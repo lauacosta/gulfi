@@ -40,13 +40,8 @@ Para tener una idea de cúal método usar de acuerdo al caso, es interesante y r
 > Para compilar la aplicación asegurate de tener un compilador de rust instalado desde la versión +1.78.0 .
 
 ```
-git clone https://github.com/lauacosta/gulfi.git
-cd gulfi
-
-cargo build --release
+$ git clone https://github.com/lauacosta/gulfi.git
+$ cd gulfi
+$ cargo build --release
+$ ./target/release/gulfi
 ```
-
-## Uso
-
-
-
