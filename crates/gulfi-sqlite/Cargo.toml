@@ -1,0 +1,20 @@
+[package]
+name = "gulfi-sqlite"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+sqlite-vec = "0.1.3"
+futures = "0.3.31"
+csv = "1.3.0"
+zerocopy.workspace = true
+eyre.workspace = true
+rusqlite.workspace = true
+reqwest.workspace = true
+tracing.workspace = true
+serde_json.workspace = true
+gulfi-openai = { path = "../gulfi-openai/" }
+gulfi-ui = { path = "../gulfi-ui/" }
+gulfi-cli = { path = "../gulfi-cli/" }
+gulfi-configuration = { path = "../gulfi-configuration/" }
+gulfi-common = { path = "../gulfi-common/" }
