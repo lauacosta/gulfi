@@ -2,13 +2,13 @@
 
 <div align = "center">
 
-# QuerySense 🔍
+# Gulfi 🔍
 
 <a href=https://github.com/lauacosta/gulfi/actions/workflows/general.yaml>
     <img src=https://github.com/lauacosta/gulfi/actions/workflows/general.yaml/badge.svg>
 </a>
 
-Querysense es una herramienta para búsquedas exactas, semánticas e híbridas sobre datos en una base de datos SQLite.
+Gulfi es una herramienta para búsquedas exactas, semánticas e híbridas sobre datos en una base de datos SQLite.
 
 ![screenshot](index_screenshot.png)
 
