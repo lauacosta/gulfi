@@ -622,7 +622,7 @@ fn update_historial(
 ) -> eyre::Result<Vec<Historial>, HttpError> {
     gulfi_sqlite::update_historial(db, query)?;
 
-    Ok(get_historial(db)?)
+    get_historial(db)
 }
 
 pub struct SearchExtractor<T>(pub T);

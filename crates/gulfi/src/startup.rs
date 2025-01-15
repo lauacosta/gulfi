@@ -172,10 +172,10 @@ pub async fn run_server(configuration: ApplicationSettings) -> Result<()> {
             let url = format!("http://{}:{}", app.host(), app.port());
             info!("La aplicación está disponible en {url}");
 
-            if configuration.open {
-                if webbrowser::open_browser(webbrowser::Browser::Default, &url).is_ok() {
-                    info!("Se abrirá la aplicación en el navegador predeterminado.");
-                }
+            if configuration.open
+                && webbrowser::open_browser(webbrowser::Browser::Default, &url).is_ok()
+            {
+                info!("Se abrirá la aplicación en el navegador predeterminado.");
             }
 
             if let Err(e) = app.run_until_stopped().await {

@@ -11,7 +11,9 @@ use std::{
 use csv::ReaderBuilder;
 use eyre::{Result, eyre};
 use futures::StreamExt;
-use gulfi_common::{DataSources, HttpError, TneaData, clean_html, normalize, parse_sources};
+use gulfi_common::{
+    DataSources, HttpError, Source, TneaData, clean_html, normalize, parse_sources,
+};
 use gulfi_configuration::Template;
 use gulfi_openai::embed_vec;
 use gulfi_ui::Historial;
@@ -244,7 +246,11 @@ pub fn setup_sqlite(
     Ok(())
 }
 
-pub fn insert_base_data(db: &rusqlite::Connection, template: &Template) -> Result<()> {
+pub fn insert_base_data(
+    db: &rusqlite::Connection,
+    template: &Template,
+    source: &Source,
+) -> Result<()> {
     let num: usize = db.query_row("select count(*) from tnea", [], |row| row.get(0))?;
     if num != 0 {
         info!("La base de datos ya contiene {num} registros. Buscando nuevos registros...");
@@ -253,7 +259,7 @@ pub fn insert_base_data(db: &rusqlite::Connection, template: &Template) -> Resul
     }
 
     let start = std::time::Instant::now();
-    let inserted = parse_and_insert("./datasources/", template, db)?;
+    let inserted = parse_and_insert("./datasources/", template, db, source)?;
     info!(
         "Se insertaron {inserted} columnas en tnea_raw! en {} ms",
         start.elapsed().as_millis()
@@ -291,10 +297,44 @@ pub fn insert_base_data(db: &rusqlite::Connection, template: &Template) -> Resul
     Ok(())
 }
 
-fn parse_and_insert(path: impl AsRef<Path>, template: &Template, db: &Connection) -> Result<usize> {
-    let mut inserted = 0;
-    // 1. Busco todos los emails que ya tengo
+fn compare_records(mut records: Vec<String>, mut headers: Vec<String>) -> eyre::Result<()> {
+    headers.sort();
+    records.sort();
 
+    let mut missing_members = vec![];
+    let mut extra_members = vec![];
+
+    for h in &headers {
+        if !records.contains(h) {
+            extra_members.push(h);
+        }
+    }
+
+    for n in &records {
+        if !headers.contains(n) {
+            missing_members.push(n);
+        }
+    }
+
+    match (missing_members.as_slice(), extra_members.as_slice()) {
+        ([], []) => Ok(()),
+        ([], extra) => Err(eyre!("El archivo tiene campos extras: {extra:?}")),
+
+        (missing, []) => Err(eyre!("El archivo no tiene los campos: {missing:?}")),
+
+        (missing, extra) => Err(eyre!(
+            "El archivo no tiene los campos: {missing:?} y le sobran los campos: {extra:?}"
+        )),
+    }
+}
+
+fn parse_and_insert(
+    path: impl AsRef<Path>,
+    template: &Template,
+    db: &Connection,
+    f: &Source,
+) -> Result<usize> {
+    let mut inserted = 0;
     let mut statement = db.prepare("select email from tnea_raw")?;
     let emails = statement
         .query_map([], |row| row.get(0))?
@@ -320,11 +360,11 @@ fn parse_and_insert(path: impl AsRef<Path>, template: &Template, db: &Connection
                     .map(std::string::ToString::to_string)
                     .collect();
 
-                for field in &template.fields {
-                    if !headers.contains(field) {
-                        return Err(eyre!("El archivo {source:?} no tiene el header {field}.",));
-                    }
-                }
+                let named_parameters: Vec<String> =
+                    f.fields.iter().map(|obj| obj.name.clone()).collect();
+
+                compare_records(named_parameters, headers)?;
+
                 reader
                     .deserialize::<TneaData>()
                     .filter_map(|row| row.ok())
@@ -334,9 +374,26 @@ fn parse_and_insert(path: impl AsRef<Path>, template: &Template, db: &Connection
             DataSources::Json => {
                 let file = File::open(&source)?;
                 let reader = BufReader::new(file);
+                let data: Vec<TneaData> = serde_json::from_reader(reader)?;
 
-                serde_json::from_reader::<_, Vec<TneaData>>(reader)?
-                    .into_iter()
+                let headers: Vec<String> = if let Some(first_record) = data.first() {
+                    let field_names: Vec<String> = serde_json::to_value(first_record)?
+                        .as_object()
+                        .unwrap()
+                        .keys()
+                        .cloned()
+                        .collect();
+
+                    field_names
+                } else {
+                    vec![]
+                };
+                let named_parameters: Vec<String> =
+                    f.fields.iter().map(|obj| obj.name.clone()).collect();
+
+                compare_records(named_parameters, headers)?;
+
+                data.into_iter()
                     .filter(|row| !emails.contains(&row.email))
                     .collect()
             }

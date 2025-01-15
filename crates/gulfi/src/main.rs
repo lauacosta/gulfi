@@ -1,12 +1,13 @@
+use std::fs::File;
+
 use clap::Parser;
 use eyre::eyre;
 use gulfi::startup;
 use gulfi_cli::{Cli, Commands, Model, SyncStrategy};
+use gulfi_common::Source;
 use gulfi_configuration::{ApplicationSettings, Template};
 use gulfi_openai::embed_single;
-use gulfi_sqlite::{
-    init_sqlite, insert_base_data, setup_sqlite, sync_fts_tnea, sync_vec_tnea,
-};
+use gulfi_sqlite::{init_sqlite, insert_base_data, setup_sqlite, sync_fts_tnea, sync_vec_tnea};
 use rusqlite::Connection;
 use tracing::{Level, debug, info, level_filters::LevelFilter};
 use tracing_error::ErrorLayer;
@@ -14,36 +15,22 @@ use tracing_subscriber::{Registry, layer::SubscriberExt, util::SubscriberInitExt
 use tracing_tree::HierarchicalLayer;
 
 fn main() -> eyre::Result<()> {
-    color_eyre::install()?;
-    dotenvy::dotenv().map_err(|err| eyre!("El archivo .env no fue encontrado. err: {}", err))?;
-
     let cli = Cli::parse();
-    let level = match cli.loglevel.to_lowercase().trim() {
-        "trace" => Level::TRACE,
-        "debug" => Level::DEBUG,
-        "info" => Level::INFO,
-        _ => {
-            return Err(eyre!(
-                "Log Level desconocido, utiliza `INFO`, `DEBUG` o `TRACE`."
-            ));
-        }
-    };
 
-    Registry::default()
-        .with(LevelFilter::from_level(level))
-        .with(
-            HierarchicalLayer::new(2)
-                .with_targets(true)
-                .with_bracketed_fields(true),
-        )
-        .with(ErrorLayer::default())
-        .init();
+    setup(cli.loglevel)?;
 
-    let template = std::env::var("TEMPLATE")
-        .map_err(|err| eyre!("Hubo un error al leer la variable de entorno `TEMPLATE` {err}."))?;
+    let file = File::open("meta.json")
+        .map_err(|err| eyre!("No se encuentra el archivo `meta.json`. {err}"))?;
 
-    let template = Template::try_from(template)
-        .map_err(|err| eyre!("Hubo un error al parsear el template {err}"))?;
+    let records: Source = serde_json::from_reader(file)
+        .map_err(|err| eyre!("Error al parsear `meta.json`. {err}"))?;
+
+    dbg!(&records);
+
+    let template =
+        Template::try_from(std::env::var("TEMPLATE").map_err(|err| {
+            eyre!("Hubo un error al leer la variable de entorno `TEMPLATE` {err}.")
+        })?)?;
 
     match cli.command {
         Commands::Serve {
@@ -91,7 +78,7 @@ fn main() -> eyre::Result<()> {
             let start = std::time::Instant::now();
 
             setup_sqlite(&db)?;
-            insert_base_data(&db, &template)?;
+            insert_base_data(&db, &template, &records)?;
 
             match sync_strat {
                 SyncStrategy::Fts => sync_fts_tnea(&db),
@@ -124,5 +111,31 @@ fn main() -> eyre::Result<()> {
         },
     }
 
+    Ok(())
+}
+
+fn setup(loglevel: String) -> eyre::Result<()> {
+    color_eyre::install()?;
+    dotenvy::dotenv().map_err(|err| eyre!("El archivo .env no fue encontrado. err: {}", err))?;
+    let level = match loglevel.to_lowercase().trim() {
+        "trace" => Level::TRACE,
+        "debug" => Level::DEBUG,
+        "info" => Level::INFO,
+        _ => {
+            return Err(eyre!(
+                "Log Level desconocido, utiliza `INFO`, `DEBUG` o `TRACE`."
+            ));
+        }
+    };
+
+    Registry::default()
+        .with(LevelFilter::from_level(level))
+        .with(
+            HierarchicalLayer::new(2)
+                .with_targets(true)
+                .with_bracketed_fields(true),
+        )
+        .with(ErrorLayer::default())
+        .init();
     Ok(())
 }
