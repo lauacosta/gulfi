@@ -14,7 +14,6 @@ use futures::StreamExt;
 use gulfi_common::{
     DataSources, HttpError, Source, TneaData, clean_html, normalize, parse_sources,
 };
-use gulfi_configuration::Template;
 use gulfi_openai::embed_vec;
 use gulfi_ui::Historial;
 use rusqlite::{Connection, ffi::sqlite3_auto_extension};
@@ -246,20 +245,16 @@ pub fn setup_sqlite(
     Ok(())
 }
 
-pub fn insert_base_data(
-    db: &rusqlite::Connection,
-    template: &Template,
-    source: &Source,
-) -> Result<()> {
+pub fn insert_base_data(db: &rusqlite::Connection, source: &Source) -> Result<()> {
     let num: usize = db.query_row("select count(*) from tnea", [], |row| row.get(0))?;
     if num != 0 {
-        info!("La base de datos ya contiene {num} registros. Buscando nuevos registros...");
+        info!("La base de datos contiene {num} registros. Buscando nuevos registros...");
     } else {
         info!("La base de datos se encuentra vacia. Buscando nuevos registros...");
     }
 
     let start = std::time::Instant::now();
-    let inserted = parse_and_insert("./datasources/", template, db, source)?;
+    let inserted = parse_and_insert("./datasources/", db, source)?;
     info!(
         "Se insertaron {inserted} columnas en tnea_raw! en {} ms",
         start.elapsed().as_millis()
@@ -270,7 +265,7 @@ pub fn insert_base_data(
         "Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite",
     );
 
-    let sql_statement = &template.template;
+    let sql_statement = source.generate_template();
     let mut statement = db.prepare(&format!(
         "
         insert or ignore into tnea (email, provincia, ciudad, edad, sexo, template)
@@ -328,12 +323,7 @@ fn compare_records(mut records: Vec<String>, mut headers: Vec<String>) -> eyre::
     }
 }
 
-fn parse_and_insert(
-    path: impl AsRef<Path>,
-    template: &Template,
-    db: &Connection,
-    f: &Source,
-) -> Result<usize> {
+fn parse_and_insert(path: impl AsRef<Path>, db: &Connection, f: &Source) -> Result<usize> {
     let mut inserted = 0;
     let mut statement = db.prepare("select email from tnea_raw")?;
     let emails = statement

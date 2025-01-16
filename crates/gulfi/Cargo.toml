@@ -31,6 +31,7 @@ serde_urlencoded.workspace = true
 gulfi-sqlite = { path = "../gulfi-sqlite/"}
 gulfi-common = { path = "../gulfi-common/"}
 gulfi-openai = { path = "../gulfi-openai/"}
+gulfi-helper = { path = "../gulfi-helper/"}
 gulfi-ui = { path = "../gulfi-ui/"}
 gulfi-cli = { path = "../gulfi-cli/"}
 gulfi-configuration = { path = "../gulfi-configuration/"}

@@ -66,6 +66,7 @@ pub enum Commands {
         #[arg(value_enum, long, default_value_t = Model::OpenAI)]
         model: Model,
     },
+    // New,
 }
 
 #[derive(Clone, ValueEnum)]

@@ -17,3 +17,4 @@ serde_urlencoded.workspace = true
 termcolor = "1.4.1"
 chrono = "0.4.39"
 ammonia = "4.0.0"
+ansi_term = "0.12.1"

@@ -2,10 +2,11 @@ use std::fs::File;
 
 use clap::Parser;
 use eyre::eyre;
-use gulfi::startup;
+use gulfi::startup::run_server;
 use gulfi_cli::{Cli, Commands, Model, SyncStrategy};
 use gulfi_common::Source;
-use gulfi_configuration::{ApplicationSettings, Template};
+use gulfi_configuration::ApplicationSettings;
+use gulfi_helper::initialize_meta_file;
 use gulfi_openai::embed_single;
 use gulfi_sqlite::{init_sqlite, insert_base_data, setup_sqlite, sync_fts_tnea, sync_vec_tnea};
 use rusqlite::Connection;
@@ -19,18 +20,18 @@ fn main() -> eyre::Result<()> {
 
     setup(cli.loglevel)?;
 
-    let file = File::open("meta.json")
-        .map_err(|err| eyre!("No se encuentra el archivo `meta.json`. {err}"))?;
+    let file = match File::open("meta.json") {
+        Ok(f) => Ok(f),
+        Err(_) => {
+            initialize_meta_file()?;
+            File::open("meta.json")
+        }
+    }?;
 
     let records: Source = serde_json::from_reader(file)
         .map_err(|err| eyre!("Error al parsear `meta.json`. {err}"))?;
 
-    dbg!(&records);
-
-    let template =
-        Template::try_from(std::env::var("TEMPLATE").map_err(|err| {
-            eyre!("Hubo un error al leer la variable de entorno `TEMPLATE` {err}.")
-        })?)?;
+    debug!(?records);
 
     match cli.command {
         Commands::Serve {
@@ -41,10 +42,10 @@ fn main() -> eyre::Result<()> {
         } => {
             let configuration = ApplicationSettings::new(port, interface, cache, open);
 
-            debug!("{:?}", &configuration);
+            debug!(?configuration);
             let rt = tokio::runtime::Runtime::new()?;
 
-            rt.block_on(startup::run_server(configuration))?
+            rt.block_on(run_server(configuration))?
         }
         Commands::Sync {
             sync_strat,
@@ -78,7 +79,7 @@ fn main() -> eyre::Result<()> {
             let start = std::time::Instant::now();
 
             setup_sqlite(&db)?;
-            insert_base_data(&db, &template, &records)?;
+            insert_base_data(&db, &records)?;
 
             match sync_strat {
                 SyncStrategy::Fts => sync_fts_tnea(&db),
@@ -108,7 +109,7 @@ fn main() -> eyre::Result<()> {
             Model::Local => {
                 todo!()
             }
-        },
+        }, // Commands::New => run_new()?,
     }
 
     Ok(())

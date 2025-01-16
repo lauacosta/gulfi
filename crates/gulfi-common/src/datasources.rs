@@ -10,6 +10,19 @@ pub struct Source {
     pub fields: Vec<Field>,
 }
 
+impl Source {
+    pub fn generate_template(&self) -> String {
+        let mut result = String::from("'  '");
+        for i in &self.fields {
+            if i.template_member {
+                result.push_str(&format!(" || {} || '  '", i.name));
+            }
+        }
+
+        result
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Field {
     pub name: String,
