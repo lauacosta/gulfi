@@ -4,10 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-
 serde.workspace = true
 axum.workspace = true
 rusqlite.workspace = true
 rinja.workspace = true
 rinja_axum.workspace = true
-
+# gulfi-sqlite = { path = "../gulfi-sqlite/" }

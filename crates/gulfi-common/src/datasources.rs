@@ -1,6 +1,8 @@
+use std::path::{Path, PathBuf};
+
+use camino::Utf8Path;
 use eyre::eyre;
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
 
 use tracing::info;
 
@@ -51,11 +53,12 @@ pub fn parse_sources(path: impl AsRef<Path>) -> eyre::Result<Vec<(PathBuf, DataS
     let mut datasources = Vec::new();
 
     info!("Escaneando los archivos disponibles...");
-    for file in std::fs::read_dir(&path)? {
-        let path = file?.path().clone();
+    for entry in std::fs::read_dir(&path)? {
+        let path = entry?.path();
+        let utf_8_path = Utf8Path::from_path(&path).expect("Deberia ser UTF-8");
 
-        if path.is_file() {
-            if let Some(ext) = path.extension().and_then(|ext| ext.to_str()) {
+        if utf_8_path.is_file() {
+            if let Some(ext) = utf_8_path.extension() {
                 let file = DataSources::from_extension(ext)?;
                 datasources.push((path, file));
             }

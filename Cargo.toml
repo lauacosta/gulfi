@@ -33,6 +33,7 @@ eyre = "0.6.12"
 rinja = { version = "0.3.5", features = ["with-axum"] }
 rinja_axum = "0.3.5"
 serde_urlencoded = "0.7.1"
+camino = "1.1.9"
 
 [profile.profiling]
 inherits = "release"

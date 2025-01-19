@@ -16,7 +16,7 @@ use gulfi_common::{
 };
 use gulfi_openai::embed_vec;
 use gulfi_ui::Historial;
-use rusqlite::{Connection, ffi::sqlite3_auto_extension};
+use rusqlite::{Connection, ToSql, ffi::sqlite3_auto_extension, types::ValueRef};
 use sqlite_vec::sqlite3_vec_init;
 use tracing::{debug, info};
 use zerocopy::IntoBytes;
@@ -463,6 +463,86 @@ pub fn get_historial(db: &Connection) -> Result<Vec<Historial>, HttpError> {
 
     Ok(rows)
 }
+
+pub struct SearchQuery<'a> {
+    db: &'a rusqlite::Connection,
+    pub stmt_str: String,
+    pub bindings: Vec<&'a dyn ToSql>,
+}
+
+type QueryResult = (Vec<String>, Vec<Vec<String>>);
+
+impl SearchQuery<'_> {
+    pub fn execute(&self) -> Result<QueryResult, HttpError> {
+        debug!("{:?}", self.stmt_str);
+        let mut statement = self.db.prepare(&self.stmt_str)?;
+
+        let column_names = statement
+            .column_names()
+            .iter()
+            .map(|str| str.to_string())
+            .collect();
+
+        let table = statement
+            .query_map(&*self.bindings, |row| {
+                let mut data = Vec::new();
+
+                for i in 0..row.as_ref().column_count() {
+                    let val = match row.get_ref(i)? {
+                        ValueRef::Text(text) => String::from_utf8_lossy(text).into_owned(),
+                        ValueRef::Real(real) => format!("{:.3}", -1. * real),
+                        ValueRef::Integer(int) => int.to_string(),
+                        _ => "Tipo de dato desconocido".to_string(),
+                    };
+                    data.push(val);
+                }
+
+                Ok(data)
+            })?
+            .collect::<Result<Vec<Vec<String>>, _>>()?;
+
+        Ok((column_names, table))
+    }
+}
+
+pub struct SearchQueryBuilder<'a> {
+    db: &'a rusqlite::Connection,
+    pub stmt_str: String,
+    pub bindings: Vec<&'a dyn ToSql>,
+}
+
+impl<'a> SearchQueryBuilder<'a> {
+    pub fn new(db: &'a rusqlite::Connection, base_stmt: &str) -> Self {
+        Self {
+            db,
+            stmt_str: base_stmt.to_string(),
+            bindings: Vec::new(),
+        }
+    }
+
+    pub fn add_filter(&mut self, filter: &str, binding: &[&'a dyn ToSql]) {
+        self.stmt_str.push_str(filter);
+        self.bindings.extend_from_slice(binding);
+    }
+
+    pub fn add_bindings(&mut self, binding: &[&'a dyn ToSql]) {
+        self.bindings.extend_from_slice(binding);
+    }
+
+    pub fn push_str(&mut self, stmt: &str) {
+        self.stmt_str.push_str(stmt);
+    }
+
+    pub fn build(self) -> SearchQuery<'a> {
+        SearchQuery {
+            db: self.db,
+            stmt_str: self.stmt_str,
+            bindings: self.bindings,
+        }
+    }
+}
+
+pub trait QueryMarker {}
 
 #[cfg(test)]
 mod tests {

@@ -3,12 +3,13 @@ use std::io::{self, Write};
 
 use ansi_term::Colour;
 use ansi_term::Colour::{Fixed, Green, RGB, Red, White};
+use eyre::Result;
 use gulfi_common::{Field, Source};
 
 const PURPLE: (u8, u8, u8) = (126, 29, 251);
 const WIDTH: usize = 15;
 
-pub fn initialize_meta_file() -> eyre::Result<()> {
+pub fn initialize_meta_file() -> Result<()> {
     println!(
         "\n{:>WIDTH$}  No se ha encontrado un archivo `meta.json`. Creando primera base...",
         Fixed(000).bold().on(Green).paint(" Gulfi ")
@@ -16,7 +17,7 @@ pub fn initialize_meta_file() -> eyre::Result<()> {
     run_new()
 }
 
-fn run_new() -> eyre::Result<()> {
+fn run_new() -> Result<()> {
     let name = prompt_input("Cual sera el nombre de la base?", validate_field_name);
 
     let mut fields = vec![];
@@ -87,7 +88,7 @@ fn prompt_options(msg: &str, opts: Vec<char>) -> char {
 }
 
 fn prompt_for_field(fields: &mut Vec<Field>) {
-    println!("");
+    println!();
     let name = prompt_input("Nombre del campo:", validate_field_name);
     let template_member = prompt_confirm("¿Quieres que sea parte del template?");
 

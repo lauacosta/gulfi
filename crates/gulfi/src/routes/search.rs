@@ -12,14 +12,5 @@ pub async fn search(
     client: Extension<reqwest::Client>,
 ) -> SearchResult {
     debug!(?params);
-    // let params: Params = serde_json::from_value(params)?;
-
-    // match app.cache {
-    //     Cache::Enabled => {
-    //         todo!();
-    //     }
-    //     Cache::Disabled => tracing::debug!("El caché se encuentra desactivado!"),
-    // };
-
     params.strategy.search(&app.db_path, &client, params).await
 }
