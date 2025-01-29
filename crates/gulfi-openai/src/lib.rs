@@ -108,7 +108,7 @@ pub async fn embed_vec(
 
     let request = RequestBody {
         input,
-        model: "text-embedding-3-small".to_string(),
+        model: "text-embedding-3-small".to_owned(),
         encoding_format: Some(EncodingFormat::Float),
         dimensions: Some(1536),
     };
@@ -186,7 +186,7 @@ pub async fn embed_single(input: String, client: &Client) -> Result<Vec<f32>> {
 
     let request = RequestBody {
         input,
-        model: "text-embedding-3-small".to_string(),
+        model: "text-embedding-3-small".to_owned(),
         encoding_format: Some(EncodingFormat::Float),
         dimensions: Some(1536),
     };
@@ -232,7 +232,7 @@ pub async fn embed_single(input: String, client: &Client) -> Result<Vec<f32>> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    // use super::*;
 
     // #[test]
     // fn it_works() {

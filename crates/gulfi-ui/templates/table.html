@@ -1,50 +1,25 @@
-{%- import "./componentes/form.html" as scope -%}
-{% extends "base.html" %}
-
-{% block historial %}
-    <ul class="historial" id="historial">
-    {% for el in historial %} 
-        <li class="historial-item"> 
-            {{ el.query }} 
-        </li>
-    {% endfor %}
-    </ul>
-{% endblock %}
-
-{% block content %}
-    {% call scope::busqueda("search") %}
-
     <div class="table-header">
         <div class="result-count">{{ msg }}</div>
         <div class="pagination"></div> 
     </div>
 
-    <button id="csv_trigger" class="search-button">
-        Descargar 
-        <svg xmlns="http://www.w3.org/2000/svg" height="18px" viewBox="0 -960 960 960" width="18" fill="#e8eaed"><path d="M480-320 280-520l56-58 104 104v-326h80v326l104-104 56 58-200 200ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z"/></svg>
-    </button>
-
-    <div class="table-container">
-        <table class="modern-table" id="table-content">
-            <thead>
+    <table class="modern-table" id="table-content">
+        <thead>
+            <tr>
+                {% for col in columns %}
+                    <th scope = "col" style="cursor:pointer">{{ col }}</th>
+                {% endfor %} 
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows%}
                 <tr>
-                    {% for col in columns %}
-                        <th scope = "col" > {{ col }}
-                        </th>
+                    {% for col in row %}
+                        <td class="csv"> {{ col|safe}} </td>
                     {% endfor %} 
                 </tr>
-            </thead>
-            <tbody>
-                {% for row in rows%}
-                    <tr>
-                        {% for col in row %}
-                            <td class="csv"> {{ col|safe}} </td>
-                        {% endfor %} 
-                    </tr>
-                {% endfor %} 
-            </tbody>
-        </table>
-    </div>
-    <p style="color:green;"> <b>* Las palabras resaltadas en verde son los resultados encontrados usando FTS!</b> </p>
-{% endblock content %}
+            {% endfor %} 
+        </tbody>
+    </table>
+<p style="color:green;"> <b>* Las palabras resaltadas en verde son los resultados encontrados usando FTS!</b> </p>
 

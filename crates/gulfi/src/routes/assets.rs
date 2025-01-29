@@ -1,9 +1,7 @@
 use axum::extract::Path;
 use axum::response::{IntoResponse, Response};
+use gulfi_ui::{MAIN_JS, STYLES_CSS};
 use http::{HeaderMap, StatusCode, header};
-
-static STYLES_CSS: &str = include_str!("../../../../dist/styles.css");
-static MAIN_JS: &str = include_str!("../../../../dist/main.js");
 
 pub async fn handle_assets(Path(path): Path<String>) -> Response {
     match path.as_str() {

@@ -16,7 +16,7 @@ use tower_http::trace::{DefaultOnResponse, TraceLayer};
 use tower_request_id::{RequestId, RequestIdLayer};
 use tracing::{Level, error, error_span, info, instrument};
 
-use crate::routes::{get_from_db, handle_assets, health_check, index, search};
+use crate::routes::{handle_assets, health_check, historial, index, search};
 
 #[derive(Debug, Clone)]
 pub struct AppState {
@@ -127,7 +127,7 @@ pub fn build_server(listener: TcpListener, state: AppState) -> Result<Serve<Rout
         .route("/", get(index))
         .route("/health", get(health_check))
         .route("/search", get(search))
-        .route("/historial", get(get_from_db))
+        .route("/historial", get(historial))
         .route("/_assets/*path", get(handle_assets))
         .with_state(state)
         .layer(Extension(

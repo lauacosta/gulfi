@@ -5,13 +5,14 @@ use rusqlite::{
     ToSql,
     types::{FromSql, FromSqlError, ValueRef},
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+
+pub static STYLES_CSS: &str = include_str!("../dist/styles.min.css");
+pub static MAIN_JS: &str = include_str!("../dist/main.min.js");
 
 #[derive(Template)]
 #[template(path = "index.html")]
-pub struct Index {
-    pub historial: Vec<Historial>,
-}
+pub struct Index;
 
 #[derive(Template)]
 #[template(path = "table.html")]
@@ -19,16 +20,14 @@ pub struct Table {
     pub msg: String,
     pub columns: Vec<String>,
     pub rows: Vec<Vec<String>>,
-    pub historial: Vec<Historial>,
 }
 
 impl Default for Table {
     fn default() -> Self {
         Self {
-            msg: "No se encontraron ningun registro.".to_string(),
+            msg: "No se encontraron ningun registro.".to_owned(),
             columns: vec![],
             rows: vec![],
-            historial: vec![],
         }
     }
 }
@@ -77,7 +76,7 @@ impl Display for Sexo {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct Historial {
     pub id: u64,
     pub query: String,

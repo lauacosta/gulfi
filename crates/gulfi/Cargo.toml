@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 authors = ["Lautaro <acostaquintanalautaro@gmail.com>"]
 
+
 [dependencies]
 dotenvy = "0.15.7"
 tower = "0.5.0"
@@ -37,3 +38,5 @@ gulfi-cli = { path = "../gulfi-cli/"}
 gulfi-configuration = { path = "../gulfi-configuration/"}
 axum-extra = { version = "0.9.6", features = ["typed-header"] }
 webbrowser = "1.0.3"
+include_dir = "0.7.4"
+tower-serve-static = "0.1.1"

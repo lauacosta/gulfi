@@ -344,11 +344,8 @@ fn parse_and_insert(path: impl AsRef<Path>, db: &Connection, f: &Source) -> Resu
                     .quote(b'"')
                     .from_path(&source)?;
 
-                let headers: Vec<String> = reader
-                    .headers()?
-                    .into_iter()
-                    .map(std::string::ToString::to_string)
-                    .collect();
+                let headers: Vec<String> =
+                    reader.headers()?.into_iter().map(String::from).collect();
 
                 let named_parameters: Vec<String> =
                     f.fields.iter().map(|obj| obj.name.clone()).collect();
@@ -477,10 +474,10 @@ impl SearchQuery<'_> {
         debug!("{:?}", self.stmt_str);
         let mut statement = self.db.prepare(&self.stmt_str)?;
 
-        let column_names = statement
+        let column_names: Vec<String> = statement
             .column_names()
-            .iter()
-            .map(|str| str.to_string())
+            .into_iter()
+            .map(String::from)
             .collect();
 
         let table = statement
@@ -492,7 +489,7 @@ impl SearchQuery<'_> {
                         ValueRef::Text(text) => String::from_utf8_lossy(text).into_owned(),
                         ValueRef::Real(real) => format!("{:.3}", -1. * real),
                         ValueRef::Integer(int) => int.to_string(),
-                        _ => "Tipo de dato desconocido".to_string(),
+                        _ => "Tipo de dato desconocido".to_owned(),
                     };
                     data.push(val);
                 }
@@ -515,7 +512,7 @@ impl<'a> SearchQueryBuilder<'a> {
     pub fn new(db: &'a rusqlite::Connection, base_stmt: &str) -> Self {
         Self {
             db,
-            stmt_str: base_stmt.to_string(),
+            stmt_str: base_stmt.to_owned(),
             bindings: Vec::new(),
         }
     }

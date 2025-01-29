@@ -49,7 +49,7 @@ where
         io::stdin()
             .read_line(&mut buffer)
             .expect("Failed to read line");
-        let answer = buffer.trim_end().to_string();
+        let answer = buffer.trim_end().to_owned();
         match validator(&answer) {
             Ok(()) => {
                 return answer;

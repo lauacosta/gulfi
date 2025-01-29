@@ -16,6 +16,7 @@ lto = "thin"
 # [features] 
 # local = ["dep:candle-nn", "dep:candle-core",  "dep:hf-hub" ,"dep:tokenizers", "dep:candle-transformers"]
 
+
 [workspace.dependencies]
 thiserror = "2.0.3"
 axum = { version = "0.7.5", features = ["macros"] }

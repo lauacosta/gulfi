@@ -14,15 +14,15 @@ pub use index::*;
 
 use gulfi_common::{HttpError, IntoHttp, SearchResult, SearchString};
 use gulfi_openai::embed_single;
-use gulfi_sqlite::{SearchQueryBuilder, get_historial};
-use gulfi_ui::{Historial, Sexo, Table};
+use gulfi_sqlite::SearchQueryBuilder;
+use gulfi_ui::{Sexo, Table};
 use reqwest::Client;
 use rusqlite::Connection;
 pub use search::*;
 
 use serde::{Deserialize, de::DeserializeOwned};
 use thiserror::Error;
-use tracing::{debug, info, instrument};
+use tracing::{debug, info};
 use zerocopy::IntoBytes;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -97,7 +97,7 @@ impl SearchStrategy {
                 query.execute()?
             }
             SearchStrategy::Semantic => {
-                let query_emb = embed_single(query.to_string(), client)
+                let query_emb = embed_single(query.clone(), client)
                     .await
                     .map_err(|err| tracing::error!("{err}"))
                     .expect("Fallo al crear un embedding del query");
@@ -142,7 +142,7 @@ impl SearchStrategy {
                 query.execute()?
             }
             SearchStrategy::ReciprocalRankFusion => {
-                let query_emb = embed_single(query.to_string(), client)
+                let query_emb = embed_single(query.clone(), client)
                     .await
                     .map_err(|err| tracing::error!("{err}"))
                     .expect("Fallo al crear un embedding del query");
@@ -236,7 +236,7 @@ impl SearchStrategy {
             }
 
             SearchStrategy::KeywordFirst => {
-                let query_emb = embed_single(query.to_string(), client)
+                let query_emb = embed_single(query.clone(), client)
                     .await
                     .map_err(|err| tracing::error!("{err}"))
                     .expect("Fallo al crear un embedding del query");
@@ -315,7 +315,7 @@ impl SearchStrategy {
                 query.execute()?
             }
             SearchStrategy::ReRankBySemantics => {
-                let query_emb = embed_single(query.to_string(), client)
+                let query_emb = embed_single(query.clone(), client)
                     .await
                     .map_err(|err| tracing::error!("{err}"))
                     .expect("Fallo al crear un embedding del query");
@@ -390,14 +390,13 @@ impl SearchStrategy {
             table.len(),
         );
 
-        let historial = update_historial(&db, &params.search_str)?;
+        gulfi_sqlite::update_historial(&db, &params.search_str)?;
 
         debug!(?column_names);
         let result = Table {
             msg: format!("Hay un total de {} resultados.", table.len()),
             columns: column_names,
             rows: table,
-            historial,
         };
 
         result.into_http()
@@ -414,7 +413,7 @@ impl TryFrom<String> for SearchStrategy {
             "rrf" => Ok(Self::ReciprocalRankFusion),
             "hkf" => Ok(Self::KeywordFirst),
             "rrs" => Ok(Self::ReRankBySemantics),
-            other => Err(SearchStrategyError::UnsupportedSearchStrategy(other.to_string()).into()),
+            other => Err(SearchStrategyError::UnsupportedSearchStrategy(other.to_owned()).into()),
         }
     }
 }
@@ -425,16 +424,6 @@ enum SearchStrategyError {
         "'{0}' No es una estrategia de búsqueda soportada, usa 'fts', 'semantic_search', 'HKF' o 'rrf'"
     )]
     UnsupportedSearchStrategy(String),
-}
-
-#[instrument(name = "Actualizando el historial", skip(db))]
-fn update_historial(
-    db: &rusqlite::Connection,
-    query: &str,
-) -> eyre::Result<Vec<Historial>, HttpError> {
-    gulfi_sqlite::update_historial(db, query)?;
-
-    get_historial(db)
 }
 
 pub struct SearchExtractor<T>(pub T);

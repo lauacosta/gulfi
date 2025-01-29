@@ -41,7 +41,7 @@ mod tests {
     fn parse_with_query_and_provincia() {
         let search = SearchString::parse("example query|some provincia");
         assert_eq!(search.query, "example query");
-        assert_eq!(search.provincia, Some("%some provincia%".to_string()));
+        assert_eq!(search.provincia, Some("%some provincia%".to_owned()));
         assert!(search.ciudad.is_none());
     }
 
@@ -49,15 +49,15 @@ mod tests {
     fn parse_with_query_provincia_and_ciudad() {
         let search = SearchString::parse("example query|some provincia,some ciudad");
         assert_eq!(search.query, "example query");
-        assert_eq!(search.provincia, Some("%some provincia%".to_string()));
-        assert_eq!(search.ciudad, Some("%some ciudad%".to_string()));
+        assert_eq!(search.provincia, Some("%some provincia%".to_owned()));
+        assert_eq!(search.ciudad, Some("%some ciudad%".to_owned()));
     }
 
     #[test]
     fn parse_with_empty_filters() {
         let search = SearchString::parse("example query|");
         assert_eq!(search.query, "example query");
-        assert_eq!(search.provincia, Some("%%".to_string()));
+        assert_eq!(search.provincia, Some("%%".to_owned()));
         assert!(search.ciudad.is_none());
     }
 
@@ -65,16 +65,16 @@ mod tests {
     fn parse_with_empty_provincia() {
         let search = SearchString::parse("example query|,some ciudad");
         assert_eq!(search.query, "example query");
-        assert_eq!(search.provincia, Some("%%".to_string()));
-        assert_eq!(search.ciudad, Some("%some ciudad%".to_string()));
+        assert_eq!(search.provincia, Some("%%".to_owned()));
+        assert_eq!(search.ciudad, Some("%some ciudad%".to_owned()));
     }
 
     #[test]
     fn parse_with_extra_whitespace() {
         let search = SearchString::parse(" example query |  some provincia , some ciudad  ");
         assert_eq!(search.query, "example query");
-        assert_eq!(search.provincia, Some("%some provincia%".to_string()));
-        assert_eq!(search.ciudad, Some("%some ciudad%".to_string()));
+        assert_eq!(search.provincia, Some("%some provincia%".to_owned()));
+        assert_eq!(search.ciudad, Some("%some ciudad%".to_owned()));
     }
 
     #[test]
