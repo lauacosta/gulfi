@@ -7,12 +7,13 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Source {
+#[serde(rename_all = "lowercase")]
+pub struct Document {
     pub name: String,
     pub fields: Vec<Field>,
 }
 
-impl Source {
+impl Document {
     pub fn generate_template(&self) -> String {
         let mut result = String::from("'  '");
         for i in &self.fields {
@@ -49,23 +50,42 @@ impl DataSources {
     }
 }
 
-pub fn parse_sources(path: impl AsRef<Path>) -> eyre::Result<Vec<(PathBuf, DataSources)>> {
-    let mut datasources = Vec::new();
+type A = Vec<(PathBuf, DataSources)>;
+pub struct Folder {
+    pub name: String,
+    pub files: A,
+}
 
-    info!("Escaneando los archivos disponibles...");
+pub fn parse_sources(path: impl AsRef<Path>, doc: &Document) -> eyre::Result<Folder> {
+    let mut files = vec![];
+
+    info!("Escaneando los archivos disponibles para {}...", doc.name);
     for entry in std::fs::read_dir(&path)? {
         let path = entry?.path();
         let utf_8_path = Utf8Path::from_path(&path).expect("Deberia ser UTF-8");
 
-        if utf_8_path.is_file() {
-            if let Some(ext) = utf_8_path.extension() {
-                let file = DataSources::from_extension(ext)?;
-                datasources.push((path, file));
+        if utf_8_path.is_dir() {
+            let name = utf_8_path.file_stem().unwrap().to_string();
+            if doc.name == name {
+                for entry in std::fs::read_dir(&path)? {
+                    let path = entry?.path();
+                    let utf_8_path = Utf8Path::from_path(&path).expect("Deberia ser UTF-8");
+
+                    if utf_8_path.is_file() {
+                        if let Some(ext) = utf_8_path.extension() {
+                            let file = DataSources::from_extension(ext)?;
+                            files.push((path, file));
+                        }
+                    }
+                }
             }
         }
     }
 
     info!("Escaneando los archivos disponibles... listo!");
 
-    Ok(datasources)
+    Ok(Folder {
+        name: doc.name.clone(),
+        files,
+    })
 }

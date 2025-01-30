@@ -52,10 +52,18 @@ pub enum Commands {
         /// Determina la cantidad de tiempo base al hacer backoff en los requests.
         #[arg(short = 'T', long, default_value_t = 5)]
         base_delay: u64,
+
+        document: String,
         // /// Determina si utilizar un modelo local o remoto (Actualmente solo es "text-embedding-3-small").
         // #[arg(value_enum, short = 'M', long, default_value_t = Model::OpenAI)]
         // model: Model,
     },
+
+    /// Lista los documentos definidos en ´meta.json´
+    List,
+
+    /// Añade un nuevo documento a ´meta.json´
+    Add,
 
     /// Genera un embedding en base a una input
     Embed {

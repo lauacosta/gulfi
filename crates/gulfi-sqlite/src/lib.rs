@@ -11,22 +11,17 @@ use std::{
 use csv::ReaderBuilder;
 use eyre::{Result, eyre};
 use futures::StreamExt;
-use gulfi_common::{
-    DataSources, HttpError, Source, TneaData, clean_html, normalize, parse_sources,
-};
+use gulfi_common::{DataSources, Document, HttpError, clean_html, parse_sources};
 use gulfi_openai::embed_vec;
 use gulfi_ui::Historial;
-use rusqlite::{Connection, ToSql, ffi::sqlite3_auto_extension, types::ValueRef};
+use rusqlite::{Connection, ToSql, ffi::sqlite3_auto_extension, params_from_iter, types::ValueRef};
+use serde_json::Value;
 use sqlite_vec::sqlite3_vec_init;
 use tracing::{debug, info};
 use zerocopy::IntoBytes;
 
-pub async fn sync_vec_tnea(
-    db: &Connection,
-    // model: Model,
-    base_delay: u64,
-) -> Result<()> {
-    let mut statement = db.prepare("select id, template from tnea")?;
+pub async fn sync_vec_tnea(db: &Connection, doc: &Document, base_delay: u64) -> Result<()> {
+    let mut statement = db.prepare(&format!("select id, template from {}", doc.name))?;
 
     let templates: Vec<(u64, String)> = match statement.query_map([], |row| {
         let id: u64 = row.get(0)?;
@@ -51,22 +46,17 @@ pub async fn sync_vec_tnea(
     let jh = templates
         .chunks(chunk_size)
         .enumerate()
-        .map(|(proc_id, chunk)|
-        //     match model {
-            // Model::OpenAI =>
-            {
-                let indices: Vec<u64> = chunk.iter().map(|(id, _)| *id).collect();
-                let templates: Vec<String> =
-                    chunk.iter().map(|(_, template)| template.clone()).collect();
-                embed_vec(indices, templates, &client, proc_id, base_delay)
-            // }
-            // Model::Local => todo!(),
+        .map(|(proc_id, chunk)| {
+            let indices: Vec<u64> = chunk.iter().map(|(id, _)| *id).collect();
+            let templates: Vec<String> =
+                chunk.iter().map(|(_, template)| template.clone()).collect();
+            embed_vec(indices, templates, &client, proc_id, base_delay)
         });
 
     let stream = futures::stream::iter(jh);
 
     let start = std::time::Instant::now();
-    info!("Insertando nuevas columnas en vec_tnea...");
+    info!("Insertando nuevas columnas en vec_{}...", doc.name);
 
     let total_inserted = Arc::new(AtomicUsize::new(0));
 
@@ -76,14 +66,13 @@ pub async fn sync_vec_tnea(
             match future.await {
                 Ok(data) => {
                     let mut statement =
-                        db.prepare("insert into vec_tnea(row_id, template_embedding) values (?,?)").unwrap();
+                        db.prepare(&format!("insert into vec_{}(row_id, template_embedding) values (?,?)", doc.name)).unwrap();
 
                     db.execute("BEGIN TRANSACTION", []).expect(
                         "Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite",
                     );
                     let mut insertions = 0;
                     for (id, embedding) in data {
-                        // tracing::debug!("{id} - {embedding:?}");
                         insertions += statement.execute(
                             rusqlite::params![id, embedding.as_bytes()],
                         ).expect("Error insertando en vec_tnea");
@@ -101,7 +90,8 @@ pub async fn sync_vec_tnea(
     }).await;
 
     info!(
-        "Insertando nuevos registros en vec_tnea... se insertaron {} registros, en {} ms",
+        "Insertando nuevos registros en vec_{}... se insertaron {} registros, en {} ms",
+        doc.name,
         total_inserted.load(Ordering::Relaxed),
         start.elapsed().as_millis()
     );
@@ -111,20 +101,30 @@ pub async fn sync_vec_tnea(
     Ok(())
 }
 
-pub fn sync_fts_tnea(db: &Connection) {
+pub fn sync_fts_tnea(db: &Connection, doc: &Document) {
     let start = std::time::Instant::now();
-    info!("Insertando nuevos registros en fts_tnea...");
-    db.execute_batch(
-        "
-        insert into fts_tnea(rowid, email, provincia, ciudad, edad, sexo, template)
-        select rowid, email, provincia, ciudad, edad, sexo, template
-        from tnea;
+    let table_name = doc.name.clone();
+    info!("Insertando nuevos registros en fts_{}...", table_name);
 
-        insert into fts_tnea(fts_tnea) values('optimize');
-        ",
-    )
-    .map_err(|err| eyre!(err))
-    .expect("Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite");
+    let mut fields: String = Default::default();
+
+    for field in &doc.fields {
+        if !field.template_member {
+            fields.push_str(&format!("{} ,", field.name));
+        }
+    }
+
+    fields.push_str("template");
+
+    let statement = format!(
+        "insert into fts_{table_name} ({fields}) select {fields} from {table_name}; insert into fts_{table_name}(fts_{table_name}) values('optimize');"
+    );
+
+    db.execute_batch(&statement)
+        .map_err(|err| eyre!(err))
+        .expect(
+            "Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite",
+        );
 
     info!(
         "Insertando nuevos registros en fts_tnea... listo!. tomó {} ms",
@@ -145,10 +145,8 @@ pub fn init_sqlite() -> Result<String> {
     Ok(path)
 }
 
-pub fn setup_sqlite(
-    db: &rusqlite::Connection,
-    // model: &Model
-) -> Result<()> {
+pub fn setup_sqlite(db: &rusqlite::Connection, document: &Document) -> Result<()> {
+    let table_name = &document.name;
     let (sqlite_version, vec_version): (String, String) =
         db.query_row("select sqlite_version(), vec_version()", [], |row| {
             Ok((row.get(0)?, row.get(1)?))
@@ -156,42 +154,53 @@ pub fn setup_sqlite(
 
     debug!("sqlite_version={sqlite_version}, vec_version={vec_version}");
 
-    let statement = format!(
-        "
-        create table if not exists tnea_raw(
-            id integer primary key,
-            email text,
-            nombre text,
-            sexo text,
-            fecha_nacimiento text,
-            edad integer not null,
-            provincia text,
-            ciudad text,
-            descripcion text,
-            estudios text,
-            experiencia text,
-            estudios_mas_recientes text
-        );
+    let mut statement = format!(
+        "create table if not exists {}_raw (id integer primary key, ",
+        table_name
+    );
+    let length = document.fields.len();
+    for (idx, field) in document.fields.iter().enumerate() {
+        if idx == length - 1 {
+            statement.push_str(&format!("{} text ", field.name));
+            break;
+        }
+        statement.push_str(&format!("{} text, ", field.name));
+    }
+    statement.push_str(&format!(
+        "); create table if not exists {} (id integer primary key,",
+        table_name
+    ));
+    for field in &document.fields {
+        if !field.template_member {
+            statement.push_str(&format!("{} text, ", field.name));
+        }
+    }
+    statement.push_str("template text ); ");
+    statement.push_str(&format!(
+        "create virtual table if not exists fts_{} using fts5 ( ",
+        table_name
+    ));
+    for field in &document.fields {
+        if !field.template_member {
+            statement.push_str(&format!("{},", field.name));
+        }
+    }
+    statement.push_str(&format!(
+        "template, content='{}', content_rowid='id'); ",
+        table_name
+    ));
 
+    statement.push_str(&format!(
+        "create virtual table if not exists vec_{} using vec0( row_id integer primary key, template_embedding float[1536]);",
+        table_name
+    ));
+
+    statement.push_str(
+        "
         create table if not exists historial(
             id integer primary key,
             query text not null unique,
             timestamp datetime default current_timestamp
-        );
-
-        create table if not exists tnea(
-            id integer primary key,
-            email text unique,
-            provincia text,
-            ciudad text,
-            edad integer not null,
-            sexo text,
-            template text
-        );
-
-        create virtual table if not exists fts_tnea using fts5(
-            email, edad, provincia, ciudad, sexo, template,
-            content='tnea', content_rowid='id'
         );
 
         create virtual table if not exists fts_historial using fts5(
@@ -217,24 +226,10 @@ pub fn setup_sqlite(
             delete from fts_historial where rowid = old.id;
         end;
 
-        {}
         ",
-        // match model {
-        //     Model::OpenAI => {
-        "create virtual table if not exists vec_tnea using vec0(
-                    row_id integer primary key,
-                    template_embedding float[1536]
-                );" // }
-
-                    // Model::Local => {
-                    //     // todo!()
-                    //     // "create virtual table if not exists vec_tnea using vec0(
-                    //     //     row_id integer primary key,
-                    //     //     template_embedding float[512]
-                    //     // );"
-                    // }
-                    // }
     );
+
+    println!("{}", statement);
 
     db.execute_batch(&statement)
         .map_err(|err| eyre!(err))
@@ -245,8 +240,12 @@ pub fn setup_sqlite(
     Ok(())
 }
 
-pub fn insert_base_data(db: &rusqlite::Connection, source: &Source) -> Result<()> {
-    let num: usize = db.query_row("select count(*) from tnea", [], |row| row.get(0))?;
+pub fn insert_base_data(db: &rusqlite::Connection, document: &Document) -> Result<()> {
+    let table_name = &document.name;
+    let num: usize = db.query_row(&format!("select count(*) from {}", table_name), [], |row| {
+        row.get(0)
+    })?;
+
     if num != 0 {
         info!("La base de datos contiene {num} registros. Buscando nuevos registros...");
     } else {
@@ -254,9 +253,10 @@ pub fn insert_base_data(db: &rusqlite::Connection, source: &Source) -> Result<()
     }
 
     let start = std::time::Instant::now();
-    let inserted = parse_and_insert("./datasources/", db, source)?;
+    let inserted = parse_and_insert("./datasources/", db, &document)?;
     info!(
-        "Se insertaron {inserted} columnas en tnea_raw! en {} ms",
+        "Se insertaron {inserted} columnas en {}_raw! en {} ms",
+        table_name,
         start.elapsed().as_millis()
     );
 
@@ -265,23 +265,27 @@ pub fn insert_base_data(db: &rusqlite::Connection, source: &Source) -> Result<()
         "Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite",
     );
 
-    let sql_statement = source.generate_template();
-    let mut statement = db.prepare(&format!(
-        "
-        insert or ignore into tnea (email, provincia, ciudad, edad, sexo, template)
-        select email, provincia, ciudad, edad, sexo, {sql_statement} as template
-        from tnea_raw;
-        " // where not exists (
-          //     select 1 from tnea where tnea.email == tnea_raw.email
-          // );
-    ))?;
+    let sql_statement = document.generate_template();
+    let mut fields = String::new();
+    for field in &document.fields {
+        if !field.template_member {
+            fields.push_str(&format!("{}, ", field.name));
+        }
+    }
+
+    let statement = format!(
+        "insert or ignore into {table_name} ({fields} template) select {fields} {sql_statement} as template from {table_name}_raw"
+    );
+
+    let mut statement = db.prepare(&statement)?;
 
     let inserted = statement
         .execute(rusqlite::params![])
         .map_err(|err| eyre!(err))?;
 
     info!(
-        "Se insertaron {inserted} columnas en tnea! en {} ms",
+        "Se insertaron {inserted} columnas en {}! en {} ms",
+        table_name,
         start.elapsed().as_millis()
     );
 
@@ -323,18 +327,15 @@ fn compare_records(mut records: Vec<String>, mut headers: Vec<String>) -> eyre::
     }
 }
 
-fn parse_and_insert(path: impl AsRef<Path>, db: &Connection, f: &Source) -> Result<usize> {
+fn parse_and_insert(path: impl AsRef<Path>, db: &Connection, doc: &Document) -> Result<usize> {
     let mut inserted = 0;
-    let mut statement = db.prepare("select email from tnea_raw")?;
-    let emails = statement
-        .query_map([], |row| row.get(0))?
-        .collect::<Result<Vec<String>, _>>()?;
-
-    let datasources = parse_sources(path)?;
-    for (source, ext) in datasources {
+    let datasource = parse_sources(path, doc)?;
+    info!("Leyendo el directorio: {:?}...", datasource.name);
+    for (source, ext) in &datasource.files {
+        let mut total_registros = 0;
         info!("Leyendo {source:?}...");
 
-        let data = match ext {
+        match ext {
             DataSources::Csv => {
                 let mut reader_config = ReaderBuilder::new();
                 let mut reader = reader_config
@@ -348,20 +349,46 @@ fn parse_and_insert(path: impl AsRef<Path>, db: &Connection, f: &Source) -> Resu
                     reader.headers()?.into_iter().map(String::from).collect();
 
                 let named_parameters: Vec<String> =
-                    f.fields.iter().map(|obj| obj.name.clone()).collect();
+                    doc.fields.iter().map(|obj| obj.name.clone()).collect();
 
-                compare_records(named_parameters, headers)?;
+                compare_records(named_parameters, headers.clone())?;
 
-                reader
-                    .deserialize::<TneaData>()
-                    .filter_map(|row| row.ok())
-                    .filter(|data| !emails.contains(&data.email))
-                    .collect::<Vec<TneaData>>()
+                let insert_sql = format!(
+                    "insert into {}_raw ({}) values ({})",
+                    doc.name,
+                    headers
+                        .iter()
+                        .map(|h| format!("\"{}\"", h))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    vec!["?"; headers.len()].join(", ")
+                );
+
+                let mut stmt = db.prepare(&insert_sql)?;
+
+                db.execute("begin transaction", [])?;
+
+                for result in reader.records() {
+                    let record = result?;
+                    let values: Vec<Option<String>> = record
+                        .iter()
+                        .map(|s| Some(clean_html(s.to_string())))
+                        .collect();
+
+                    stmt.execute(params_from_iter(values))?;
+                    total_registros += 1;
+                }
+
+                db.execute("COMMIT", [])?;
             }
             DataSources::Json => {
                 let file = File::open(&source)?;
                 let reader = BufReader::new(file);
-                let data: Vec<TneaData> = serde_json::from_reader(reader)?;
+                let data: Vec<Value> = serde_json::from_reader(reader)?;
+
+                if data.is_empty() {
+                    continue;
+                }
 
                 let headers: Vec<String> = if let Some(first_record) = data.first() {
                     let field_names: Vec<String> = serde_json::to_value(first_record)?
@@ -375,61 +402,55 @@ fn parse_and_insert(path: impl AsRef<Path>, db: &Connection, f: &Source) -> Resu
                 } else {
                     vec![]
                 };
+
                 let named_parameters: Vec<String> =
-                    f.fields.iter().map(|obj| obj.name.clone()).collect();
+                    doc.fields.iter().map(|obj| obj.name.clone()).collect();
+                compare_records(named_parameters, headers.clone())?;
 
-                compare_records(named_parameters, headers)?;
+                let insert_sql = format!(
+                    "insert into {}_raw ({}) values ({})",
+                    doc.name,
+                    headers
+                        .iter()
+                        .map(|h| format!("\"{}\"", h))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    vec!["?"; headers.len()].join(", ")
+                );
 
-                data.into_iter()
-                    .filter(|row| !emails.contains(&row.email))
-                    .collect()
+                let mut stmt = db.prepare(&insert_sql)?;
+
+                db.execute("begin transaction", [])?;
+
+                for record in data {
+                    if let Some(map) = record.as_object() {
+                        let values: Vec<Option<String>> = headers
+                            .iter()
+                            .map(|h| {
+                                map.get(h)
+                                    .and_then(|v| v.as_str().map(|s| clean_html(s.to_string())))
+                            })
+                            .collect();
+
+                        stmt.execute(params_from_iter(values))?;
+                        total_registros += 1;
+                    }
+                }
+
+                db.execute("COMMIT", [])?;
             }
         };
-        let total_registros = data.len();
 
-        info!("Abriendo transacción para insertar nuevos registros en la tabla `tnea_raw`.");
-        let mut statement = db.prepare(
-            "insert into tnea_raw (
-            email,
-            nombre,
-            sexo,
-            fecha_nacimiento,
-            edad,
-            provincia,
-            ciudad,
-            descripcion,
-            estudios,
-            estudios_mas_recientes,
-            experiencia
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        )?;
-
-        db.execute("BEGIN TRANSACTION", [])?;
-
-        for record in data.into_iter() {
-            statement.execute((
-                &record.email,
-                &record.nombre,
-                &record.sexo,
-                &record.fecha_nacimiento,
-                &record.edad,
-                normalize(&record.provincia),
-                normalize(&record.ciudad),
-                clean_html(record.descripcion),
-                clean_html(record.estudios),
-                clean_html(record.estudios_mas_recientes),
-                clean_html(record.experiencia),
-            ))?;
-
-            inserted += 1;
-        }
-
-        db.execute("COMMIT", [])?;
+        info!(
+            "Abriendo transacción para insertar nuevos registros en la tabla `{}_raw`.",
+            doc.name
+        );
 
         info!(
             "Leyendo {source:?}... listo! - {} nuevos registros",
             total_registros,
         );
+        inserted += total_registros;
     }
 
     Ok(inserted)

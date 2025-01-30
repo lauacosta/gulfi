@@ -4,9 +4,9 @@ use clap::Parser;
 use eyre::eyre;
 use gulfi::startup::run_server;
 use gulfi_cli::{Cli, Commands, Model, SyncStrategy};
-use gulfi_common::Source;
+use gulfi_common::Document;
 use gulfi_configuration::ApplicationSettings;
-use gulfi_helper::initialize_meta_file;
+use gulfi_helper::{add_document_to_meta_file, initialize_meta_file};
 use gulfi_openai::embed_single;
 use gulfi_sqlite::{init_sqlite, insert_base_data, setup_sqlite, sync_fts_tnea, sync_vec_tnea};
 use rusqlite::Connection;
@@ -28,10 +28,10 @@ fn main() -> eyre::Result<()> {
         }
     }?;
 
-    let records: Source = serde_json::from_reader(file)
+    let documents: Vec<Document> = serde_json::from_reader(file)
         .map_err(|err| eyre!("Error al parsear `meta.json`. {err}"))?;
 
-    debug!(?records);
+    debug!(?documents);
 
     match cli.command {
         Commands::Serve {
@@ -50,54 +50,63 @@ fn main() -> eyre::Result<()> {
         Commands::Sync {
             sync_strat,
             clean_slate,
-            base_delay, // model,
+            base_delay,
+            document,
         } => {
-            let db = Connection::open(init_sqlite()?)?;
+            let document = document.trim().to_lowercase();
 
-            if clean_slate {
-                let exists: String = match db.query_row(
-                    "select name from sqlite_master where type='table' and name=?",
-                    ["tnea"],
-                    |row| row.get(0),
-                ) {
-                    Ok(msg) => msg,
-                    Err(err) => {
-                        return Err(eyre!(
-                            "Es probable que la base de datos no esté creada. {}",
-                            err
-                        ));
+            if let Some(doc) = documents
+                .iter()
+                .find(|d| d.name.trim().to_lowercase() == document)
+            {
+                let db = Connection::open(init_sqlite()?)?;
+                if clean_slate {
+                    let exists: String = match db.query_row(
+                        "select name from sqlite_master where type='table' and name=?",
+                        [doc.name.clone()],
+                        |row| row.get(0),
+                    ) {
+                        Ok(msg) => msg,
+                        Err(err) => {
+                            return Err(eyre!(
+                                "Es probable que la base de datos no esté creada. {}",
+                                err
+                            ));
+                        }
+                    };
+
+                    if !exists.is_empty() {
+                        db.execute(&format!("drop table {}", doc.name), [])?;
+                        db.execute(&format!("drop table {}_raw", doc.name), [])?;
+                        db.execute(&format!("drop table vec_{}", doc.name), [])?;
                     }
-                };
-
-                if !exists.is_empty() {
-                    db.execute("drop table tnea", [])?;
-                    db.execute("drop table tnea_raw", [])?;
-                    db.execute("drop table vec_tnea", [])?;
                 }
+
+                let start = std::time::Instant::now();
+
+                setup_sqlite(&db, &doc)?;
+                insert_base_data(&db, &doc)?;
+
+                match sync_strat {
+                    SyncStrategy::Fts => sync_fts_tnea(&db, &doc),
+                    SyncStrategy::Vector => {
+                        let rt = tokio::runtime::Runtime::new()?;
+                        rt.block_on(sync_vec_tnea(&db, &doc, base_delay))?;
+                    }
+                    SyncStrategy::All => {
+                        sync_fts_tnea(&db, &doc);
+                        let rt = tokio::runtime::Runtime::new()?;
+                        rt.block_on(sync_vec_tnea(&db, &doc, base_delay))?;
+                    }
+                }
+
+                info!(
+                    "Sincronización finalizada, tomó {} ms",
+                    start.elapsed().as_millis()
+                );
+            } else {
+                println!("Este documento no existe!");
             }
-
-            let start = std::time::Instant::now();
-
-            setup_sqlite(&db)?;
-            insert_base_data(&db, &records)?;
-
-            match sync_strat {
-                SyncStrategy::Fts => sync_fts_tnea(&db),
-                SyncStrategy::Vector => {
-                    let rt = tokio::runtime::Runtime::new()?;
-                    rt.block_on(sync_vec_tnea(&db, base_delay))?;
-                }
-                SyncStrategy::All => {
-                    sync_fts_tnea(&db);
-                    let rt = tokio::runtime::Runtime::new()?;
-                    rt.block_on(sync_vec_tnea(&db, base_delay))?;
-                }
-            }
-
-            info!(
-                "Sincronización finalizada, tomó {} ms",
-                start.elapsed().as_millis()
-            );
         }
         Commands::Embed { input, model } => match model {
             Model::OpenAI => {
@@ -109,7 +118,11 @@ fn main() -> eyre::Result<()> {
             Model::Local => {
                 todo!()
             }
-        }, // Commands::New => run_new()?,
+        },
+        Commands::Add => add_document_to_meta_file(documents)?,
+        Commands::List => {
+            println!("{}", serde_json::to_string_pretty(&documents)?);
+        }
     }
 
     Ok(())

@@ -55,6 +55,7 @@ impl SearchStrategy {
         let search = SearchString::parse(&params.search_str);
         debug!(?search);
         let query = search.query;
+        println!("{}", query);
         let provincia = search.provincia;
         let ciudad = search.ciudad;
 
@@ -383,6 +384,8 @@ impl SearchStrategy {
                 query.execute()?
             }
         };
+
+        dbg!(&table);
 
         info!(
             "Busqueda para el query: `{}`, exitosa! {} registros",

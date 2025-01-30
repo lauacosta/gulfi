@@ -6,7 +6,6 @@ use gulfi_sqlite::init_sqlite;
 use std::io;
 use std::net::IpAddr;
 use std::time::Duration;
-use tokio::signal::unix::SignalKind;
 use tower_http::compression::CompressionLayer;
 
 use axum::{Router, body::Body, http::Request, routing::get, serve::Serve};
@@ -100,14 +99,14 @@ impl Application {
                 };
                 #[cfg(unix)]
                 let terminate = async {
-                    signal::unix::signal(SignalKind::terminate())
-                        .expect("Fallo en instalar el handler para las señales")
+                    signal::unix::signal(signal::unix::SignalKind::terminate())
+                        .expect("failed to install signal handler")
                         .recv()
                         .await;
                 };
 
                 #[cfg(not(unix))]
-                let terminate: () = pending();
+                let terminate = std::future::pending::<()>();
 
                 tokio::select! {
                     () = ctrl_c => {

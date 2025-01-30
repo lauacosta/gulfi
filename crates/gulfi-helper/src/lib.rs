@@ -4,7 +4,7 @@ use std::io::{self, Write};
 use ansi_term::Colour;
 use ansi_term::Colour::{Fixed, Green, RGB, Red, White};
 use eyre::Result;
-use gulfi_common::{Field, Source};
+use gulfi_common::{Document, Field, clean_html};
 
 const PURPLE: (u8, u8, u8) = (126, 29, 251);
 const WIDTH: usize = 15;
@@ -17,10 +17,23 @@ pub fn initialize_meta_file() -> Result<()> {
     run_new()
 }
 
-fn run_new() -> Result<()> {
-    let name = prompt_input("Cual sera el nombre de la base?", validate_field_name);
+pub fn add_document_to_meta_file(mut documents: Vec<Document>) -> Result<()> {
+    let document = add_document();
+    documents.push(document);
 
+    let file = File::create("meta.json")?;
+    serde_json::to_writer(file, &documents)?;
+    Ok(())
+}
+
+fn add_document() -> Document {
+    let name = clean_html(prompt_input(
+        "Cual sera el nombre del documento?",
+        validate_field_name,
+    ))
+    .to_lowercase();
     let mut fields = vec![];
+
     loop {
         prompt_for_field(&mut fields);
         if !prompt_confirm("¿Añadir otro campo?") {
@@ -28,10 +41,23 @@ fn run_new() -> Result<()> {
         }
     }
 
-    let records = Source { name, fields };
-    let file = File::create("meta.json")?;
-    serde_json::to_writer(file, &records)?;
+    Document { name, fields }
+}
 
+fn run_new() -> Result<()> {
+    let mut documents = vec![];
+    loop {
+        let document = add_document();
+
+        documents.push(document);
+
+        if !prompt_confirm("¿Añadir documento?") {
+            break;
+        }
+    }
+
+    let file = File::create("meta.json")?;
+    serde_json::to_writer(file, &documents)?;
     Ok(())
 }
 
@@ -89,7 +115,7 @@ fn prompt_options(msg: &str, opts: Vec<char>) -> char {
 
 fn prompt_for_field(fields: &mut Vec<Field>) {
     println!();
-    let name = prompt_input("Nombre del campo:", validate_field_name);
+    let name = clean_html(prompt_input("Nombre del campo:", validate_field_name)).to_lowercase();
     let template_member = prompt_confirm("¿Quieres que sea parte del template?");
 
     fields.push(Field {
