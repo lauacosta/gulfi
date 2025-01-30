@@ -16,3 +16,5 @@ bun.lockb
 .idea
 gulfi_release.zip
 gulfi_release
+./crates/gulfi-ui/dist/
+

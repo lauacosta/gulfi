@@ -1,4 +1,5 @@
 mod assets;
+mod favoritos;
 mod health_check;
 mod historial;
 mod index;
@@ -7,6 +8,7 @@ pub(crate) mod search;
 pub use assets::*;
 use axum::{async_trait, extract::FromRequestParts};
 use color_eyre::Report;
+pub use favoritos::*;
 pub use health_check::*;
 pub use historial::*;
 use http::{Uri, request::Parts};
@@ -54,7 +56,7 @@ impl SearchStrategy {
             .expect("Deberia ser un path valido a una base de datos sqlite.");
         let search = SearchString::parse(&params.search_str);
         debug!(?search);
-        let query = search.query;
+        let query = search.query.trim().to_owned();
         let provincia = search.provincia;
         let ciudad = search.ciudad;
 

@@ -6,7 +6,6 @@ use gulfi_sqlite::init_sqlite;
 use std::io;
 use std::net::IpAddr;
 use std::time::Duration;
-use tokio::signal::unix::SignalKind;
 use tower_http::compression::CompressionLayer;
 
 use axum::{Router, body::Body, http::Request, routing::get, serve::Serve};
@@ -16,7 +15,10 @@ use tower_http::trace::{DefaultOnResponse, TraceLayer};
 use tower_request_id::{RequestId, RequestIdLayer};
 use tracing::{Level, error, error_span, info, instrument};
 
-use crate::routes::{handle_assets, health_check, historial, index, search};
+use crate::routes::{
+    add_favoritos, delete_favoritos, delete_historial, favoritos, handle_assets, health_check,
+    historial, index, search,
+};
 
 #[derive(Debug, Clone)]
 pub struct AppState {
@@ -100,14 +102,14 @@ impl Application {
                 };
                 #[cfg(unix)]
                 let terminate = async {
-                    signal::unix::signal(SignalKind::terminate())
+                    signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
                         .expect("Fallo en instalar el handler para las señales")
                         .recv()
                         .await;
                 };
 
                 #[cfg(not(unix))]
-                let terminate: () = pending();
+                let terminate = std::future::pending::<()>();
 
                 tokio::select! {
                     () = ctrl_c => {
@@ -126,8 +128,12 @@ pub fn build_server(listener: TcpListener, state: AppState) -> Result<Serve<Rout
     let server = Router::new()
         .route("/", get(index))
         .route("/health", get(health_check))
+        .route(
+            "/favoritos",
+            get(favoritos).post(add_favoritos).delete(delete_favoritos),
+        )
         .route("/search", get(search))
-        .route("/historial", get(historial))
+        .route("/historial", get(historial).delete(delete_historial))
         .route("/_assets/*path", get(handle_assets))
         .with_state(state)
         .layer(Extension(

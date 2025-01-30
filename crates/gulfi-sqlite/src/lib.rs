@@ -8,6 +8,7 @@ use std::{
     },
 };
 
+use chrono::NaiveDateTime;
 use csv::ReaderBuilder;
 use eyre::{Result, eyre};
 use futures::StreamExt;
@@ -15,7 +16,7 @@ use gulfi_common::{
     DataSources, HttpError, Source, TneaData, clean_html, normalize, parse_sources,
 };
 use gulfi_openai::embed_vec;
-use gulfi_ui::Historial;
+use gulfi_ui::{Favoritos, Historial, Resultados};
 use rusqlite::{Connection, ToSql, ffi::sqlite3_auto_extension, types::ValueRef};
 use sqlite_vec::sqlite3_vec_init;
 use tracing::{debug, info};
@@ -176,6 +177,14 @@ pub fn setup_sqlite(
         create table if not exists historial(
             id integer primary key,
             query text not null unique,
+            timestamp datetime default current_timestamp
+        );
+
+        create table if not exists favoritos (
+            id integer primary key,
+            nombre text not null unique,
+            data text,
+            busquedas text,
             timestamp datetime default current_timestamp
         );
 
@@ -459,6 +468,35 @@ pub fn get_historial(db: &Connection) -> Result<Vec<Historial>, HttpError> {
         .collect::<Result<Vec<Historial>, _>>()?;
 
     Ok(rows)
+}
+
+pub fn get_favoritos(db: &Connection) -> Result<Favoritos, HttpError> {
+    let mut statement = db.prepare(
+        "select id, nombre, data, timestamp, busquedas from favoritos order by timestamp desc",
+    )?;
+
+    let rows = statement
+        .query_map([], |row| {
+            let id: u64 = row.get(0).unwrap_or_default();
+            let nombre: String = row.get(1).unwrap_or_default();
+            let data: String = row.get(2).unwrap_or_default();
+            let timestamp_str: String = row.get(3).unwrap_or_default();
+            let bus: String = row.get(4).unwrap_or_default();
+            dbg!(&bus);
+
+            let timestamp = NaiveDateTime::parse_from_str(&timestamp_str, "%Y-%m-%d %H:%M:%S")
+                .unwrap_or_else(|_| Default::default());
+
+            let busquedas: Vec<String> =
+                serde_json::from_str(&bus).expect("Tendria que poder ser serializado");
+
+            let data = Resultados::new(id, nombre, data, timestamp, busquedas);
+
+            Ok(data)
+        })?
+        .collect::<Result<Vec<Resultados>, _>>()?;
+
+    Ok(Favoritos { favoritos: rows })
 }
 
 pub struct SearchQuery<'a> {

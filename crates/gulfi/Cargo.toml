@@ -27,6 +27,8 @@ serde.workspace = true
 serde_json.workspace = true
 http.workspace = true
 zerocopy.workspace = true
+rinja_axum.workspace = true
+rinja.workspace = true
 serde_urlencoded.workspace = true
 
 gulfi-sqlite = { path = "../gulfi-sqlite/"}

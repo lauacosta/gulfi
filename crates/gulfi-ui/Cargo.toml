@@ -13,4 +13,5 @@ axum.workspace = true
 rusqlite.workspace = true
 rinja.workspace = true
 rinja_axum.workspace = true
+chrono.workspace = true
 # gulfi-sqlite = { path = "../gulfi-sqlite/" }

@@ -27,7 +27,7 @@ pub enum HttpError {
 }
 
 impl HttpError {
-    fn from_report(err: color_eyre::Report) -> Self {
+    pub fn from_report(err: color_eyre::Report) -> Self {
         error!("HTTP handler error: {}", err.root_cause());
 
         if let Some(bt) = err

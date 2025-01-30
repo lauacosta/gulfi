@@ -1,5 +1,6 @@
 use std::fmt::Display;
 
+use chrono::NaiveDateTime;
 use rinja::Template;
 use rusqlite::{
     ToSql,
@@ -86,6 +87,40 @@ impl Historial {
     #[must_use]
     pub fn new(id: u64, query: String) -> Self {
         Self { id, query }
+    }
+}
+
+#[derive(Template, Debug, Clone, Default, Serialize)]
+#[template(path = "favoritos.html")]
+pub struct Favoritos {
+    pub favoritos: Vec<Resultados>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct Resultados {
+    pub id: u64,
+    pub nombre: String,
+    pub data: String,
+    pub fecha: String,
+    pub busquedas: Vec<String>,
+}
+
+impl Resultados {
+    #[must_use]
+    pub fn new(
+        id: u64,
+        nombre: String,
+        data: String,
+        fecha: NaiveDateTime,
+        busquedas: Vec<String>,
+    ) -> Self {
+        Self {
+            id,
+            nombre,
+            data,
+            fecha: fecha.format("%b %d, %Y").to_string(),
+            busquedas,
+        }
     }
 }
 
