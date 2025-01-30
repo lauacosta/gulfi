@@ -4,6 +4,7 @@ let heldSearches = [];
 let isHolding = false;
 
 document.addEventListener("DOMContentLoaded", async () => {
+
     await updateHistorial();
     initHistorial();
     initKeyboard();
@@ -18,24 +19,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         initPagination();
     });
 
-    document.addEventListener("htmx:beforeRequest", (event) => {
-        if (event.target.id === "search-form") {
-            const formData = new FormData(event.target);
-            const query = formData.get("query");
-
-            if (query) {
-                const normalizedQuery = query.trim().toLowerCase();
-
-                if (
-                    !heldSearches.some(
-                        (search) => search.toLowerCase() === normalizedQuery,
-                    )
-                ) {
-                    heldSearches.push(query);
-                }
-            }
-        }
-    });
 });
 
 function setSaveButton() {
@@ -81,9 +64,9 @@ function setSaveButton() {
 }
 
 function initHistorial() {
-    const input = document.getElementById("search-input")
-    input.value = "";
     const historialItems = document.querySelectorAll(".list-item");
+    const input = document.getElementById("search-input")
+
 
     for (const item of historialItems) {
         item.addEventListener("click", () => {
@@ -368,8 +351,14 @@ function guardarResultados() {
                 const weight = calcularPeso(heldData);
                 itemsCount.textContent = heldData.length;
                 dataWeight.textContent = `${weight} KB`;
-
                 downloadBtn.disabled = false;
+
+                const input = document.getElementById("search-input")
+                if (input !== null) {
+                    if (input.value.trim()) {
+                        heldSearches.push(input.value);
+                    }
+                }
             }
         });
 
