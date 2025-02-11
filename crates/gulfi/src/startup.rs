@@ -1,6 +1,6 @@
 use axum::Extension;
 use eyre::Result;
-use gulfi_cli::Cache;
+// use gulfi_cli::Cache;
 use gulfi_configuration::ApplicationSettings;
 use gulfi_sqlite::init_sqlite;
 use std::io;
@@ -23,7 +23,7 @@ use crate::routes::{
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub db_path: String,
-    pub cache: Cache,
+    // pub cache: Cache,
 }
 
 #[derive(Debug)]
@@ -67,9 +67,9 @@ impl Application {
         let host = configuration.host;
 
         let db_path = init_sqlite()?;
-        let cache = configuration.cache.clone();
+        // let cache = configuration.cache.clone();
 
-        let state = AppState { db_path, cache };
+        let state = AppState { db_path };
 
         let server = build_server(listener, state)?;
 

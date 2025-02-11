@@ -1,7 +1,7 @@
 [package]
 name = "gulfi-sqlite"
-version = "0.1.0"
 edition = "2024"
+version.workspace = true
 
 [dependencies]
 sqlite-vec = "0.1.3"

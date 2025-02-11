@@ -1,22 +1,22 @@
 use std::net::IpAddr;
 
-use gulfi_cli::Cache;
+// use gulfi_cli::Cache;
 
 #[derive(Debug, Clone)]
 pub struct ApplicationSettings {
     pub port: u16,
     pub host: IpAddr,
-    pub cache: Cache,
+    // pub cache: Cache,
     pub open: bool,
 }
 
 impl ApplicationSettings {
     #[must_use]
-    pub fn new(port: u16, host: IpAddr, cache: Cache, open: bool) -> Self {
+    pub fn new(port: u16, host: IpAddr, open: bool) -> Self {
         Self {
             port,
             host,
-            cache,
+            // cache,
             open,
         }
     }

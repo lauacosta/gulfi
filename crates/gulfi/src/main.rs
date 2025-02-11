@@ -36,10 +36,10 @@ fn main() -> eyre::Result<()> {
         Commands::Serve {
             interface,
             port,
-            cache,
+            // cache,
             open,
         } => {
-            let configuration = ApplicationSettings::new(port, interface, cache, open);
+            let configuration = ApplicationSettings::new(port, interface, open);
 
             debug!(?configuration);
             let rt = tokio::runtime::Runtime::new()?;

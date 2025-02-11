@@ -1,17 +1,19 @@
 use std::net::IpAddr;
 
-use clap::{Parser, Subcommand, ValueEnum, command};
+use clap::{Parser, Subcommand, ValueEnum, command, crate_version};
 
 #[derive(Parser)]
-#[command(version, about, long_about = None, before_help = r"
+#[command(version, about, long_about = None, before_help = format!(r"
  _____       _  __ _ 
 |  __ \     | |/ _(_)
 | |  \/_   _| | |_ _ 
 | | __| | | | |  _| |
 | |_\ \ |_| | | | | |
- \____/\__,_|_|_| |_| v1.0.0
+ \____/\__,_|_|_| |_| {}
 
-    @lauacosta/gulfi")]
+    @lauacosta/gulfi", crate_version!()
+    ))
+]
 pub struct Cli {
     #[arg(long = "log-level", default_value = "INFO")]
     pub loglevel: String,
@@ -22,7 +24,7 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Inicia el cliente web.
+    /// Inicia el servidor HTTP y expone la interfaz web
     Serve {
         /// Establece la dirección IP.
         #[clap(short = 'I', long, default_value = "127.0.0.1")]
@@ -32,14 +34,13 @@ pub enum Commands {
         #[clap(short = 'P', long, default_value_t = 3000)]
         port: u16,
 
-        #[arg(value_enum, short = 'C', long, default_value_t = Cache::Disabled)]
-        cache: Cache,
-
+        // #[arg(value_enum, short = 'C', long, default_value_t = Cache::Disabled)]
+        // cache: Cache,
         /// Automaticamente abre la aplicación en el navegador
         #[arg(long, default_value = "false")]
         open: bool,
     },
-    /// Actualiza las bases de datos
+    /// Actualiza la base de datos
     Sync {
         /// Fuerza la actualización incluso cuando la base de datos no está vacía.
         #[arg(long, default_value = "false")]
@@ -68,6 +69,7 @@ pub enum Model {
     Local,
 }
 
+#[allow(unused)]
 #[derive(Debug, Clone, ValueEnum)]
 pub enum Cache {
     Enabled,
