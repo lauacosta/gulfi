@@ -3,11 +3,10 @@ use std::fs::File;
 use clap::Parser;
 use eyre::eyre;
 use gulfi::startup::run_server;
-use gulfi_cli::{Cli, Commands, Model, SyncStrategy};
+use gulfi_cli::{Cli, Commands, SyncStrategy};
 use gulfi_common::Source;
 use gulfi_configuration::ApplicationSettings;
 use gulfi_helper::initialize_meta_file;
-use gulfi_openai::embed_single;
 use gulfi_sqlite::{init_sqlite, insert_base_data, setup_sqlite, sync_fts_tnea, sync_vec_tnea};
 use rusqlite::Connection;
 use tracing::{Level, debug, info, level_filters::LevelFilter};
@@ -21,7 +20,7 @@ fn main() -> eyre::Result<()> {
     setup(cli.loglevel)?;
 
     let file = match File::open("meta.json") {
-        Ok(f) => Ok(f),
+        Ok(file) => Ok(file),
         Err(_) => {
             initialize_meta_file()?;
             File::open("meta.json")
@@ -50,8 +49,9 @@ fn main() -> eyre::Result<()> {
         Commands::Sync {
             sync_strat,
             clean_slate,
-            base_delay, // model,
+            base_delay,
         } => {
+            let base_delay = base_delay * 1000;
             let db = Connection::open(init_sqlite()?)?;
 
             if clean_slate {
@@ -99,17 +99,6 @@ fn main() -> eyre::Result<()> {
                 start.elapsed().as_millis()
             );
         }
-        Commands::Embed { input, model } => match model {
-            Model::OpenAI => {
-                let client = reqwest::Client::new();
-                let rt = tokio::runtime::Runtime::new()?;
-                let output = rt.block_on(embed_single(input, &client))?;
-                println!("{output:?}");
-            }
-            Model::Local => {
-                todo!()
-            }
-        }, // Commands::New => run_new()?,
     }
 
     Ok(())

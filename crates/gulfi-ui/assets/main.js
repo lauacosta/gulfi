@@ -4,13 +4,13 @@ let heldSearches = [];
 let isHolding = false;
 
 document.addEventListener("DOMContentLoaded", async () => {
-
     await updateHistorial();
     initHistorial();
     initKeyboard();
     hideElements();
     initSlider();
     setSaveButton();
+    listenerResetHeldData();
 
     document.body.addEventListener("htmx:afterRequest", async () => {
         await updateHistorial();
@@ -18,7 +18,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         guardarResultados();
         initPagination();
     });
-
 });
 
 function setSaveButton() {
@@ -27,8 +26,8 @@ function setSaveButton() {
         return;
     }
 
-    saveBtn.addEventListener("click", async () => {
-        event.preventDefault();
+    saveBtn.addEventListener("click", async (e) => {
+        e.preventDefault();
         if (heldData.length === 0 || heldSearches.length === 0) {
             return;
         }
@@ -67,9 +66,9 @@ function initHistorial() {
     const historialItems = document.querySelectorAll(".list-item");
     const input = document.getElementById("search-input")
 
-
     for (const item of historialItems) {
-        item.addEventListener("click", () => {
+        item.addEventListener("click", (e) => {
+            e.preventDefault();
             const queryContent = item.textContent || "";
             input.value = queryContent.trim();
         });
@@ -141,14 +140,16 @@ function initPagination() {
     function create_pagination_controls(container, total, show_page_callback) {
         const startButton = document.createElement("button");
         startButton.textContent = "<<";
-        startButton.addEventListener("click", () => {
+        startButton.addEventListener("click", (e) => {
+            e.preventDefault();
             currentPage = 0;
             show_page_callback(currentPage);
         });
 
         const prevButton = document.createElement("button");
         prevButton.textContent = "<";
-        prevButton.addEventListener("click", () => {
+        prevButton.addEventListener("click", (e) => {
+            e.preventDefault();
             if (currentPage > 0) {
                 show_page_callback(--currentPage);
             }
@@ -159,7 +160,8 @@ function initPagination() {
 
         const nextButton = document.createElement("button");
         nextButton.textContent = ">";
-        nextButton.addEventListener("click", () => {
+        nextButton.addEventListener("click", (e) => {
+            e.preventDefault();
             if (currentPage < totalPages - 1) {
                 show_page_callback(++currentPage);
             }
@@ -167,7 +169,8 @@ function initPagination() {
 
         const endButton = document.createElement("button");
         endButton.textContent = ">>";
-        endButton.addEventListener("click", () => {
+        endButton.addEventListener("click", (e) => {
+            e.preventDefault();
             currentPage = totalPages - 1;
             show_page_callback(currentPage);
         });
@@ -230,6 +233,22 @@ function hideElements() {
     });
 }
 
+function listenerResetHeldData() {
+    const resetBtn = document.getElementById("resetDownloadBtn");
+
+    if (resetBtn) {
+        resetBtn.addEventListener("click", (e) => {
+            e.preventDefault();
+            heldData = [];
+
+            const weight = calcularPeso(heldData);
+            itemsCount.textContent = heldData.length;
+            dataWeight.textContent = `${weight} KB`;
+            downloadBtn.disabled = true;
+        })
+    }
+}
+
 function initSlider() {
     const balance_slider = document.getElementById("balanceSlider");
     const peso_fts_label = document.getElementById("value1Display");
@@ -265,7 +284,6 @@ async function updateHistorial() {
     const historial = document.getElementById("historial");
 
     if (!historial) {
-        console.error("no esta #historial");
         return;
     }
 
@@ -299,10 +317,10 @@ async function updateHistorial() {
 
             deleteBtn.classList.add("delete-btn");
 
-            // deleteBtn.classList.add("delete-btn");
-            deleteBtn.addEventListener("click", async () => {
+            deleteBtn.addEventListener("click", async (e) => {
+                e.preventDefault();
                 try {
-                    const deleteResponse = await fetch(`/historial?query=${el.query}`, {
+                    const deleteResponse = await fetch(`/historial?query=${encodeURIComponent(el.query)}`, {
                         method: "DELETE",
                     });
 
@@ -344,7 +362,7 @@ function guardarResultados() {
                 heldData.push(
                     ...[...table.querySelectorAll("tbody tr")].map((row) => {
                         const cell = row.children[index];
-                        return cell ? cell.innerText : "";
+                        return cell ? cell.innerText.trim().replace(/\n/g, '') : "";
                     }),
                 );
 
@@ -368,7 +386,8 @@ function guardarResultados() {
     });
 
     if (downloadBtn) {
-        downloadBtn.addEventListener("click", async () => {
+        downloadBtn.addEventListener("click", async (e) => {
+            e.preventDefault();
             descargarCSVGlobal();
         });
     }
@@ -402,26 +421,32 @@ function descargarCSVFavoritos(data, filename) {
         return;
     }
 
-    const dataArray = JSON.parse(data);
-    if (!dataArray || dataArray.length === 0) {
-        return;
+    try {
+        const dataArray = JSON.parse(data);
+        if (!dataArray || dataArray.length === 0) {
+            return;
+        }
+
+        const csvRows = [];
+
+        for (const item of dataArray) {
+            csvRows.push(`"${item.replace(/"/g, '""')}"`);
+        }
+
+        const csvString = csvRows.join("\n");
+
+        const blob = new Blob([csvString], { type: "text/csv" });
+
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `${filename}.csv`;
+        link.click();
+        URL.revokeObjectURL(link.href);
+
+    } catch (error) {
+        console.error(error);
+        console.log(data);
     }
-
-    const csvRows = [];
-
-    for (const item of dataArray) {
-        csvRows.push(`"${item.replace(/"/g, '""')}"`);
-    }
-
-    const csvString = csvRows.join("\n");
-
-    const blob = new Blob([csvString], { type: "text/csv" });
-
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `${filename}.csv`;
-    link.click();
-    URL.revokeObjectURL(link.href);
 }
 
 function calcularPeso(data) {

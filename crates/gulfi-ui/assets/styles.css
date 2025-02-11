@@ -29,16 +29,6 @@ body {
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
 }
 
-/* aside.sidebar { */
-/*     width: 300px; */
-/*     height: 100vh; */
-/*     background-color: #f7f7f7; */
-/*     padding: 20px; */
-/*     border-right: 1px solid #ddd; */
-/*     overflow-y: auto; */
-/*     overflow-x: auto; */
-/* } */
-
 aside.sidebar {
     width: 250px;
     padding: 1rem;
@@ -47,15 +37,9 @@ aside.sidebar {
     overflow-y: auto;
 }
 
-/* aside.sidebar h2 { */
-/*     margin-bottom: 15px; */
-/* } */
-
 .historial {
     list-style-type: none;
 }
-
-
 
 .main-content {
     flex: 1;
@@ -231,7 +215,8 @@ button:active {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
     padding: 1px;
     margin: 20px;
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: auto;
 }
 
 .table-header {

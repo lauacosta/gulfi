@@ -1,16 +1,49 @@
 {
-	"name": "TNEA",
-	"fields": [
-		{ "name": "email", "template_member": false },
-		{ "name": "nombre", "template_member": false },
-		{ "name": "sexo", "template_member": false },
-		{ "name": "fecha_nacimiento", "template_member": false },
-		{ "name": "edad", "template_member": false },
-		{ "name": "provincia", "template_member": false },
-		{ "name": "ciudad", "template_member": false },
-		{ "name": "estudios", "template_member": true },
-		{ "name": "experiencia", "template_member": true },
-		{ "name": "descripcion", "template_member": true },
-		{ "name": "estudios_mas_recientes", "template_member": true }
-	]
+    "name": "TNEA",
+    "fields": [
+        {
+            "name": "email",
+            "template_member": false
+        },
+        {
+            "name": "nombre",
+            "template_member": false
+        },
+        {
+            "name": "sexo",
+            "template_member": false
+        },
+        {
+            "name": "fecha_nacimiento",
+            "template_member": false
+        },
+        {
+            "name": "edad",
+            "template_member": false
+        },
+        {
+            "name": "provincia",
+            "template_member": false
+        },
+        {
+            "name": "ciudad",
+            "template_member": false
+        },
+        {
+            "name": "estudios",
+            "template_member": true
+        },
+        {
+            "name": "experiencia",
+            "template_member": true
+        },
+        {
+            "name": "descripcion",
+            "template_member": true
+        },
+        {
+            "name": "estudios_mas_recientes",
+            "template_member": true
+        }
+    ]
 }

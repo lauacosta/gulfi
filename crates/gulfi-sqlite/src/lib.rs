@@ -22,11 +22,7 @@ use sqlite_vec::sqlite3_vec_init;
 use tracing::{debug, info};
 use zerocopy::IntoBytes;
 
-pub async fn sync_vec_tnea(
-    db: &Connection,
-    // model: Model,
-    base_delay: u64,
-) -> Result<()> {
+pub async fn sync_vec_tnea(db: &Connection, base_delay: u64) -> Result<()> {
     let mut statement = db.prepare("select id, template from tnea")?;
 
     let templates: Vec<(u64, String)> = match statement.query_map([], |row| {
@@ -52,16 +48,11 @@ pub async fn sync_vec_tnea(
     let jh = templates
         .chunks(chunk_size)
         .enumerate()
-        .map(|(proc_id, chunk)|
-        //     match model {
-            // Model::OpenAI =>
-            {
-                let indices: Vec<u64> = chunk.iter().map(|(id, _)| *id).collect();
-                let templates: Vec<String> =
-                    chunk.iter().map(|(_, template)| template.clone()).collect();
-                embed_vec(indices, templates, &client, proc_id, base_delay)
-            // }
-            // Model::Local => todo!(),
+        .map(|(proc_id, chunk)| {
+            let indices: Vec<u64> = chunk.iter().map(|(id, _)| *id).collect();
+            let templates: Vec<String> =
+                chunk.iter().map(|(_, template)| template.clone()).collect();
+            embed_vec(indices, templates, &client, proc_id, base_delay)
         });
 
     let stream = futures::stream::iter(jh);
@@ -146,10 +137,7 @@ pub fn init_sqlite() -> Result<String> {
     Ok(path)
 }
 
-pub fn setup_sqlite(
-    db: &rusqlite::Connection,
-    // model: &Model
-) -> Result<()> {
+pub fn setup_sqlite(db: &rusqlite::Connection) -> Result<()> {
     let (sqlite_version, vec_version): (String, String) =
         db.query_row("select sqlite_version(), vec_version()", [], |row| {
             Ok((row.get(0)?, row.get(1)?))

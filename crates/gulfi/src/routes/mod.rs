@@ -9,13 +9,13 @@ pub use assets::*;
 use axum::{async_trait, extract::FromRequestParts};
 use color_eyre::Report;
 pub use favoritos::*;
+use gulfi_openai::embed_single;
 pub use health_check::*;
 pub use historial::*;
 use http::{Uri, request::Parts};
 pub use index::*;
 
 use gulfi_common::{HttpError, IntoHttp, SearchResult, SearchString};
-use gulfi_openai::embed_single;
 use gulfi_sqlite::SearchQueryBuilder;
 use gulfi_ui::{Sexo, Table};
 use reqwest::Client;

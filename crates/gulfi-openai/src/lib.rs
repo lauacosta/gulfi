@@ -4,9 +4,12 @@ use std::{
 };
 
 use eyre::Result;
+use rand::Rng;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use tracing::{error, info, instrument};
+use tracing::{debug, error, info, instrument, warn};
+
+const MAX_INTENTOS: u32 = 5;
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -53,6 +56,10 @@ pub enum EmbeddingError {
     MaxRetriesExceeded,
 }
 
+#[instrument(
+    name = "Solicitando embeddings a la API",
+    skip(client, token, request, max_retries)
+)]
 async fn request_embeddings(
     client: &Client,
     token: &str,
@@ -63,9 +70,13 @@ async fn request_embeddings(
     proc_id: usize,
 ) -> Result<reqwest::Response, EmbeddingError> {
     if attempt > 0 {
-        tracing::warn!("Intento {attempt}/{max_retries} [{proc_id}]");
-        let delay = Duration::from_millis(1000 * time_backoff.pow(attempt));
-        tokio::time::sleep(delay).await;
+        warn!("Intento {attempt}/{max_retries} [{proc_id}]");
+
+        let max_delay = time_backoff * 2u64.pow(attempt);
+        let jittered_delay = rand::rng().random_range(0..=max_delay);
+
+        debug!(%jittered_delay);
+        tokio::time::sleep(Duration::from_millis(jittered_delay)).await;
     }
 
     let response = client
@@ -78,11 +89,24 @@ async fn request_embeddings(
     match response.status() {
         status if status.is_success() => Ok(response),
         status if status.as_u16() == 429 => {
+            let retry_after = response
+                .headers()
+                .get("retry-after")
+                .and_then(|h| h.to_str().ok())
+                .and_then(|s| s.parse::<u64>().ok());
+
             if attempt >= max_retries {
-                error!("El maximo numero de intentos fue excedido bajo rate limit [{proc_id}]");
+                error!(
+                    "El maximo numero de intentos fue excedido debido al Rate limit [{proc_id}]"
+                );
                 Err(EmbeddingError::MaxRetriesExceeded)
             } else {
-                error!("Rate limit excedido, volviendo a intentar... [{proc_id}]");
+                warn!("Rate limit excedido, volviendo a intentar... [{proc_id}]");
+
+                if let Some(retry_after) = retry_after {
+                    tokio::time::sleep(Duration::from_secs(retry_after)).await;
+                }
+
                 Err(EmbeddingError::RateLimit)
             }
         }
@@ -96,13 +120,14 @@ async fn request_embeddings(
 }
 
 // https://community.openai.com/t/does-the-index-field-on-an-embedding-response-correlate-to-the-index-of-the-input-text-it-was-generated-from/526099
+// TODO: Check por un bug, siempre hay una request que devuelve 400 no 429.
 #[instrument(name = "Generando Embeddings", skip(input, client, indices))]
 pub async fn embed_vec(
     indices: Vec<u64>,
     input: Vec<String>,
     client: &Client,
     proc_id: usize,
-    time_backoff: u64,
+    base_delay: u64,
 ) -> Result<Vec<(u64, Vec<f32>)>> {
     let global_start = Instant::now();
 
@@ -115,7 +140,6 @@ pub async fn embed_vec(
 
     let token = var("OPENAI_KEY").expect("`OPENAI_KEY debería estar definido en el .env");
 
-    const MAX_INTENTOS: u32 = 3;
     let mut intento = 0;
     let mut response = None;
 
@@ -128,7 +152,7 @@ pub async fn embed_vec(
             &request,
             intento,
             MAX_INTENTOS,
-            time_backoff,
+            base_delay,
             proc_id,
         )
         .await
@@ -172,7 +196,7 @@ pub async fn embed_vec(
     Ok(embedding)
 }
 
-#[instrument(name = "Generando embedding del query", skip(input, client))]
+#[instrument(name = "Generando embedding a partir del query", skip(input, client))]
 pub async fn embed_single(input: String, client: &Client) -> Result<Vec<f32>> {
     let global_start = Instant::now();
 

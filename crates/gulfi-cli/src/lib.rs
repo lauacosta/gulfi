@@ -49,24 +49,10 @@ pub enum Commands {
         #[arg(value_enum, short = 'S', long, default_value_t = SyncStrategy::Fts)]
         sync_strat: SyncStrategy,
 
-        /// Determina la cantidad de tiempo base al hacer backoff en los requests.
-        #[arg(short = 'T', long, default_value_t = 5)]
+        /// Determina la cantidad de tiempo base al hacer backoff en los requests. En millisegundos.
+        #[arg(short = 'T', long, default_value_t = 2)]
         base_delay: u64,
-        // /// Determina si utilizar un modelo local o remoto (Actualmente solo es "text-embedding-3-small").
-        // #[arg(value_enum, short = 'M', long, default_value_t = Model::OpenAI)]
-        // model: Model,
     },
-
-    /// Genera un embedding en base a una input
-    Embed {
-        /// Input que transformar a un embedding
-        #[arg(long)]
-        input: String,
-        /// Determina si utilizar un modelo local (actualmente es distilBERT) o remoto (actualmente solo es "text-embedding-3-small").
-        #[arg(value_enum, long, default_value_t = Model::OpenAI)]
-        model: Model,
-    },
-    // New,
 }
 
 #[derive(Clone, ValueEnum)]

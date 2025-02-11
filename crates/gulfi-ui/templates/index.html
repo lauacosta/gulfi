@@ -106,11 +106,15 @@
                         </div>
 
                         <div class="button-container">
-                            <button type="submit" class="search-button">Buscar</button>
-                            <button id="downloadBtn" class="search-button" disabled>
+                            <button aria-label="Buscar" title="Buscar" type="submit" class="search-button">Buscar</button>
+                            <button aria-label = "Descargar" title="Descargar" id="downloadBtn" class="search-button" disabled>
                                 Descargar <span id="itemsCount">0</span> elementos (<span id="dataWeight">0 KB</span>)
                             </button>
-                            <button id="saveBtn" class="search-button">
+                            <button aria-label = "Resetear descarga" title="Resetear descarga" id="resetDownloadBtn" class="search-button">
+                                ⟳
+                            </button>
+
+                            <button aria-label = "Agregar búsqueda a favoritos" title="Agregar búsqueda a favoritos" id="saveBtn" class="search-button">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512" width="24" height="24">
                                     <path d="M259.3 17.8L194 150.2 47.9 171.5c-26.2 3.8-36.7 36-17.7 54.6l105.7 103-25 146c-4.5 26.2 23 46 46.4 33.7L288 439.6l131.7 69.2c23.4 12.3 50.9-7.4 46.4-33.7l-25-146 105.7-103c19-18.6 8.5-50.8-17.7-54.6L382 150.2 316.7 17.8c-11.7-23.6-45.7-23.9-57.4 0z"/>
                                 </svg>
@@ -123,7 +127,6 @@
                 </div>
 
                 <div class="table-container" id=>
-                    
                     <div class="tooltip">
                         Haz click en las columnas que quieras exportar a CSV, se acumularan hasta que presiones descargar!
                     </div>

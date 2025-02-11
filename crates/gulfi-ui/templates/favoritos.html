@@ -42,11 +42,16 @@
                         hx-delete="/favoritos?nombre={{ fav.nombre }}" 
                         hx-target="#card-{{ fav.nombre}}"
                         hx-swap="outerHTML" 
-                        class="delete-button">
+                        class="delete-button"
+                        aria-label ="Borrar de favoritos" title="Borrar de favoritos"
+                        >
                         Borrar
                     </button>
                     <button
-                        class="search-button"  onclick="descargarCSVFavoritos('{{ fav.data }}','{{ fav.nombre }}')">
+                        class="search-button"
+                        onclick="descargarCSVFavoritos('{{ fav.data }}','{{ fav.nombre }}')"
+                        aria-label ="Descargar" title="Descargar"
+                    >
                         Descargar
                     </button>
                 </div>

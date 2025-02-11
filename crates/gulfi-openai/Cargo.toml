@@ -10,4 +10,4 @@ tracing.workspace = true
 reqwest.workspace = true
 tokio.workspace = true
 eyre.workspace = true
-
+rand = "0.9.0"
