@@ -34,8 +34,6 @@ clap = { version = "4.5.20", features = ["derive"] }
 reqwest = { version = "0.12.8", default-features = false, features = ["json", "stream", "rustls-tls", "gzip", "deflate"] }
 color-eyre = "0.6.3"
 eyre = "0.6.12"
-rinja = { version = "0.3.5", features = ["with-axum"] }
-rinja_axum = "0.3.5"
 serde_urlencoded = "0.7.1"
 camino = "1.1.9"
 

@@ -3,15 +3,11 @@ name = "gulfi-ui"
 edition = "2024"
 version.workspace = true
 
-[build-dependencies]
-lightningcss = "1.0.0-alpha.63"
-minify-js = "0.6.0"
-
 [dependencies]
 serde.workspace = true
 axum.workspace = true
 rusqlite.workspace = true
-rinja.workspace = true
-rinja_axum.workspace = true
 chrono.workspace = true
+
+include_dir = "0.7.4"
 # gulfi-sqlite = { path = "../gulfi-sqlite/" }

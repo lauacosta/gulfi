@@ -1,35 +1,46 @@
-use std::{fs, path::Path};
-
-use lightningcss::{
-    printer::PrinterOptions,
-    stylesheet::{MinifyOptions, ParserOptions, StyleSheet},
-};
-use minify_js::{Session, TopLevelMode};
+use std::path::Path;
+use std::process::Command;
 
 fn main() {
-    println!("cargo::rerun-if-changed=assets/main.js");
-    println!("cargo::rerun-if-changed=assets/style.css");
+    println!("cargo:rerun-if-changed=ui/");
 
-    if !Path::new("dist").exists() {
-        fs::create_dir_all("dist").expect("Error al generar el directorio 'dist'");
+    let ui_dir = Path::new("ui");
+    let output_dir = ui_dir.join("dist");
+
+    if !ui_dir.exists() {
+        panic!("Directorio '{}' no existe!", ui_dir.display());
     }
 
-    let css_content =
-        fs::read_to_string("assets/styles.css").expect("No se encontró 'assets/styles.css'");
-    let mut stylesheet = StyleSheet::parse(&css_content, ParserOptions::default()).unwrap();
-    stylesheet.minify(MinifyOptions::default()).unwrap();
-    let res = stylesheet.to_css(PrinterOptions::default()).unwrap();
-    fs::write("dist/styles.min.css", res.code).expect("No se ha podido escribir styles.min.css");
+    let pnpm_check = Command::new("pnpm")
+        .arg("--version")
+        .output()
+        .expect("Fallo al chequear la instalacion de pnpm");
 
-    let js_content = fs::read_to_string("assets/main.js").expect("No se encontró 'assets/main.js'");
-    let session = Session::new();
-    let mut out = Vec::new();
-    minify_js::minify(
-        &session,
-        TopLevelMode::Global,
-        js_content.as_bytes(),
-        &mut out,
-    )
-    .expect("No se ha podido minimizar el codigo JS.");
-    fs::write("dist/main.min.js", out).expect("No se ha podido escribir main.min.js");
+    if !pnpm_check.status.success() {
+        panic!("pnpm no está instalado.");
+    }
+
+    println!(
+        "pnpm encontrado: {}",
+        String::from_utf8_lossy(&pnpm_check.stdout)
+    );
+
+    let status = Command::new("pnpm")
+        .args(["build", "--", "--outDir", output_dir.to_str().unwrap()])
+        .current_dir(ui_dir)
+        .status()
+        .expect("El proceso de build falló.");
+
+    if !status.success() {
+        panic!("Svelte build falló!");
+    }
+
+    if !output_dir.exists() {
+        panic!(
+            "Build exitosa, pero '{}' no fue creado!",
+            output_dir.display()
+        );
+    }
+
+    println!("La UI se construyó exitosamente.");
 }

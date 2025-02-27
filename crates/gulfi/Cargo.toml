@@ -4,7 +4,6 @@ edition = "2024"
 authors = ["Lautaro <acostaquintanalautaro@gmail.com>"]
 version.workspace = true
 
-
 [dependencies]
 dotenvy = "0.15.7"
 tower = "0.5.0"
@@ -13,6 +12,7 @@ tower-request-id = "0.3.0"
 tracing-tree = "0.4.0"
 tracing-error = "0.2.0"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json"] }
+mime_guess = "2.0.5"
 
 eyre.workspace = true
 thiserror.workspace = true
@@ -27,8 +27,6 @@ serde.workspace = true
 serde_json.workspace = true
 http.workspace = true
 zerocopy.workspace = true
-rinja_axum.workspace = true
-rinja.workspace = true
 serde_urlencoded.workspace = true
 
 gulfi-sqlite = { path = "../gulfi-sqlite/"}
@@ -40,5 +38,4 @@ gulfi-cli = { path = "../gulfi-cli/"}
 gulfi-configuration = { path = "../gulfi-configuration/"}
 axum-extra = { version = "0.9.6", features = ["typed-header"] }
 webbrowser = "1.0.3"
-include_dir = "0.7.4"
 tower-serve-static = "0.1.1"

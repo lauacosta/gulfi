@@ -2,19 +2,18 @@
 /scripts
 *.sqlite3
 .env
-querysense.db
+gulfi.db
 /configuration
 /dist
 /sql
 /datasources
 /backup
-/node_modules
-bun.lockb
+
 /release
 /backups
 /scripts
 .idea
 gulfi_release.zip
 gulfi_release
-/crates/gulfi-ui/dist/*
+/crates/gulfi-ui/ui/dist/*
 

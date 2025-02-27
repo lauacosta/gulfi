@@ -1,6 +1,5 @@
 use axum::Extension;
 use eyre::Result;
-// use gulfi_cli::Cache;
 use gulfi_configuration::ApplicationSettings;
 use gulfi_sqlite::init_sqlite;
 use std::io;
@@ -16,8 +15,8 @@ use tower_request_id::{RequestId, RequestIdLayer};
 use tracing::{Level, error, error_span, info, instrument};
 
 use crate::routes::{
-    add_favoritos, delete_favoritos, delete_historial, favoritos, handle_assets, health_check,
-    historial, index, search,
+    add_favoritos, delete_favoritos, delete_historial, favoritos, health_check, historial, search,
+    serve_ui,
 };
 
 #[derive(Debug, Clone)]
@@ -125,16 +124,21 @@ impl Application {
 }
 
 pub fn build_server(listener: TcpListener, state: AppState) -> Result<Serve<Router, Router>> {
-    let server = Router::new()
-        .route("/", get(index))
-        .route("/health", get(health_check))
+    let api_routes = Router::new()
+        .route("/api/health", get(health_check))
         .route(
-            "/favoritos",
+            "/api/favoritos",
             get(favoritos).post(add_favoritos).delete(delete_favoritos),
         )
-        .route("/search", get(search))
-        .route("/historial", get(historial).delete(delete_historial))
-        .route("/_assets/*path", get(handle_assets))
+        .route("/api/search", get(search))
+        .route("/api/historial", get(historial).delete(delete_historial));
+
+    let frontend_routes = Router::new()
+        .route("/assets/*path", get(serve_ui))
+        .fallback(serve_ui);
+
+    let server = api_routes
+        .merge(frontend_routes)
         .with_state(state)
         .layer(Extension(
             reqwest::ClientBuilder::new()

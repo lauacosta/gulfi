@@ -1,13 +1,13 @@
 use axum::{
+    Json,
     http::StatusCode,
     response::{IntoResponse, Response},
 };
 use chrono::Local;
+use serde_json::json;
 use std::io::Write;
 use termcolor::{ColorChoice, StandardStream};
 use tracing::error;
-
-use crate::Fallback;
 
 pub type SearchResult = Result<Response, HttpError>;
 
@@ -65,16 +65,17 @@ macro_rules! impl_from {
 impl_from!(std::io::Error);
 impl_from!(serde_urlencoded::de::Error);
 impl_from!(serde_json::Error);
-impl_from!(rinja::Error);
 impl_from!(rusqlite::Error);
 
 impl IntoResponse for HttpError {
     fn into_response(self) -> Response {
         let date = Local::now().to_rfc3339();
         match self {
-            HttpError::Internal { err } => {
-                (StatusCode::INTERNAL_SERVER_ERROR, Fallback { err, date }).into_response()
-            }
+            HttpError::Internal { err } => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!( { "err":err, "date":date })),
+            )
+                .into_response(),
         }
     }
 }

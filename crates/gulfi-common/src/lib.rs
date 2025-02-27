@@ -1,11 +1,9 @@
 mod datasources;
 mod domain;
-mod fallback;
 mod into_http;
 
 pub use datasources::*;
 pub use domain::*;
-pub use fallback::*;
 pub use into_http::*;
 
 #[inline]

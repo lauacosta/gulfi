@@ -15,12 +15,12 @@ use serde::Deserialize;
 
 use crate::startup::AppState;
 
-pub async fn favoritos(State(app): State<AppState>) -> Result<Favoritos, HttpError> {
+pub async fn favoritos(State(app): State<AppState>) -> Result<Json<Favoritos>, HttpError> {
     let db = Connection::open(app.db_path)
         .expect("Deberia ser un path valido a una base de datos SQLite");
     let favoritos = get_favoritos(&db)?;
 
-    Ok(favoritos)
+    Ok(Json(favoritos))
 }
 
 #[derive(Deserialize, Debug)]
