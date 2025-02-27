@@ -2,6 +2,8 @@
     import { onMount } from "svelte";
     import Table from "../lib/Table.svelte";
 
+    const apiUrl = import.meta.env.VITE_API_URL;
+
     let heldData: Array<string> = [];
     let heldHeaders = [];
     let heldSearches = [];
@@ -60,7 +62,7 @@
 
     async function updateHistorial() {
         try {
-            const response = await fetch("/api/historial");
+            const response = await fetch(`${apiUrl}/api/historial`);
 
             if (!response.ok) {
                 historialItems = [
@@ -93,7 +95,7 @@
     async function deleteHistorialItem(queryText: string, index: number) {
         try {
             const deleteResponse = await fetch(
-                `/api/historial?query=${encodeURIComponent(queryText)}`,
+                `${apiUrl}/api/historial?query=${encodeURIComponent(queryText)}`,
                 {
                     method: "DELETE",
                 },
@@ -149,7 +151,7 @@
 
         try {
             const response = await fetch(
-                `/api/search?${searchParams.toString()}`,
+                `${apiUrl}/api/search?${searchParams.toString()}`,
             );
             if (response.ok) {
                 const data = await response.json();
@@ -332,7 +334,7 @@
             };
 
             try {
-                const response = await fetch("/api/favoritos", {
+                const response = await fetch(`${apiUrl}/api/favoritos`, {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
@@ -360,8 +362,8 @@
 
 <div class="content-wrapper">
     <aside class="sidebar">
-        <h2>Historial</h2>
-        <ul class="historial" id="historial">
+        <div class="sidebar-title">Historial</div>
+        <ul class="sidebar-menu" id="historial">
             {#each historialItems as item, index}
                 {#if item.isError}
                     <li>{item.query}</li>
@@ -373,20 +375,24 @@
                         <button
                             aria-label="Borrar item del historial"
                             type="button"
-                            class="delete-btn"
+                            class="delete-icon"
                             on:click={() =>
                                 deleteHistorialItem(item.query, index)}
                         >
                             <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                viewBox="0 0 448 512"
-                                width="24"
-                                height="24"
+                                width="20"
+                                height="20"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                ><polyline points="3 6 5 6 21 6"
+                                ></polyline><path
+                                    d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+                                ></path></svg
                             >
-                                <path
-                                    d="M170.5 51.6L151.5 80l145 0-19-28.4c-1.5-2.2-4-3.6-6.7-3.6l-93.7 0c-2.7 0-5.2 1.3-6.7 3.6zm147-26.6L354.2 80 368 80l48 0 8 0c13.3 0 24 10.7 24 24s-10.7 24-24 24l-8 0 0 304c0 44.2-35.8 80-80 80l-224 0c-44.2 0-80-35.8-80-80l0-304-8 0c-13.3 0-24-10.7-24-24S10.7 80 24 80l8 0 48 0 13.8 0 36.7-55.1C140.9 9.4 158.4 0 177.1 0l93.7 0c18.7 0 36.2 9.4 46.6 24.9zM80 128l0 304c0 17.7 14.3 32 32 32l224 0c17.7 0 32-14.3 32-32l0-304L80 128zm80 64l0 208c0 8.8-7.2 16-16 16s-16-7.2-16-16l0-208c0-8.8 7.2-16 16-16s16 7.2 16 16zm80 0l0 208c0 8.8-7.2 16-16 16s-16-7.2-16-16l0-208c0-8.8 7.2-16 16-16s16 7.2 16 16zm80 0l0 208c0 8.8-7.2 16-16 16s-16-7.2-16-16l0-208c0-8.8 7.2-16 16-16s16 7.2 16 16z"
-                                />
-                            </svg>
                         </button>
                     </li>
                 {/if}
@@ -401,7 +407,7 @@
                     <label for="search-input"
                         >Búsqueda:
                         <span class="help-icon">
-                            &#9432;
+                            i
                             <span class="search-tooltip"
                                 >El formato es "query | provincia, ciudad", los
                                 campos provincia y ciudad son opcionales.</span
@@ -499,7 +505,7 @@
                         <label for="vecinos"
                             >N° de Vecinos:
                             <span class="help-icon">
-                                &#9432;
+                                i
                                 <span class="search-tooltip"
                                     >Representa el número de resultados más
                                     cercanos que se quiere buscar.</span
@@ -524,7 +530,7 @@
                         <label for="balanceSlider"
                             >Pesos:
                             <span class="help-icon">
-                                &#9432;
+                                i
                                 <span class="search-tooltip"
                                     >Representa el compromiso de asignarle más
                                     importancia a los resultados de cada
@@ -577,13 +583,13 @@
                         aria-label="Buscar"
                         title="Buscar"
                         type="submit"
-                        class="search-button">Buscar</button
+                        class="btn search-button">Buscar</button
                     >
                     <button
                         aria-label="Descargar"
                         title="Descargar"
                         id="downloadBtn"
-                        class="search-button"
+                        class="btn search-button"
                         disabled={downloadBtnDisabled}
                         on:click|preventDefault={descargarCSVGlobal}
                     >
@@ -594,28 +600,43 @@
                         aria-label="Resetear descarga"
                         title="Resetear descarga"
                         id="resetDownloadBtn"
-                        class="search-button"
+                        class="btn btn-icon"
                         on:click|preventDefault={resetHeldData}
                     >
-                        ⟳
+                        <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            ><path d="M23 4v6h-6" /><path d="M1 20v-6h6" /><path
+                                d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"
+                            /></svg
+                        >
                     </button>
                     <button
                         aria-label="Agregar búsqueda a favoritos"
                         title="Agregar búsqueda a favoritos"
                         id="saveBtn"
-                        class="search-button"
+                        class="btn btn-icon"
                         on:click|preventDefault={saveFavorite}
                     >
                         <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 576 512"
-                            width="24"
-                            height="24"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            ><polygon
+                                points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
+                            ></polygon></svg
                         >
-                            <path
-                                d="M259.3 17.8L194 150.2 47.9 171.5c-26.2 3.8-36.7 36-17.7 54.6l105.7 103-25 146c-4.5 26.2 23 46 46.4 33.7L288 439.6l131.7 69.2c23.4 12.3 50.9-7.4 46.4-33.7l-25-146 105.7-103c19-18.6 8.5-50.8-17.7-54.6L382 150.2 316.7 17.8c-11.7-23.6-45.7-23.9-57.4 0z"
-                            />
-                        </svg>
                     </button>
                 </div>
             </form>
@@ -625,15 +646,11 @@
             </div>
         </div>
 
-        <div class="table-container">
-            <div class="tooltip">
-                Haz click en las columnas que quieras exportar a CSV, se
-                acumularan hasta que presiones descargar!
-            </div>
-            <div id="table-content">
-                <Table table={tableContent} />
-            </div>
-            <div class="pagination"></div>
+        <!-- <div class="table-container"> -->
+        <div id="table-content">
+            <Table table={tableContent} />
         </div>
+        <!-- <div class="pagination"></div> -->
+        <!-- </div> -->
     </main>
 </div>

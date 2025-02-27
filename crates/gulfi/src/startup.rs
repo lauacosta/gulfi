@@ -2,10 +2,12 @@ use axum::Extension;
 use eyre::Result;
 use gulfi_configuration::ApplicationSettings;
 use gulfi_sqlite::init_sqlite;
+use http::{HeaderValue, Method};
 use std::io;
 use std::net::IpAddr;
 use std::time::Duration;
-use tower_http::compression::CompressionLayer;
+use tower_http::cors::Any;
+use tower_http::{compression::CompressionLayer, cors::CorsLayer};
 
 use axum::{Router, body::Body, http::Request, routing::get, serve::Serve};
 use tokio::{net::TcpListener, signal};
@@ -137,9 +139,22 @@ pub fn build_server(listener: TcpListener, state: AppState) -> Result<Serve<Rout
         .route("/assets/*path", get(serve_ui))
         .fallback(serve_ui);
 
-    let server = api_routes
-        .merge(frontend_routes)
-        .with_state(state)
+    let is_dev = cfg!(debug_assertions);
+
+    info!("Running in dev: {is_dev}");
+
+    let mut server = api_routes.merge(frontend_routes).with_state(state);
+
+    if is_dev {
+        let cors = CorsLayer::new()
+            .allow_origin(Any)
+            .allow_methods([Method::GET, Method::POST, Method::DELETE])
+            .allow_headers(Any);
+
+        server = server.layer(cors);
+    }
+
+    let server = server
         .layer(Extension(
             reqwest::ClientBuilder::new()
                 .timeout(Duration::from_secs(5))

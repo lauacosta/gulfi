@@ -8,8 +8,8 @@ use rusqlite::{
 };
 use serde::{Deserialize, Serialize};
 
-pub static STYLES_CSS: &str = include_str!("../dist/styles.min.css");
-pub static MAIN_JS: &str = include_str!("../dist/main.min.js");
+// pub static STYLES_CSS: &str = include_str!("../dist/styles.min.css");
+// pub static MAIN_JS: &str = include_str!("../dist/main.min.js");
 
 pub static ASSETS: Dir = include_dir!("$CARGO_MANIFEST_DIR/ui/dist");
 
