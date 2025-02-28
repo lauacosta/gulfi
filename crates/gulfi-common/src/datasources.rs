@@ -1,13 +1,18 @@
-use std::path::{Path, PathBuf};
+use std::{
+    fmt::Debug,
+    fs::metadata,
+    path::{Path, PathBuf},
+};
 
 use camino::Utf8Path;
 use eyre::eyre;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
-use tracing::info;
+use tracing::{error, info, warn};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Source {
+    #[serde(deserialize_with = "to_lowercase")]
     pub name: String,
     pub fields: Vec<Field>,
 }
@@ -29,6 +34,7 @@ impl Source {
 pub struct Field {
     pub name: String,
     pub template_member: bool,
+    pub unique: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -49,10 +55,33 @@ impl DataSources {
     }
 }
 
-pub fn parse_sources(path: impl AsRef<Path>) -> eyre::Result<Vec<(PathBuf, DataSources)>> {
+pub fn parse_sources<T: AsRef<Path> + Debug>(path: T) -> eyre::Result<Vec<(PathBuf, DataSources)>> {
     let mut datasources = Vec::new();
 
-    info!("Escaneando los archivos disponibles...");
+    match metadata(&path) {
+        Err(err) => {
+            error!("El directorio `{path:?}` no existe!: {err}");
+            info!(
+                "Para solucionarlo, cree un directorio en `datasources` con el nombre de su documento."
+            );
+            return Err(eyre!(err));
+        }
+        Ok(metadata) => {
+            if metadata.is_dir() {
+                let entries = std::fs::read_dir(&path).unwrap();
+                if entries.into_iter().count() == 0 {
+                    warn!("El directorio {path:?}` existe, pero no tiene archivos.");
+                }
+            } else {
+                error!("`{path:?}` no es un directorio!");
+                info!(
+                    "Para solucionarlo, cree un directorio en `datasources` con el nombre de su documento."
+                );
+                return Err(eyre!("No es un directorio"));
+            }
+        }
+    }
+
     for entry in std::fs::read_dir(&path)? {
         let path = entry?.path();
         let utf_8_path = Utf8Path::from_path(&path).expect("Deberia ser UTF-8");
@@ -65,7 +94,13 @@ pub fn parse_sources(path: impl AsRef<Path>) -> eyre::Result<Vec<(PathBuf, DataS
         }
     }
 
-    info!("Escaneando los archivos disponibles... listo!");
-
     Ok(datasources)
+}
+
+fn to_lowercase<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    Ok(s.to_lowercase())
 }

@@ -1,8 +1,7 @@
 use axum::Extension;
 use eyre::Result;
-use gulfi_configuration::ApplicationSettings;
 use gulfi_sqlite::init_sqlite;
-use http::{HeaderValue, Method};
+use http::Method;
 use std::io;
 use std::net::IpAddr;
 use std::time::Duration;
@@ -16,6 +15,7 @@ use tower_http::trace::{DefaultOnResponse, TraceLayer};
 use tower_request_id::{RequestId, RequestIdLayer};
 use tracing::{Level, error, error_span, info, instrument};
 
+use crate::ApplicationSettings;
 use crate::routes::{
     add_favoritos, delete_favoritos, delete_historial, favoritos, health_check, historial, search,
     serve_ui,

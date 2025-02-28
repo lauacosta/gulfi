@@ -35,7 +35,6 @@ gulfi-openai = { path = "../gulfi-openai/"}
 gulfi-helper = { path = "../gulfi-helper/"}
 gulfi-ui = { path = "../gulfi-ui/"}
 gulfi-cli = { path = "../gulfi-cli/"}
-gulfi-configuration = { path = "../gulfi-configuration/"}
 axum-extra = { version = "0.9.6", features = ["typed-header"] }
 webbrowser = "1.0.3"
 tower-serve-static = "0.1.1"

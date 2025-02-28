@@ -31,6 +31,7 @@ use zerocopy::IntoBytes;
 pub struct Params {
     #[serde(rename = "query")]
     search_str: String,
+    doc: String,
     strategy: SearchStrategy,
     sexo: Sexo,
     edad_min: u64,
@@ -59,24 +60,34 @@ impl SearchStrategy {
         let query = search.query.trim().to_owned();
         let provincia = search.provincia;
         let ciudad = search.ciudad;
+        let doc = params.doc;
+
+        // let field_names = {
+        //     let fields: Vec<String> = doc
+        //         .fields
+        //         .iter()
+        //         .filter(|x| !x.template_member)
+        //         .map(|x| x.name.clone())
+        //         .collect();
+        //
+        //     fields.join(", ")
+        // };
 
         let (column_names, table) = match self {
             SearchStrategy::Fts => {
                 let mut search_query = SearchQueryBuilder::new(
                     &db,
-                    "select
-                    rank as score,
-                    email, 
-                    provincia,
-                    ciudad,
-                    edad, 
-                    sexo, 
-                    highlight(fts_tnea, 5, '<b style=\"color: green;\">', '</b>') as template,
-                    'fts' as match_type
-                from fts_tnea
-                where template match '\"' || :query || '\"'
-                and edad between :edad_min and :edad_max
-                ",
+                    &format!(
+                        // {field_names},
+                        "select
+                            rank as score,
+                            highlight(fts_tnea, 5, '<b style=\"color: green;\">', '</b>') as template,
+                            'fts' as match_type
+                        from fts_{doc}
+                        where template match '\"' || :query || '\"'
+                        and edad between :edad_min and :edad_max
+                        "
+                    ),
                 );
                 search_query.add_bindings(&[&query, &params.edad_min, &params.edad_max]);
 

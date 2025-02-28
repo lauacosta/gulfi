@@ -1,15 +1,12 @@
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 
 use chrono::NaiveDateTime;
 use include_dir::{Dir, include_dir};
 use rusqlite::{
     ToSql,
-    types::{FromSql, FromSqlError, ValueRef},
+    types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, ValueRef},
 };
 use serde::{Deserialize, Serialize};
-
-// pub static STYLES_CSS: &str = include_str!("../dist/styles.min.css");
-// pub static MAIN_JS: &str = include_str!("../dist/main.min.js");
 
 pub static ASSETS: Dir = include_dir!("$CARGO_MANIFEST_DIR/ui/dist");
 
@@ -85,18 +82,18 @@ pub enum Sexo {
 }
 
 impl ToSql for Sexo {
-    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
         let value = match self {
             Sexo::F => "F",
             Sexo::M => "M",
             Sexo::U => "U",
         };
-        Ok(rusqlite::types::ToSqlOutput::from(value))
+        Ok(ToSqlOutput::from(value))
     }
 }
 
 impl FromSql for Sexo {
-    fn column_result(value: ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         match value {
             ValueRef::Text(text) => match text {
                 b"F" => Ok(Sexo::F),
@@ -109,7 +106,7 @@ impl FromSql for Sexo {
 }
 
 impl Display for Sexo {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let content = match self {
             Sexo::U => "No definido",
             Sexo::F => "F",

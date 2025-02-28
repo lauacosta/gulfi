@@ -90,11 +90,13 @@ fn prompt_options(msg: &str, opts: Vec<char>) -> char {
 fn prompt_for_field(fields: &mut Vec<Field>) {
     println!();
     let name = prompt_input("Nombre del campo:", validate_field_name);
-    let template_member = prompt_confirm("¿Quieres que sea parte del template?");
+    let template_member = prompt_confirm("Quieres que sea parte del template?");
+    let unique = prompt_confirm("¿Este campo debería ser único?");
 
     fields.push(Field {
         name,
         template_member,
+        unique,
     });
 }
 

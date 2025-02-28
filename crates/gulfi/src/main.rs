@@ -1,17 +1,21 @@
-use std::fs::File;
-
 use clap::Parser;
 use eyre::eyre;
+use gulfi::ApplicationSettings;
 use gulfi::startup::run_server;
 use gulfi_cli::{Cli, Commands, SyncStrategy};
 use gulfi_common::Source;
-use gulfi_configuration::ApplicationSettings;
 use gulfi_helper::initialize_meta_file;
 use gulfi_sqlite::{init_sqlite, insert_base_data, setup_sqlite, sync_fts_tnea, sync_vec_tnea};
 use rusqlite::Connection;
+use std::fs::File;
 use tracing::{Level, debug, info, level_filters::LevelFilter};
 use tracing_error::ErrorLayer;
-use tracing_subscriber::{Registry, layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::{
+    Registry,
+    fmt::{self, format::FmtSpan},
+    layer::SubscriberExt,
+    util::SubscriberInitExt,
+};
 use tracing_tree::HierarchicalLayer;
 
 fn main() -> eyre::Result<()> {
@@ -27,7 +31,7 @@ fn main() -> eyre::Result<()> {
         }
     }?;
 
-    let records: Source = serde_json::from_reader(file)
+    let records: Vec<Source> = serde_json::from_reader(file)
         .map_err(|err| eyre!("Error al parsear `meta.json`. {err}"))?;
 
     debug!(?records);
@@ -78,19 +82,19 @@ fn main() -> eyre::Result<()> {
 
             let start = std::time::Instant::now();
 
-            setup_sqlite(&db)?;
+            setup_sqlite(&db, &records)?;
             insert_base_data(&db, &records)?;
 
             match sync_strat {
-                SyncStrategy::Fts => sync_fts_tnea(&db),
+                SyncStrategy::Fts => sync_fts_tnea(&db, &records),
                 SyncStrategy::Vector => {
                     let rt = tokio::runtime::Runtime::new()?;
-                    rt.block_on(sync_vec_tnea(&db, base_delay))?;
+                    rt.block_on(sync_vec_tnea(&db, &records, base_delay))?;
                 }
                 SyncStrategy::All => {
-                    sync_fts_tnea(&db);
+                    sync_fts_tnea(&db, &records);
                     let rt = tokio::runtime::Runtime::new()?;
-                    rt.block_on(sync_vec_tnea(&db, base_delay))?;
+                    rt.block_on(sync_vec_tnea(&db, &records, base_delay))?;
                 }
             }
 
@@ -123,9 +127,11 @@ fn setup(loglevel: String) -> eyre::Result<()> {
         .with(
             HierarchicalLayer::new(2)
                 .with_targets(true)
-                .with_bracketed_fields(true),
+                .with_bracketed_fields(true)
+                .with_ansi(true),
         )
         .with(ErrorLayer::default())
         .init();
+
     Ok(())
 }

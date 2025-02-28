@@ -1,8 +1,0 @@
-[package]
-name = "gulfi-configuration"
-edition = "2024"
-version.workspace = true
-
-[dependencies]
-eyre.workspace = true 
-gulfi-cli = { path = "../gulfi-cli/"}

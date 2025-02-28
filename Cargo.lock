@@ -757,7 +757,6 @@ dependencies = [
  "eyre",
  "gulfi-cli",
  "gulfi-common",
- "gulfi-configuration",
  "gulfi-helper",
  "gulfi-openai",
  "gulfi-sqlite",
@@ -810,14 +809,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gulfi-configuration"
-version = "1.1.0"
-dependencies = [
- "eyre",
- "gulfi-cli",
-]
-
-[[package]]
 name = "gulfi-helper"
 version = "1.1.0"
 dependencies = [
@@ -853,11 +844,11 @@ dependencies = [
  "futures",
  "gulfi-cli",
  "gulfi-common",
- "gulfi-configuration",
  "gulfi-openai",
  "gulfi-ui",
  "reqwest",
  "rusqlite",
+ "serde",
  "serde_json",
  "sqlite-vec",
  "tracing",

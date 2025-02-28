@@ -12,5 +12,6 @@ pub async fn search(
     client: Extension<reqwest::Client>,
 ) -> SearchResult {
     debug!(?params);
+
     params.strategy.search(&app.db_path, &client, params).await
 }
