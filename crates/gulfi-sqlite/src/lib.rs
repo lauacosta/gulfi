@@ -13,7 +13,7 @@ use chrono::NaiveDateTime;
 use csv::ReaderBuilder;
 use eyre::{Result, eyre};
 use futures::StreamExt;
-use gulfi_common::{DataSources, HttpError, Source, clean_html, parse_sources};
+use gulfi_common::{DataSources, Document, HttpError, clean_html, normalize, parse_sources};
 use gulfi_openai::embed_vec;
 use gulfi_ui::{Favoritos, Historial, Resultados};
 use rusqlite::{Connection, ToSql, ffi::sqlite3_auto_extension, types::ValueRef};
@@ -22,61 +22,55 @@ use sqlite_vec::sqlite3_vec_init;
 use tracing::{Level, debug, error, info, span};
 use zerocopy::IntoBytes;
 
-pub async fn sync_vec_tnea(
-    db: &Connection,
-    documents: &Vec<Source>,
-    base_delay: u64,
-) -> Result<()> {
-    for doc in documents {
-        let doc_name = doc.name.clone();
+pub async fn sync_vec_tnea(db: &Connection, doc: &Document, base_delay: u64) -> Result<()> {
+    let doc_name = doc.name.clone();
 
-        let span = span!(Level::INFO, "Sincronizando tablas VEC", doc = doc_name);
-        let _guard = span.enter();
+    let span = span!(Level::INFO, "Sincronizando tablas VEC", doc = doc_name);
+    let _guard = span.enter();
 
-        let mut statement = db.prepare(&format!("select id, template from {doc_name}"))?;
+    let mut statement = db.prepare(&format!("select id, vec_input from {doc_name}"))?;
 
-        let templates: Vec<(u64, String)> = match statement.query_map([], |row| {
-            let id: u64 = row.get(0)?;
-            let template: String = row.get::<_, String>(1)?;
-            Ok((id, template))
-        }) {
-            Ok(rows) => rows
-                .map(|v| v.expect("Deberia tener un template"))
-                .collect(),
-            Err(err) => return Err(eyre!(err)),
-        };
+    let v_inputs: Vec<(u64, String)> = match statement.query_map([], |row| {
+        let id: u64 = row.get(0)?;
+        let input: String = row.get::<_, String>(1)?;
+        Ok((id, input))
+    }) {
+        Ok(rows) => rows
+            .map(|v| v.expect("Deberia tener una vec_input"))
+            .collect(),
+        Err(err) => return Err(eyre!(err)),
+    };
 
-        let chunk_size = 2048;
+    let chunk_size = 2048;
 
-        let client = reqwest::ClientBuilder::new()
-            .deflate(true)
-            .gzip(true)
-            .build()?;
+    let client = reqwest::ClientBuilder::new()
+        .deflate(true)
+        .gzip(true)
+        .build()?;
 
-        let jh = templates
-            .chunks(chunk_size)
-            .enumerate()
-            .map(|(proc_id, chunk)| {
-                let indices: Vec<u64> = chunk.iter().map(|(id, _)| *id).collect();
-                let templates: Vec<String> =
-                    chunk.iter().map(|(_, template)| template.clone()).collect();
-                embed_vec(indices, templates, &client, proc_id, base_delay)
-            });
+    let jh = v_inputs
+        .chunks(chunk_size)
+        .enumerate()
+        .map(|(proc_id, chunk)| {
+            let indices: Vec<u64> = chunk.iter().map(|(id, _)| *id).collect();
+            let v_inputs: Vec<String> = chunk.iter().map(|(_, input)| input.clone()).collect();
+            embed_vec(indices, v_inputs, &client, proc_id, base_delay)
+        });
 
-        let stream = futures::stream::iter(jh);
+    let stream = futures::stream::iter(jh);
 
-        let start = std::time::Instant::now();
+    let start = std::time::Instant::now();
 
-        let total_inserted = Arc::new(AtomicUsize::new(0));
+    let total_inserted = Arc::new(AtomicUsize::new(0));
 
-        stream.for_each_concurrent(Some(5), |future| {
+    stream.for_each_concurrent(Some(5), |future| {
         let total_inserted = total_inserted.clone();
         let sent_doc_name =doc_name.clone();
         async move {
             match future.await {
                 Ok(data) => {
                     let mut statement =
-                        db.prepare(&format!("insert into vec_{sent_doc_name}(row_id, template_embedding) values (?,?)")).unwrap();
+                        db.prepare(&format!("insert into vec_{sent_doc_name}(row_id, vec_input_embedding) values (?,?)")).unwrap();
 
                     db.execute("BEGIN TRANSACTION", []).expect(
                         "Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite",
@@ -99,49 +93,44 @@ pub async fn sync_vec_tnea(
         }
     }).await;
 
-        let total = total_inserted.load(Ordering::Relaxed);
-        let elapsed = start.elapsed().as_millis();
-        info!("Se han insertado {total} nuevos registros en vec_{doc_name} ({elapsed} ms)",);
-    }
+    let total = total_inserted.load(Ordering::Relaxed);
+    let elapsed = start.elapsed().as_millis();
+    info!("Se han insertado {total} nuevos registros en vec_{doc_name} ({elapsed} ms)",);
 
     Ok(())
 }
 
-pub fn sync_fts_tnea(db: &Connection, documents: &Vec<Source>) {
-    for doc in documents {
-        let doc_name = doc.name.clone();
-        let span = span!(Level::INFO, "Sincronizando tablas FTS", doc = doc_name);
-        let _guard = span.enter();
+pub fn sync_fts_tnea(db: &Connection, doc: &Document) {
+    let doc_name = doc.name.clone();
+    let span = span!(Level::INFO, "Sincronizando tablas FTS", doc = doc_name);
+    let _guard = span.enter();
 
-        let field_names = {
-            let fields: Vec<String> = doc
-                .fields
-                .iter()
-                .filter(|x| !x.template_member)
-                .map(|x| x.name.clone())
-                .collect();
+    let field_names = {
+        let fields: Vec<String> = doc
+            .fields
+            .iter()
+            .filter(|x| !x.vec_input)
+            .map(|x| x.name.clone())
+            .collect();
 
-            fields.join(", ")
-        };
+        fields.join(", ")
+    };
 
-        let start = std::time::Instant::now();
-        db.execute_batch(&format!(
-            "
-            insert into fts_{doc_name}(rowid, {field_names}, template)
-            select rowid, {field_names}, template
+    let start = std::time::Instant::now();
+    db.execute_batch(&format!(
+        "
+            insert into fts_{doc_name}(rowid, {field_names}, vec_input)
+            select rowid, {field_names}, vec_input 
             from tnea;
 
             insert into fts_{doc_name}(fts_{doc_name}) values('optimize');
             "
-        ))
-        .map_err(|err| eyre!(err))
-        .expect(
-            "Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite",
-        );
+    ))
+    .map_err(|err| eyre!(err))
+    .expect("Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite");
 
-        let elapsed = start.elapsed().as_millis();
-        info!("Se han insertando nuevos registros en fts_{doc_name}. ({elapsed} ms)",);
-    }
+    let elapsed = start.elapsed().as_millis();
+    info!("Se han insertando nuevos registros en fts_{doc_name}. ({elapsed} ms)",);
 }
 
 pub fn init_sqlite() -> Result<String> {
@@ -157,7 +146,7 @@ pub fn init_sqlite() -> Result<String> {
     Ok(path)
 }
 
-pub fn setup_sqlite(db: &rusqlite::Connection, documents: &Vec<Source>) -> Result<()> {
+pub fn setup_sqlite(db: &rusqlite::Connection, doc: &Document) -> Result<()> {
     let (sqlite_version, vec_version): (String, String) =
         db.query_row("select sqlite_version(), vec_version()", [], |row| {
             Ok((row.get(0)?, row.get(1)?))
@@ -211,54 +200,53 @@ pub fn setup_sqlite(db: &rusqlite::Connection, documents: &Vec<Source>) -> Resul
             "Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite",
         );
 
-    for doc in documents {
-        let doc_name = doc.name.clone();
+    let doc_name = doc.name.clone();
 
-        let (raw_fields_str, fields_str, field_names) = {
-            let fields: Vec<String> = doc
-                .fields
-                .iter()
-                .map(|x| {
-                    if x.unique {
-                        // WARN: Es una buena idea?
-                        format!("{} text unique on conflict ignore", x.name.clone())
-                    } else {
-                        format!("{} text", x.name.clone())
-                    }
-                })
-                .collect();
-            let raw_fields_str = fields.join(", ");
+    let (raw_fields_str, fields_str, field_names) = {
+        let fields: Vec<String> = doc
+            .fields
+            .iter()
+            .map(|x| {
+                if x.unique {
+                    // WARN: Es una buena idea?
+                    format!("{} text unique on conflict ignore", x.name.clone())
+                } else {
+                    format!("{} text", x.name.clone())
+                }
+            })
+            .collect();
+        let raw_fields_str = fields.join(", ");
 
-            let fields: Vec<String> = doc
-                .fields
-                .iter()
-                .filter(|x| !x.template_member)
-                .map(|x| {
-                    if x.unique {
-                        // WARN: Es una buena idea?
-                        format!("{} text unique on conflict ignore", x.name.clone())
-                    } else {
-                        format!("{} text", x.name.clone())
-                    }
-                })
-                .collect();
+        let fields: Vec<String> = doc
+            .fields
+            .iter()
+            .filter(|x| !x.vec_input)
+            .map(|x| {
+                if x.unique {
+                    // WARN: Es una buena idea?
+                    format!("{} text unique on conflict ignore", x.name.clone())
+                } else {
+                    format!("{} text", x.name.clone())
+                }
+            })
+            .collect();
 
-            let fields_str = fields.join(", ");
+        let fields_str = fields.join(", ");
 
-            let fields: Vec<String> = doc
-                .fields
-                .iter()
-                .filter(|x| !x.template_member)
-                .map(|x| x.name.clone())
-                .collect();
+        let fields: Vec<String> = doc
+            .fields
+            .iter()
+            .filter(|x| !x.vec_input)
+            .map(|x| x.name.clone())
+            .collect();
 
-            let fields_names = fields.join(", ");
+        let fields_names = fields.join(", ");
 
-            (raw_fields_str, fields_str, fields_names)
-        };
+        (raw_fields_str, fields_str, fields_names)
+    };
 
-        let statement = format!(
-            "
+    let statement = format!(
+        "
             create table if not exists {doc_name}_raw(
                 id integer primary key,
                 {raw_fields_str}
@@ -267,105 +255,102 @@ pub fn setup_sqlite(db: &rusqlite::Connection, documents: &Vec<Source>) -> Resul
             create table if not exists {doc_name}(
                 id integer primary key,
                 {fields_str},
-                template text
+                vec_input text
             );
 
             create virtual table if not exists fts_{doc_name} using fts5(
-                {field_names}, template,
+                vec_input, {field_names},
                 content='{doc_name}', content_rowid='id'
             );
 
             create virtual table if not exists vec_{doc_name} using vec0(
                 row_id integer primary key,
-                template_embedding float[1536]
+                vec_input_embedding float[1536]
             );
             ",
+    );
+
+    debug!(?statement);
+
+    db.execute_batch(&statement)
+        .map_err(|err| eyre!(err))
+        .expect(
+            "Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite",
         );
-
-        debug!(?statement);
-
-        db.execute_batch(&statement)
-            .map_err(|err| eyre!(err))
-            .expect(
-                "Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite",
-            );
-    }
 
     Ok(())
 }
 
-pub fn insert_base_data(db: &rusqlite::Connection, documents: &Vec<Source>) -> Result<()> {
-    for doc in documents {
-        let doc_name = doc.name.clone();
-        let span = span!(Level::INFO, "Procesando", doc = doc_name);
-        let _guard = span.enter();
+pub fn insert_base_data(db: &rusqlite::Connection, doc: &Document) -> Result<()> {
+    let doc_name = doc.name.clone();
+    let span = span!(Level::INFO, "Procesando", doc = doc_name);
+    let _guard = span.enter();
 
-        info!("📂Procesando el documento: {doc_name}");
+    info!("📂Procesando el documento: {doc_name}");
 
-        let num: usize = db.query_row(&format!("select count(*) from {doc_name}"), [], |row| {
-            row.get(0)
-        })?;
-        if num != 0 {
-            info!("Contiene {num} registros. Buscando nuevos registros.");
+    let num: usize = db.query_row(&format!("select count(*) from {doc_name}"), [], |row| {
+        row.get(0)
+    })?;
+    if num != 0 {
+        info!("Contiene {num} registros. Buscando nuevos registros.");
+    } else {
+        info!("Se encuentra vacio. Buscando nuevos registros.");
+    }
+
+    let start = std::time::Instant::now();
+    let inserted = parse_and_insert(format!("./datasources/{doc_name}"), db, doc)?;
+    let elapsed = start.elapsed().as_millis();
+    info!(
+        "Se insertaron {inserted} columnas en {doc_name}_raw! ({elapsed} ms). {}",
+        if inserted == 0 {
+            "No hubo nuevos registros."
         } else {
-            info!("Se encuentra vacio. Buscando nuevos registros.");
+            ""
         }
+    );
 
-        let start = std::time::Instant::now();
-        let inserted = parse_and_insert(format!("./datasources/{doc_name}"), db, doc)?;
-        let elapsed = start.elapsed().as_millis();
-        info!(
-            "Se insertaron {inserted} columnas en {doc_name}_raw! ({elapsed} ms). {}",
-            if inserted == 0 {
-                "No hubo nuevos registros."
-            } else {
-                ""
-            }
-        );
+    let start = std::time::Instant::now();
+    db.execute("BEGIN TRANSACTION", []).expect(
+        "Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite",
+    );
 
-        let start = std::time::Instant::now();
-        db.execute("BEGIN TRANSACTION", []).expect(
-            "Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite",
-        );
+    let fields_str = {
+        let fields: Vec<String> = doc
+            .fields
+            .iter()
+            .filter(|x| !x.vec_input)
+            .map(|x| x.name.clone())
+            .collect();
 
-        let fields_str = {
-            let fields: Vec<String> = doc
-                .fields
-                .iter()
-                .filter(|x| !x.template_member)
-                .map(|x| x.name.clone())
-                .collect();
+        fields.join(", ")
+    };
 
-            fields.join(", ")
-        };
-
-        let sql_statement = doc.generate_template();
-        let mut statement = db.prepare(&format!(
-            "
-                insert or ignore into {doc_name} ({fields_str}, template)
-                select {fields_str}, {sql_statement} as template
+    let sql_statement = doc.generate_vec_input();
+    let mut statement = db.prepare(&format!(
+        "
+                insert or ignore into {doc_name} ({fields_str}, vec_input)
+                select {fields_str}, {sql_statement} as vec_input
                 from {doc_name}_raw;
                 "
-        ))?;
+    ))?;
 
-        let inserted = statement
-            .execute(rusqlite::params![])
-            .map_err(|err| eyre!(err))?;
+    let inserted = statement
+        .execute(rusqlite::params![])
+        .map_err(|err| eyre!(err))?;
 
-        let elapsed = start.elapsed().as_millis();
-        info!(
-            "Se insertaron {inserted} columnas en {doc_name}! ({elapsed} ms). {}",
-            if inserted == 0 {
-                "No hubo nuevos registros."
-            } else {
-                ""
-            }
-        );
+    let elapsed = start.elapsed().as_millis();
+    info!(
+        "Se insertaron {inserted} columnas en {doc_name}! ({elapsed} ms). {}",
+        if inserted == 0 {
+            "No hubo nuevos registros."
+        } else {
+            ""
+        }
+    );
 
-        db.execute("COMMIT", []).expect(
-            "Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite",
-        );
-    }
+    db.execute("COMMIT", []).expect(
+        "Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite",
+    );
 
     Ok(())
 }
@@ -401,9 +386,13 @@ fn compare_records(mut records: Vec<String>, mut headers: Vec<String>) -> eyre::
     }
 }
 
-fn parse_and_insert<T: AsRef<Path> + Debug>(path: T, db: &Connection, f: &Source) -> Result<usize> {
+fn parse_and_insert<T: AsRef<Path> + Debug>(
+    path: T,
+    db: &Connection,
+    doc: &Document,
+) -> Result<usize> {
     let mut inserted = 0;
-    let doc_name = f.name.clone();
+    let doc_name = doc.name.clone();
 
     info!(?path, "Buscando archivos disponibles...");
     let datasources = parse_sources(&path)?;
@@ -423,7 +412,7 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(path: T, db: &Connection, f: &Source
                     reader.headers()?.into_iter().map(String::from).collect();
 
                 let expected_parameters: Vec<String> =
-                    f.fields.iter().map(|obj| obj.name.clone()).collect();
+                    doc.fields.iter().map(|obj| obj.name.clone()).collect();
 
                 compare_records(expected_parameters, headers)?;
 
@@ -450,7 +439,7 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(path: T, db: &Connection, f: &Source
                 };
 
                 let expected_parameters: Vec<String> =
-                    f.fields.iter().map(|obj| obj.name.clone()).collect();
+                    doc.fields.iter().map(|obj| obj.name.clone()).collect();
 
                 compare_records(expected_parameters, headers)?;
 
@@ -460,15 +449,15 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(path: T, db: &Connection, f: &Source
         let total_registros = data.len();
 
         let (fields_str, placeholders_str) = {
-            let fields: Vec<String> = f.fields.iter().map(|x| x.name.clone()).collect();
+            let fields: Vec<String> = doc.fields.iter().map(|x| x.name.clone()).collect();
             let fields_str = fields.join(", ");
 
-            let placeholders: Vec<String> = f.fields.iter().map(|_| String::from("?")).collect();
+            let placeholders: Vec<String> = doc.fields.iter().map(|_| String::from("?")).collect();
             let placeholders_str = placeholders.join(", ");
 
             (fields_str, placeholders_str)
         };
-        let expected_fields: Vec<String> = f.fields.iter().map(|obj| obj.name.clone()).collect();
+        let expected_fields: Vec<String> = doc.fields.iter().map(|obj| obj.name.clone()).collect();
 
         info!("Abriendo transacción para insertar nuevos registros en `{doc_name}_raw`.");
         let mut statement = db.prepare(&format!(
@@ -477,12 +466,24 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(path: T, db: &Connection, f: &Source
 
         db.execute("BEGIN TRANSACTION", [])?;
 
+        let input_fields = doc
+            .fields
+            .iter()
+            .map(|x| x.name.clone())
+            .collect::<Vec<String>>();
+
         for record in data {
             if let Value::Object(map) = record {
                 let values: Vec<Value> = expected_fields
                     .iter()
                     .map(|field| match map.get(field) {
-                        Some(Value::String(s)) => Value::String(clean_html(s.clone())),
+                        Some(Value::String(s)) => {
+                            if input_fields.contains(field) {
+                                Value::String(clean_html(s.clone()))
+                            } else {
+                                Value::String(normalize(&s))
+                            }
+                        }
                         Some(other) => other.clone(),
                         None => Value::Null,
                     })
@@ -511,7 +512,6 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(path: T, db: &Connection, f: &Source
 
                 inserted += statement.execute(&bindings[..])?;
             }
-            // inserted += 1;
         }
 
         db.execute("COMMIT", [])?;
@@ -538,9 +538,10 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(path: T, db: &Connection, f: &Source
 // }
 
 pub fn update_historial(db: &Connection, query: &str) -> Result<(), HttpError> {
-    let updated = db.execute("insert or replace into historial(query) values (?)", [
-        query,
-    ])?;
+    let updated = db.execute(
+        "insert or replace into historial(query) values (?)",
+        [query],
+    )?;
     info!("{} registros fueron añadidos al historial!", updated);
 
     Ok(())

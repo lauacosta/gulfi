@@ -11,17 +11,17 @@ use serde::{Deserialize, Deserializer, Serialize};
 use tracing::{error, info, warn};
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Source {
+pub struct Document {
     #[serde(deserialize_with = "to_lowercase")]
     pub name: String,
     pub fields: Vec<Field>,
 }
 
-impl Source {
-    pub fn generate_template(&self) -> String {
+impl Document {
+    pub fn generate_vec_input(&self) -> String {
         let mut result = String::from("'  '");
         for i in &self.fields {
-            if i.template_member {
+            if i.vec_input {
                 result.push_str(&format!(" || {} || '  '", i.name));
             }
         }
@@ -33,7 +33,7 @@ impl Source {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Field {
     pub name: String,
-    pub template_member: bool,
+    pub vec_input: bool,
     pub unique: bool,
 }
 

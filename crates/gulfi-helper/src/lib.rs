@@ -1,18 +1,18 @@
 use std::fs::File;
 use std::io::{self, Write};
 
-use ansi_term::Colour;
-use ansi_term::Colour::{Fixed, Green, RGB, Red, White};
+use color_eyre::owo_colors::OwoColorize;
 use eyre::Result;
-use gulfi_common::{Field, Source};
+use gulfi_common::{Document, Field};
 
-const PURPLE: (u8, u8, u8) = (126, 29, 251);
-const WIDTH: usize = 15;
+pub const WIDTH: usize = 4;
 
 pub fn initialize_meta_file() -> Result<()> {
     println!(
-        "\n{:>WIDTH$}  No se ha encontrado un archivo `meta.json`. Creando primera base...",
-        Fixed(000).bold().on(Green).paint(" Gulfi ")
+        "\n{:<WIDTH$}{stage}  No se ha encontrado un archivo `meta.json`. Creando primera base...",
+        "",
+        stage = " Gulfi ".bright_white().bold().on_green(),
+        // Fixed(000).bold().on(Green).paint(" Gulfi ")
     );
     run_new()
 }
@@ -28,7 +28,7 @@ fn run_new() -> Result<()> {
         }
     }
 
-    let records = Source { name, fields };
+    let records = Document { name, fields };
     let file = File::create("meta.json")?;
     serde_json::to_writer(file, &records)?;
 
@@ -41,8 +41,9 @@ where
 {
     loop {
         print!(
-            "\n{stage:>WIDTH$}  {prompt} ",
-            stage = White.bold().on(rgb(PURPLE)).paint(" Builder "),
+            "\n{:<WIDTH$}{stage}  {prompt} ",
+            "",
+            stage = " Builder ".bright_white().bold().on_magenta() // stage = White.bold().on(rgb(PURPLE)).paint(" Builder "),
         );
         io::stdout().flush().unwrap();
         let mut buffer = String::new();
@@ -55,7 +56,7 @@ where
                 return answer;
             }
             Err(msg) => {
-                println!("Error: {}", Red.bold().paint(msg));
+                println!("Error: {}", msg.bold().bright_red());
             }
         }
     }
@@ -90,12 +91,12 @@ fn prompt_options(msg: &str, opts: Vec<char>) -> char {
 fn prompt_for_field(fields: &mut Vec<Field>) {
     println!();
     let name = prompt_input("Nombre del campo:", validate_field_name);
-    let template_member = prompt_confirm("Quieres que sea parte del template?");
+    let vec_input = prompt_confirm("¿Quieres que sea vectorizado?");
     let unique = prompt_confirm("¿Este campo debería ser único?");
 
     fields.push(Field {
         name,
-        template_member,
+        vec_input,
         unique,
     });
 }
@@ -107,8 +108,4 @@ fn validate_field_name(name: &str) -> Result<(), String> {
         ));
     }
     Ok(())
-}
-
-fn rgb(color: (u8, u8, u8)) -> Colour {
-    RGB(color.0, color.1, color.2)
 }

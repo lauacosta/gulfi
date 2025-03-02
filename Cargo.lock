@@ -812,13 +812,11 @@ dependencies = [
 name = "gulfi-helper"
 version = "1.1.0"
 dependencies = [
- "ansi_term",
  "color-eyre",
  "eyre",
  "gulfi-common",
  "serde",
  "serde_json",
- "termcolor",
 ]
 
 [[package]]

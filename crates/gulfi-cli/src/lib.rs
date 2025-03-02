@@ -15,7 +15,7 @@ use clap::{Parser, Subcommand, ValueEnum, command, crate_version};
     ))
 ]
 pub struct Cli {
-    #[arg(long = "log-level", default_value = "INFO")]
+    #[arg(long = "level", default_value = "INFO")]
     pub loglevel: String,
 
     #[command(subcommand)]
@@ -42,18 +42,21 @@ pub enum Commands {
     },
     /// Actualiza la base de datos
     Sync {
+        document: String,
+
         /// Fuerza la actualización incluso cuando la base de datos no está vacía.
         #[arg(long, default_value = "false")]
         clean_slate: bool,
 
         /// Determina la estrategia para actualizar la base de datos.
-        #[arg(value_enum, short = 'S', long, default_value_t = SyncStrategy::Fts)]
+        #[arg(value_enum,  default_value_t = SyncStrategy::Fts)]
         sync_strat: SyncStrategy,
 
         /// Determina la cantidad de tiempo base al hacer backoff en los requests. En millisegundos.
         #[arg(short = 'T', long, default_value_t = 2)]
         base_delay: u64,
     },
+    List,
 }
 
 #[derive(Clone, ValueEnum)]

@@ -31,7 +31,7 @@ use zerocopy::IntoBytes;
 pub struct Params {
     #[serde(rename = "query")]
     search_str: String,
-    doc: String,
+    // doc: String,
     strategy: SearchStrategy,
     sexo: Sexo,
     edad_min: u64,
@@ -60,13 +60,13 @@ impl SearchStrategy {
         let query = search.query.trim().to_owned();
         let provincia = search.provincia;
         let ciudad = search.ciudad;
-        let doc = params.doc;
+        // let doc = params.doc;
 
         // let field_names = {
         //     let fields: Vec<String> = doc
         //         .fields
         //         .iter()
-        //         .filter(|x| !x.template_member)
+        //         .filter(|x| !x.vec_input)
         //         .map(|x| x.name.clone())
         //         .collect();
         //
@@ -75,20 +75,24 @@ impl SearchStrategy {
 
         let (column_names, table) = match self {
             SearchStrategy::Fts => {
-                let mut search_query = SearchQueryBuilder::new(
-                    &db,
-                    &format!(
-                        // {field_names},
-                        "select
-                            rank as score,
-                            highlight(fts_tnea, 5, '<b style=\"color: green;\">', '</b>') as template,
-                            'fts' as match_type
-                        from fts_{doc}
-                        where template match '\"' || :query || '\"'
-                        and edad between :edad_min and :edad_max
-                        "
-                    ),
+                debug!("{:?}", &params);
+                let search = &format!(
+                    "select
+                    rank as score,
+                    email,
+                    provincia,
+                    ciudad,
+                    edad,
+                    sexo,
+                    highlight(fts_tnea, 0, '<b style=\"color: green;\">', '</b>') as input,
+                    'fts' as match_type
+                    from fts_tnea
+                    where vec_input match '\"' || :query || '\"'
+                    and cast(edad as integer) between :edad_min and :edad_max
+                    " // vec_input,
                 );
+
+                let mut search_query = SearchQueryBuilder::new(&db, &search);
                 search_query.add_bindings(&[&query, &params.edad_min, &params.edad_max]);
 
                 if provincia.is_some() {
@@ -127,13 +131,13 @@ impl SearchStrategy {
                     tnea.ciudad,
                     tnea.edad,
                     tnea.sexo,
-                    tnea.template,
+                    tnea.vec_input,
                     'vec' as match_type
                 from vec_tnea
                 left join tnea on tnea.id = vec_tnea.row_id
-                where template_embedding match :embedding
+                where vec_input_embedding match :embedding
                 and k = 1000
-                and tnea.edad between :edad_min and :edad_max
+                and cast (tnea.edad as integer) between :edad_min and :edad_max
                 ",
                 );
                 search_query.add_bindings(&[&embedding, &params.edad_min, &params.edad_max]);
@@ -177,7 +181,7 @@ impl SearchStrategy {
                     distance
                 from vec_tnea
                 where
-                    template_embedding match :embedding
+                    vec_input_embedding match :embedding
                     and k = :k
                 ),
 
@@ -187,7 +191,7 @@ impl SearchStrategy {
                     row_number() over (order by rank) as rank_number,
                     rank as score
                 from fts_tnea
-                where template match '\"' || :query || '\"'
+                where vec_input match '\"' || :query || '\"'
                 ),
 
             final as (
@@ -197,7 +201,7 @@ impl SearchStrategy {
                     tnea.sexo,
                     tnea.provincia, 
                     tnea.ciudad,
-                    tnea.template,
+                    tnea.vec_input,
                     vec_matches.rank_number as vec_rank,
                     fts_matches.rank_number as fts_rank,
                     (
@@ -209,7 +213,7 @@ impl SearchStrategy {
                 from fts_matches
                 full outer join vec_matches on vec_matches.row_id = fts_matches.row_id
                 join tnea on tnea.id = coalesce(fts_matches.row_id, vec_matches.row_id)
-                where tnea.edad between :edad_min and :edad_max
+                where cast(tnea.edad as integer) between :edad_min and :edad_max
             ",
                 );
                 search_query.add_bindings(&[
@@ -265,7 +269,7 @@ impl SearchStrategy {
                     rowid as row_id,
                     rank as score
                 from fts_tnea
-                where template match '\"' || :query || '\"'
+                where vec_input match '\"' || :query || '\"'
                 ),
 
                 vec_matches as (
@@ -274,7 +278,7 @@ impl SearchStrategy {
                     distance as score
                 from vec_tnea
                 where
-                    template_embedding match :embedding
+                    vec_input_embedding match :embedding
                     and k = :k
                 order by distance
                 ),
@@ -287,7 +291,7 @@ impl SearchStrategy {
 
                 final as (
                 select distinct
-                    tnea.template,
+                    tnea.vec_input,
                     tnea.email,
                     tnea.provincia,
                     tnea.ciudad,
@@ -297,7 +301,7 @@ impl SearchStrategy {
                     combined.match_type
                 from combined
                 left join tnea on tnea.id = combined.row_id
-                where tnea.edad between :edad_min and :edad_max
+                where cast(tnea.edad as integer) between :edad_min and :edad_max
                 ",
                 );
                 search_query.add_bindings(&[
@@ -343,20 +347,20 @@ impl SearchStrategy {
                     rowid,
                     rank as score
                 from fts_tnea
-                where template match '\"' || :query || '\"'
+                where vec_input match '\"' || :query || '\"'
                 ),
 
                 embeddings AS (
                     SELECT
                         row_id as rowid,
-                        template_embedding
+                        vec_input_embedding
                     FROM vec_tnea
                     WHERE row_id IN (SELECT rowid FROM fts_matches)
                 ),
 
                 final as (
                 select
-                    tnea.template,
+                    tnea.vec_input,
                     tnea.email,
                     tnea.provincia,
                     tnea.ciudad,
@@ -367,7 +371,7 @@ impl SearchStrategy {
                 from fts_matches
                 left join tnea on tnea.id = fts_matches.rowid
                 left join embeddings on embeddings.rowid = fts_matches.rowid
-                where tnea.edad between :edad_min and :edad_max
+                where cast(tnea.edad as integer) between :edad_min and :edad_max
             ",
                 );
                 search_query.add_bindings(&[&query, &k, &params.edad_min, &params.edad_max]);
@@ -387,7 +391,7 @@ impl SearchStrategy {
                 };
 
                 search_query.add_filter(
-                    " order by vec_distance_cosine(:embedding, embeddings.template_embedding)
+                    " order by vec_distance_cosine(:embedding, embeddings.vec_input_embedding)
                 )
                 select * from final;",
                     &[&embedding],
