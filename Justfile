@@ -1,6 +1,12 @@
 _default:
     just --list
 
+dev:
+    cargo run -- serve dev
+
+watch: 
+    watchexec -r -e rs -- cargo run
+
 run *args:
     cargo run --release -- {{args}}
 

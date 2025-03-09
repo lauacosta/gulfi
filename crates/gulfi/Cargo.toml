@@ -38,3 +38,6 @@ gulfi-cli = { path = "../gulfi-cli/"}
 axum-extra = { version = "0.9.6", features = ["typed-header"] }
 webbrowser = "1.0.3"
 tower-serve-static = "0.1.1"
+rustyline = { version = "15.0.0", features = ["derive", "rustyline-derive", "with-file-history"] }
+regex = "1.11.1"
+base64 = "0.22.1"

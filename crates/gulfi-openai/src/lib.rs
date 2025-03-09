@@ -72,11 +72,11 @@ async fn request_embeddings(
     if attempt > 0 {
         warn!("Intento {attempt}/{max_retries} [{proc_id}]");
 
-        let max_delay = time_backoff * 2u64.pow(attempt);
-        let jittered_delay = rand::rng().random_range(0..=max_delay);
+        let base_delay = time_backoff * 2u64.pow(attempt);
+        let jittered_delay = rand::rng().random_range(0..=base_delay / 2);
 
-        debug!(%jittered_delay);
-        tokio::time::sleep(Duration::from_millis(jittered_delay)).await;
+        debug!(%time_backoff, %base_delay, %jittered_delay);
+        tokio::time::sleep(Duration::from_millis(base_delay + jittered_delay)).await;
     }
 
     let response = client
@@ -86,9 +86,11 @@ async fn request_embeddings(
         .send()
         .await?;
 
-    match response.status() {
-        status if status.is_success() => Ok(response),
-        status if status.as_u16() == 429 => {
+    let status = response.status();
+
+    match status.as_u16() {
+        200..299 => Ok(response),
+        429 | 502 | 520 => {
             let retry_after = response
                 .headers()
                 .get("retry-after")
@@ -110,11 +112,14 @@ async fn request_embeddings(
                 Err(EmbeddingError::RateLimit)
             }
         }
-        status => {
-            error!("El request ha fallado con status: {status} [{proc_id}]");
-            Err(EmbeddingError::RequestError(
-                response.error_for_status().unwrap_err(),
-            ))
+        _ => {
+            let error_status = response.error_for_status_ref().err();
+            let err_body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "No response body".to_string());
+            error!("El request ha fallado con status: {status}. Respuesta: {err_body} [{proc_id}]");
+            Err(EmbeddingError::RequestError(error_status.unwrap()))
         }
     }
 }

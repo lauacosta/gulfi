@@ -1,10 +1,11 @@
 use std::{
-    fmt::Debug,
+    fmt::{Debug, Display, Formatter},
     fs::metadata,
     path::{Path, PathBuf},
 };
 
 use camino::Utf8Path;
+use color_eyre::owo_colors::OwoColorize;
 use eyre::eyre;
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -15,6 +16,43 @@ pub struct Document {
     #[serde(deserialize_with = "to_lowercase")]
     pub name: String,
     pub fields: Vec<Field>,
+}
+
+impl Display for Document {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let name = self.name.to_uppercase();
+        writeln!(f, "{:<4}- {name}:", "")?;
+
+        for field in &self.fields {
+            let field_name = &field.name;
+            let formatted = if field.vec_input && field.unique {
+                format!(
+                    "{:<6}- {field_name} \t {}, {}",
+                    "",
+                    "vec_input".bright_blue().bold(),
+                    "único".bright_magenta().bold(),
+                )
+            } else if field.vec_input {
+                format!(
+                    "{:<6}- {field_name} \t {}",
+                    "",
+                    "vec_input".bright_blue().bold()
+                )
+            } else if field.unique {
+                format!(
+                    "{:<6}- {field_name} \t {}",
+                    "",
+                    "único".bright_magenta().bold()
+                )
+            } else {
+                format!("{:<6}- {field_name}", "")
+            };
+
+            writeln!(f, "{}", formatted)?;
+        }
+
+        Ok(())
+    }
 }
 
 impl Document {

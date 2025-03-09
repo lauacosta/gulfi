@@ -1,4 +1,6 @@
 use axum::Extension;
+use clap::{crate_name, crate_version};
+use color_eyre::owo_colors::OwoColorize;
 use eyre::Result;
 use gulfi_sqlite::init_sqlite;
 use http::Method;
@@ -13,7 +15,7 @@ use tokio::{net::TcpListener, signal};
 use tower::ServiceBuilder;
 use tower_http::trace::{DefaultOnResponse, TraceLayer};
 use tower_request_id::{RequestId, RequestIdLayer};
-use tracing::{Level, error, error_span, info, instrument};
+use tracing::{Level, error, error_span, info};
 
 use crate::ApplicationSettings;
 use crate::routes::{
@@ -42,7 +44,6 @@ impl Application {
     /// Entrará en panicos si no es capaz de:
     /// 1. Vincular un `tokio::net::TcpListener` a la dirección dada.
     /// 2. Falla en conectarse con el servidor de `MeiliSearch`.
-    #[tracing::instrument(name = "Construyendo la aplicación.", skip(configuration))]
     pub async fn build(configuration: &ApplicationSettings) -> Result<Self> {
         let address = format!("{}:{}", configuration.host, configuration.port);
 
@@ -91,7 +92,6 @@ impl Application {
     /// # Panics
     ///
     /// Entrará en pánico si no es capaz de instalar el handler requerido.
-    #[tracing::instrument(skip(self))]
     pub async fn run_until_stopped(self) -> io::Result<()> {
         self.server
             // https://github.com/tokio-rs/axum/blob/main/examples/graceful-shutdown/src/main.rs
@@ -139,13 +139,9 @@ pub fn build_server(listener: TcpListener, state: AppState) -> Result<Serve<Rout
         .route("/assets/*path", get(serve_ui))
         .fallback(serve_ui);
 
-    let is_dev = cfg!(debug_assertions);
-
-    info!("Running in dev: {is_dev}");
-
     let mut server = api_routes.merge(frontend_routes).with_state(state);
 
-    if is_dev {
+    if cfg!(debug_assertions) {
         let cors = CorsLayer::new()
             .allow_origin(Any)
             .allow_methods([Method::GET, Method::POST, Method::DELETE])
@@ -190,18 +186,31 @@ pub fn build_server(listener: TcpListener, state: AppState) -> Result<Serve<Rout
     Ok(axum::serve(listener, server))
 }
 
-#[instrument(skip(configuration))]
+// #[instrument(skip(configuration))]
 pub async fn run_server(configuration: ApplicationSettings) -> Result<()> {
+    let time = std::time::Instant::now();
     match Application::build(&configuration).await {
         Ok(app) => {
             let url = format!("http://{}:{}", app.host(), app.port());
-            info!("La aplicación está disponible en {url}");
-
             if configuration.open
                 && webbrowser::open_browser(webbrowser::Browser::Default, &url).is_ok()
             {
                 info!("Se abrirá la aplicación en el navegador predeterminado.");
             }
+
+            println!(
+                "\n\n  {} {} listo en {} ms\n",
+                crate_name!().to_uppercase().bold().bright_green(),
+                format!("v{}", crate_version!()).green(),
+                time.elapsed().as_millis().bold().bright_white(),
+            );
+
+            println!(
+                "  {}  {}:  {}",
+                "➜".bold().bright_green(),
+                "Local".bold().bright_white(),
+                url.bright_cyan().underline()
+            );
 
             if let Err(e) = app.run_until_stopped().await {
                 error!("Error ejecutando el servidor HTTP: {:?}", e);

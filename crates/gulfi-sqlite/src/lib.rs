@@ -22,6 +22,8 @@ use sqlite_vec::sqlite3_vec_init;
 use tracing::{Level, debug, error, info, span};
 use zerocopy::IntoBytes;
 
+pub const DIMENSION: usize = 1536;
+
 pub async fn sync_vec_tnea(db: &Connection, doc: &Document, base_delay: u64) -> Result<()> {
     let doc_name = doc.name.clone();
 
@@ -265,7 +267,7 @@ pub fn setup_sqlite(db: &rusqlite::Connection, doc: &Document) -> Result<()> {
 
             create virtual table if not exists vec_{doc_name} using vec0(
                 row_id integer primary key,
-                vec_input_embedding float[1536]
+                vec_input_embedding float[{DIMENSION}]
             );
             ",
     );
@@ -521,21 +523,6 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
 
     Ok(inserted)
 }
-// #[derive(Deserialize)]
-// struct Meta {
-//     tables: std::collections::HashMap<String, TableMeta>,
-// }
-//
-// #[derive(Deserialize)]
-// struct TableMeta {
-//     columns: Vec<String>,
-// }
-//
-// fn load_meta(filename: &str) -> Result<Meta> {
-//     let data = std::fs::read_to_string(filename)?;
-//     let meta: Meta = serde_json::from_str(&data)?;
-//     Ok(meta)
-// }
 
 pub fn update_historial(db: &Connection, query: &str) -> Result<(), HttpError> {
     let updated = db.execute(
@@ -662,11 +649,11 @@ impl<'a> SearchQueryBuilder<'a> {
         self.stmt_str.push_str(stmt);
     }
 
-    pub fn build(self) -> SearchQuery<'a> {
+    pub fn build(&self) -> SearchQuery<'a> {
         SearchQuery {
             db: self.db,
-            stmt_str: self.stmt_str,
-            bindings: self.bindings,
+            stmt_str: self.stmt_str.clone(),
+            bindings: self.bindings.clone(),
         }
     }
 }

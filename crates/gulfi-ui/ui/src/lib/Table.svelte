@@ -1,9 +1,8 @@
 <script lang="ts">
-    export let table: {
-        msg: string;
-        columns: string[];
-        rows: string[][];
-    };
+    import type { TableContent } from "./types";
+    export let table: TableContent;
+    export let page: number;
+    export let total_pages: number;
 </script>
 
 {#if table.columns.length > 0}
@@ -14,6 +13,7 @@
 
     <div class="table-header">
         <div class="result-count">{table.msg}</div>
+        <div class="result-count">{page} de {total_pages}</div>
         <div class="pagination"></div>
     </div>
 

@@ -1,23 +1,31 @@
+use std::fs::File;
+
 use clap::Parser;
 use color_eyre::owo_colors::OwoColorize;
 use eyre::eyre;
 use gulfi::ApplicationSettings;
 use gulfi::startup::run_server;
-use gulfi_cli::{Cli, Commands, SyncStrategy};
+use gulfi_cli::{Cli, Command, SyncStrategy};
 use gulfi_common::Document;
 use gulfi_helper::initialize_meta_file;
 use gulfi_sqlite::{init_sqlite, insert_base_data, setup_sqlite, sync_fts_tnea, sync_vec_tnea};
 use rusqlite::Connection;
-use std::fs::File;
 use tracing::{Level, debug, info, level_filters::LevelFilter};
 use tracing_error::ErrorLayer;
 use tracing_subscriber::{Registry, layer::SubscriberExt, util::SubscriberInitExt};
 use tracing_tree::HierarchicalLayer;
 
+#[cfg(debug_assertions)]
+use eyre::Report;
+#[cfg(debug_assertions)]
+use gulfi_cli::Mode;
+#[cfg(debug_assertions)]
+use tokio::{process::Command as TokioCommand, try_join};
+
 fn main() -> eyre::Result<()> {
     let cli = Cli::parse();
 
-    setup(cli.loglevel)?;
+    setup(&cli.loglevel)?;
 
     let file = match File::open("meta.json") {
         Ok(file) => Ok(file),
@@ -32,54 +40,56 @@ fn main() -> eyre::Result<()> {
 
     debug!(?documents);
 
-    match cli.command {
-        Commands::List => {
+    match cli.command() {
+        Command::List => {
             println!("Documentos definidos en `meta.json`:");
             for doc in documents {
-                let name = doc.name.to_uppercase();
-
-                println!("{:<4}- {name}:", "");
-                for field in doc.fields {
-                    let field_name = field.name;
-                    if field.vec_input && field.unique {
-                        println!(
-                            "{:<6}- {field_name} \t {}, {}",
-                            "",
-                            "vec_input".bright_blue().bold(),
-                            "único".bright_magenta().bold(),
-                        );
-                    } else if field.vec_input {
-                        println!(
-                            "{:<6}- {field_name} \t {}",
-                            "",
-                            "vec_input".bright_blue().bold()
-                        );
-                    } else if field.unique {
-                        println!(
-                            "{:<6}- {field_name} \t {}",
-                            "",
-                            "único".bright_magenta().bold()
-                        );
-                    } else {
-                        println!("{:<6}- {field_name}", "");
-                    }
-                }
+                println!("{doc}");
             }
         }
 
-        Commands::Serve {
+        Command::Serve {
             interface,
             port,
             open,
+            #[cfg(debug_assertions)]
+            mode,
         } => {
             let configuration = ApplicationSettings::new(port, interface, open);
 
             debug!(?configuration);
             let rt = tokio::runtime::Runtime::new()?;
 
-            rt.block_on(run_server(configuration))?
+            #[cfg(debug_assertions)]
+            match mode {
+                Mode::Dev => {
+                    let frontend_future = async {
+                        TokioCommand::new("pnpm")
+                            .arg("run")
+                            .arg("dev")
+                            .arg("--clearScreen=false")
+                            .current_dir("./crates/gulfi-ui/ui")
+                            .stdout(std::process::Stdio::inherit())
+                            .stderr(std::process::Stdio::inherit())
+                            .spawn()
+                            .map_err(Report::from)?
+                            .wait()
+                            .await
+                            .map_err(Report::from)?;
+                        Ok::<(), Report>(())
+                    };
+
+                    rt.block_on(async { try_join!(run_server(configuration), frontend_future) })?;
+                }
+                Mode::Prod => rt.block_on(run_server(configuration))?,
+            }
+
+            #[cfg(not(debug_assertions))]
+            {
+                rt.block_on(run_server(configuration))?;
+            }
         }
-        Commands::Sync {
+        Command::Sync {
             sync_strat,
             clean_slate,
             base_delay,
@@ -154,7 +164,7 @@ fn main() -> eyre::Result<()> {
     Ok(())
 }
 
-fn setup(loglevel: String) -> eyre::Result<()> {
+fn setup(loglevel: &str) -> eyre::Result<()> {
     color_eyre::install()?;
     dotenvy::dotenv().map_err(|err| eyre!("El archivo .env no fue encontrado. err: {}", err))?;
     let level = match loglevel.to_lowercase().trim() {

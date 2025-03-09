@@ -1,18 +1,26 @@
 mod assets;
-mod favoritos;
-mod health_check;
-mod historial;
-mod index;
-pub(crate) mod search;
 mod serve_ui;
 pub use serve_ui::*;
+mod favoritos;
+pub use favoritos::*;
+pub use health_check::*;
+mod health_check;
+mod historial;
+pub use historial::*;
+mod index;
+pub(crate) mod search;
+pub use search::*;
+
+use base64::{
+    Engine,
+    alphabet::{self},
+    engine::{self, general_purpose},
+};
+use serde_json::json;
 
 use axum::{Json, async_trait, extract::FromRequestParts};
 use color_eyre::Report;
-pub use favoritos::*;
 use gulfi_openai::embed_single;
-pub use health_check::*;
-pub use historial::*;
 use http::{Uri, request::Parts};
 
 use gulfi_common::{HttpError, IntoHttp, SearchResult, SearchString};
@@ -20,9 +28,8 @@ use gulfi_sqlite::SearchQueryBuilder;
 use gulfi_ui::{Sexo, Table};
 use reqwest::Client;
 use rusqlite::Connection;
-pub use search::*;
 
-use serde::{Deserialize, de::DeserializeOwned};
+use serde::{Deserialize, Deserializer, de::DeserializeOwned};
 use thiserror::Error;
 use tracing::{debug, info};
 use zerocopy::IntoBytes;
@@ -32,6 +39,8 @@ pub struct Params {
     #[serde(rename = "query")]
     search_str: String,
     // doc: String,
+    page: usize,
+    limit: usize,
     strategy: SearchStrategy,
     sexo: Sexo,
     edad_min: u64,
@@ -40,6 +49,7 @@ pub struct Params {
     peso_semantic: f32,
     #[serde(rename = "k")]
     k_neighbors: u64,
+    vector: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Clone, Copy)]
@@ -60,22 +70,15 @@ impl SearchStrategy {
         let query = search.query.trim().to_owned();
         let provincia = search.provincia;
         let ciudad = search.ciudad;
-        // let doc = params.doc;
 
-        // let field_names = {
-        //     let fields: Vec<String> = doc
-        //         .fields
-        //         .iter()
-        //         .filter(|x| !x.vec_input)
-        //         .map(|x| x.name.clone())
-        //         .collect();
-        //
-        //     fields.join(", ")
-        // };
+        let engine = engine::GeneralPurpose::new(&alphabet::URL_SAFE, general_purpose::NO_PAD);
+        let mut embedding_base64: Option<String> = None;
+
+        let offset = (params.page - 1) * params.limit;
+        let total_results: usize;
 
         let (column_names, table) = match self {
             SearchStrategy::Fts => {
-                debug!("{:?}", &params);
                 let search = &format!(
                     "select
                     rank as score,
@@ -88,12 +91,17 @@ impl SearchStrategy {
                     'fts' as match_type
                     from fts_tnea
                     where vec_input match '\"' || :query || '\"'
-                    and cast(edad as integer) between :edad_min and :edad_max
-                    " // vec_input,
+                    "
                 );
 
                 let mut search_query = SearchQueryBuilder::new(&db, &search);
-                search_query.add_bindings(&[&query, &params.edad_min, &params.edad_max]);
+
+                search_query.add_bindings(&[&query]);
+
+                search_query.add_filter(
+                    " and cast(edad as integer) between :edad_min and :edad_max ",
+                    &[&params.edad_min, &params.edad_max],
+                );
 
                 if provincia.is_some() {
                     search_query.add_filter(" and provincia like :provincia", &[&provincia]);
@@ -103,23 +111,40 @@ impl SearchStrategy {
                 }
 
                 match params.sexo {
-                    Sexo::M => search_query.add_filter(" and sexo = :sexo", &[&params.sexo]),
-                    Sexo::F => search_query.add_filter(" and sexo = :sexo", &[&params.sexo]),
+                    Sexo::M => {
+                        search_query.add_filter(" and sexo = :sexo", &[&params.sexo]);
+                    }
+                    Sexo::F => {
+                        search_query.add_filter(" and sexo = :sexo", &[&params.sexo]);
+                    }
                     Sexo::U => (),
                 };
 
                 search_query.push_str(" order by rank");
 
                 let query = search_query.build();
+                let (_, count_table) = query.execute()?;
+                total_results = count_table.len();
+
+                search_query.add_filter(" limit :limit ", &[&params.limit]);
+                search_query.add_filter(" offset :offset ", &[&offset]);
+
+                let query = search_query.build();
                 query.execute()?
             }
             SearchStrategy::Semantic => {
-                let query_emb = embed_single(query.clone(), client)
-                    .await
-                    .map_err(|err| tracing::error!("{err}"))
-                    .expect("Fallo al crear un embedding del query");
-
-                let embedding = query_emb.as_bytes();
+                let embedding = {
+                    match params.vector {
+                        Some(emb) => engine.decode(emb).expect("Deberia poder decodificarse"),
+                        None => embed_single(query.clone(), client)
+                            .await
+                            .map_err(|err| tracing::error!("{err}"))
+                            .expect("Fallo al crear un embedding del query")
+                            .as_bytes()
+                            .to_owned(),
+                    }
+                };
+                embedding_base64 = Some(engine.encode(&embedding));
 
                 let mut search_query = SearchQueryBuilder::new(
                     &db,
@@ -137,10 +162,14 @@ impl SearchStrategy {
                 left join tnea on tnea.id = vec_tnea.row_id
                 where vec_input_embedding match :embedding
                 and k = 1000
-                and cast (tnea.edad as integer) between :edad_min and :edad_max
                 ",
                 );
-                search_query.add_bindings(&[&embedding, &params.edad_min, &params.edad_max]);
+                search_query.add_bindings(&[&embedding]);
+
+                search_query.add_filter(
+                    " and cast(edad as integer) between :edad_min and :edad_max ",
+                    &[&params.edad_min, &params.edad_max],
+                );
 
                 if provincia.is_some() {
                     search_query.add_filter(" and tnea.provincia like :provincia", &[&provincia]);
@@ -155,16 +184,32 @@ impl SearchStrategy {
                     Sexo::F => search_query.add_filter(" and sexo = :sexo", &[&params.sexo]),
                     Sexo::U => (),
                 };
+
+                search_query.add_filter(" limit :limit ", &[&params.limit]);
+                search_query.add_filter(" offset :offset ", &[&offset]);
+
+                let query = search_query.build();
+
+                let (_, count_table) = query.execute()?;
+                total_results = count_table.len();
+
                 let query = search_query.build();
                 query.execute()?
             }
             SearchStrategy::ReciprocalRankFusion => {
-                let query_emb = embed_single(query.clone(), client)
-                    .await
-                    .map_err(|err| tracing::error!("{err}"))
-                    .expect("Fallo al crear un embedding del query");
+                let embedding = {
+                    match params.vector {
+                        Some(emb) => engine.decode(emb).expect("Deberia poder decodificarse"),
+                        None => embed_single(query.clone(), client)
+                            .await
+                            .map_err(|err| tracing::error!("{err}"))
+                            .expect("Fallo al crear un embedding del query")
+                            .as_bytes()
+                            .to_owned(),
+                    }
+                };
+                embedding_base64 = Some(engine.encode(&embedding));
 
-                let embedding = query_emb.as_bytes();
                 // Normalizo los datos que estan en un rango de 0 a 100 para que esten de 0 a 1.
                 let weight_vec = params.peso_semantic / 100.0;
                 let weight_fts: f32 = params.peso_fts / 100.0;
@@ -241,24 +286,38 @@ impl SearchStrategy {
                     Sexo::U => (),
                 };
 
+                search_query.push_str(" order by combined_rank desc ");
+
+                search_query.add_filter(" limit :limit ", &[&params.limit]);
+                search_query.add_filter(" offset :offset ", &[&offset]);
                 search_query.push_str(
-                    " order by combined_rank desc
-                    ) 
-                    select * from final;
-                ",
+                    ") 
+                    select * from final;",
                 );
+
+                let query = search_query.build();
+
+                let (_, count_table) = query.execute()?;
+                total_results = count_table.len();
 
                 let query = search_query.build();
                 query.execute()?
             }
 
             SearchStrategy::KeywordFirst => {
-                let query_emb = embed_single(query.clone(), client)
-                    .await
-                    .map_err(|err| tracing::error!("{err}"))
-                    .expect("Fallo al crear un embedding del query");
+                let embedding = {
+                    match params.vector {
+                        Some(emb) => engine.decode(emb).expect("Deberia poder decodificarse"),
+                        None => embed_single(query.clone(), client)
+                            .await
+                            .map_err(|err| tracing::error!("{err}"))
+                            .expect("Fallo al crear un embedding del query")
+                            .as_bytes()
+                            .to_owned(),
+                    }
+                };
+                embedding_base64 = Some(engine.encode(&embedding));
 
-                let embedding = query_emb.as_bytes();
                 let k = params.k_neighbors;
 
                 let mut search_query = SearchQueryBuilder::new(
@@ -326,17 +385,32 @@ impl SearchStrategy {
                     Sexo::U => (),
                 };
 
+                search_query.add_filter(" limit :limit ", &[&params.limit]);
+                search_query.add_filter(" offset :offset ", &[&offset]);
+
                 search_query.push_str(" ) select * from final;");
+
+                let query = search_query.build();
+                let (_, count_table) = query.execute()?;
+                total_results = count_table.len();
 
                 let query = search_query.build();
                 query.execute()?
             }
             SearchStrategy::ReRankBySemantics => {
-                let query_emb = embed_single(query.clone(), client)
-                    .await
-                    .map_err(|err| tracing::error!("{err}"))
-                    .expect("Fallo al crear un embedding del query");
-                let embedding = query_emb.as_bytes();
+                let embedding = {
+                    match params.vector {
+                        Some(emb) => engine.decode(emb).expect("Deberia poder decodificarse"),
+                        None => embed_single(query.clone(), client)
+                            .await
+                            .map_err(|err| tracing::error!("{err}"))
+                            .expect("Fallo al crear un embedding del query")
+                            .as_bytes()
+                            .to_owned(),
+                    }
+                };
+                embedding_base64 = Some(engine.encode(&embedding));
+
                 let k = params.k_neighbors;
 
                 let mut search_query = SearchQueryBuilder::new(
@@ -391,34 +465,48 @@ impl SearchStrategy {
                 };
 
                 search_query.add_filter(
-                    " order by vec_distance_cosine(:embedding, embeddings.vec_input_embedding)
-                )
-                select * from final;",
+                    " order by vec_distance_cosine(:embedding, embeddings.vec_input_embedding) ",
                     &[&embedding],
                 );
+
+                search_query.add_filter(" limit :limit ", &[&params.limit]);
+                search_query.add_filter(" offset :offset ", &[&offset]);
+
+                search_query.push_str(
+                    " )
+                select * from final;",
+                );
+
+                let query = search_query.build();
+                let (_, count_table) = query.execute()?;
+                total_results = count_table.len();
+
                 let query = search_query.build();
                 query.execute()?
             }
         };
 
+        let pages = total_results.div_ceil(params.limit);
+        let total = table.len();
+
         info!(
             "Busqueda para el query: `{}`, exitosa! {} registros",
-            query,
-            table.len(),
+            query, total,
         );
 
         gulfi_sqlite::update_historial(&db, &params.search_str)?;
 
-        debug!(?column_names);
-        let result = Table {
-            msg: format!("Hay un total de {} resultados.", table.len()),
+        let table = Table {
+            msg: format!("Hay un total de {} resultados.", total * pages),
             columns: column_names,
             rows: table,
         };
 
-        let result = Json(result);
-
-        result.into_http()
+        if let Some(base64_string) = embedding_base64 {
+            Json(json!({"table":table, "pages":pages, "embedding":base64_string})).into_http()
+        } else {
+            Json(json!({"table":table, "pages":pages})).into_http()
+        }
     }
 }
 

@@ -3,7 +3,7 @@ use std::net::IpAddr;
 use clap::{Parser, Subcommand, ValueEnum, command, crate_version};
 
 #[derive(Parser)]
-#[command(version, about, long_about = None, before_help = format!(r"
+#[command(version, about,  long_about = None, before_help = format!(r"
  _____       _  __ _ 
 |  __ \     | |/ _(_)
 | |  \/_   _| | |_ _ 
@@ -19,13 +19,22 @@ pub struct Cli {
     pub loglevel: String,
 
     #[command(subcommand)]
-    pub command: Commands,
+    command: Option<Command>,
 }
 
-#[derive(Subcommand)]
-pub enum Commands {
+impl Cli {
+    pub fn command(&self) -> Command {
+        self.command.clone().unwrap_or(Command::List)
+    }
+}
+
+#[derive(Subcommand, Clone, Debug)]
+pub enum Command {
     /// Inicia el servidor HTTP y expone la interfaz web
     Serve {
+        #[cfg(debug_assertions)]
+        #[arg(value_enum)]
+        mode: Mode,
         /// Establece la dirección IP.
         #[clap(short = 'I', long, default_value = "127.0.0.1")]
         interface: IpAddr,
@@ -59,7 +68,14 @@ pub enum Commands {
     List,
 }
 
-#[derive(Clone, ValueEnum)]
+#[cfg(debug_assertions)]
+#[derive(Debug, Clone, ValueEnum)]
+pub enum Mode {
+    Prod,
+    Dev,
+}
+
+#[derive(Debug, Clone, ValueEnum)]
 pub enum SyncStrategy {
     Fts,
     Vector,
