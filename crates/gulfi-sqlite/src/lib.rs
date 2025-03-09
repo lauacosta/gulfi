@@ -9,7 +9,7 @@ use std::{
     },
 };
 
-use chrono::NaiveDateTime;
+use chrono::{NaiveDateTime, offset};
 use csv::ReaderBuilder;
 use eyre::{Result, eyre};
 use futures::StreamExt;
@@ -586,11 +586,12 @@ pub struct SearchQuery<'a> {
     pub bindings: Vec<&'a dyn ToSql>,
 }
 
-type QueryResult = (Vec<String>, Vec<Vec<String>>);
+type QueryResult = (Vec<String>, Vec<Vec<String>>, usize);
 
 impl SearchQuery<'_> {
     pub fn execute(&self) -> Result<QueryResult, HttpError> {
         debug!("{:?}", self.stmt_str);
+
         let mut statement = self.db.prepare(&self.stmt_str)?;
 
         let column_names: Vec<String> = statement
@@ -617,7 +618,9 @@ impl SearchQuery<'_> {
             })?
             .collect::<Result<Vec<Vec<String>>, _>>()?;
 
-        Ok((column_names, table))
+        let count = table.len();
+
+        Ok((column_names, table, count))
     }
 }
 
@@ -636,7 +639,7 @@ impl<'a> SearchQueryBuilder<'a> {
         }
     }
 
-    pub fn add_filter(&mut self, filter: &str, binding: &[&'a dyn ToSql]) {
+    pub fn add_statement(&mut self, filter: &str, binding: &[&'a dyn ToSql]) {
         self.stmt_str.push_str(filter);
         self.bindings.extend_from_slice(binding);
     }
@@ -645,7 +648,7 @@ impl<'a> SearchQueryBuilder<'a> {
         self.bindings.extend_from_slice(binding);
     }
 
-    pub fn push_str(&mut self, stmt: &str) {
+    pub fn add_statement_str(&mut self, stmt: &str) {
         self.stmt_str.push_str(stmt);
     }
 

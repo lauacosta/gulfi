@@ -29,7 +29,7 @@ use gulfi_ui::{Sexo, Table};
 use reqwest::Client;
 use rusqlite::Connection;
 
-use serde::{Deserialize, Deserializer, de::DeserializeOwned};
+use serde::{Deserialize, de::DeserializeOwned};
 use thiserror::Error;
 use tracing::{debug, info};
 use zerocopy::IntoBytes;
@@ -56,28 +56,37 @@ pub struct Params {
 pub enum SearchStrategy {
     Fts,
     Semantic,
-    KeywordFirst,
     ReciprocalRankFusion,
-    ReRankBySemantics,
+    // KeywordFirst,
+    // ReRankBySemantics,
 }
 
 impl SearchStrategy {
     pub async fn search(self, db_path: &str, client: &Client, params: Params) -> SearchResult {
         let db = Connection::open(db_path)
             .expect("Deberia ser un path valido a una base de datos sqlite.");
+
         let search = SearchString::parse(&params.search_str);
+
         debug!(?search);
+
+        let offset = (params.page - 1) * params.limit;
         let query = search.query.trim().to_owned();
         let provincia = search.provincia;
         let ciudad = search.ciudad;
 
         let engine = engine::GeneralPurpose::new(&alphabet::URL_SAFE, general_purpose::NO_PAD);
+
+        let embedding: Vec<u8>;
         let mut embedding_base64: Option<String> = None;
 
-        let offset = (params.page - 1) * params.limit;
-        let total_results: usize;
+        // Normalizo los datos que estan en un rango de 0 a 100 para que esten de 0 a 1.
+        let weight_vec = params.peso_semantic / 100.0;
+        let weight_fts: f32 = params.peso_fts / 100.0;
+        let rrf_k: i64 = 60;
+        let k = params.k_neighbors;
 
-        let (column_names, table) = match self {
+        let (search_query, total_results) = match self {
             SearchStrategy::Fts => {
                 let search = &format!(
                     "select
@@ -98,42 +107,37 @@ impl SearchStrategy {
 
                 search_query.add_bindings(&[&query]);
 
-                search_query.add_filter(
+                search_query.add_statement(
                     " and cast(edad as integer) between :edad_min and :edad_max ",
                     &[&params.edad_min, &params.edad_max],
                 );
 
                 if provincia.is_some() {
-                    search_query.add_filter(" and provincia like :provincia", &[&provincia]);
+                    search_query.add_statement(" and provincia like :provincia", &[&provincia]);
                 }
                 if ciudad.is_some() {
-                    search_query.add_filter(" and ciudad like :ciudad", &[&ciudad]);
+                    search_query.add_statement(" and ciudad like :ciudad", &[&ciudad]);
                 }
 
                 match params.sexo {
                     Sexo::M => {
-                        search_query.add_filter(" and sexo = :sexo", &[&params.sexo]);
+                        search_query.add_statement(" and sexo = :sexo", &[&params.sexo]);
                     }
                     Sexo::F => {
-                        search_query.add_filter(" and sexo = :sexo", &[&params.sexo]);
+                        search_query.add_statement(" and sexo = :sexo", &[&params.sexo]);
                     }
                     Sexo::U => (),
                 };
 
-                search_query.push_str(" order by rank");
+                search_query.add_statement_str(" order by rank");
 
-                let query = search_query.build();
-                let (_, count_table) = query.execute()?;
-                total_results = count_table.len();
+                search_query.add_statement(" limit :limit ", &[&params.limit]);
+                search_query.add_statement(" offset :offset ", &[&offset]);
 
-                search_query.add_filter(" limit :limit ", &[&params.limit]);
-                search_query.add_filter(" offset :offset ", &[&offset]);
-
-                let query = search_query.build();
-                query.execute()?
+                search_query.build()
             }
             SearchStrategy::Semantic => {
-                let embedding = {
+                embedding = {
                     match params.vector {
                         Some(emb) => engine.decode(emb).expect("Deberia poder decodificarse"),
                         None => embed_single(query.clone(), client)
@@ -166,38 +170,33 @@ impl SearchStrategy {
                 );
                 search_query.add_bindings(&[&embedding]);
 
-                search_query.add_filter(
+                search_query.add_statement(
                     " and cast(edad as integer) between :edad_min and :edad_max ",
                     &[&params.edad_min, &params.edad_max],
                 );
 
                 if provincia.is_some() {
-                    search_query.add_filter(" and tnea.provincia like :provincia", &[&provincia]);
+                    search_query
+                        .add_statement(" and tnea.provincia like :provincia", &[&provincia]);
                 }
 
                 if ciudad.is_some() {
-                    search_query.add_filter(" and tnea.ciudad like :ciudad", &[&ciudad]);
+                    search_query.add_statement(" and tnea.ciudad like :ciudad", &[&ciudad]);
                 }
 
                 match params.sexo {
-                    Sexo::M => search_query.add_filter(" and sexo = :sexo", &[&params.sexo]),
-                    Sexo::F => search_query.add_filter(" and sexo = :sexo", &[&params.sexo]),
+                    Sexo::M => search_query.add_statement(" and sexo = :sexo", &[&params.sexo]),
+                    Sexo::F => search_query.add_statement(" and sexo = :sexo", &[&params.sexo]),
                     Sexo::U => (),
                 };
 
-                search_query.add_filter(" limit :limit ", &[&params.limit]);
-                search_query.add_filter(" offset :offset ", &[&offset]);
+                search_query.add_statement(" limit :limit ", &[&params.limit]);
+                search_query.add_statement(" offset :offset ", &[&offset]);
 
-                let query = search_query.build();
-
-                let (_, count_table) = query.execute()?;
-                total_results = count_table.len();
-
-                let query = search_query.build();
-                query.execute()?
+                search_query.build()
             }
             SearchStrategy::ReciprocalRankFusion => {
-                let embedding = {
+                embedding = {
                     match params.vector {
                         Some(emb) => engine.decode(emb).expect("Deberia poder decodificarse"),
                         None => embed_single(query.clone(), client)
@@ -209,12 +208,6 @@ impl SearchStrategy {
                     }
                 };
                 embedding_base64 = Some(engine.encode(&embedding));
-
-                // Normalizo los datos que estan en un rango de 0 a 100 para que esten de 0 a 1.
-                let weight_vec = params.peso_semantic / 100.0;
-                let weight_fts: f32 = params.peso_fts / 100.0;
-                let rrf_k: i64 = 60;
-                let k = params.k_neighbors;
 
                 let mut search_query = SearchQueryBuilder::new(
                     &db,
@@ -273,221 +266,36 @@ impl SearchStrategy {
                 ]);
 
                 if provincia.is_some() {
-                    search_query.add_filter(" and tnea.provincia like :provincia", &[&provincia]);
+                    search_query
+                        .add_statement(" and tnea.provincia like :provincia", &[&provincia]);
                 }
 
                 if ciudad.is_some() {
-                    search_query.add_filter(" and tnea.ciudad like :ciudad", &[&ciudad]);
+                    search_query.add_statement(" and tnea.ciudad like :ciudad", &[&ciudad]);
                 }
 
                 match params.sexo {
-                    Sexo::M => search_query.add_filter(" and sexo = :sexo", &[&params.sexo]),
-                    Sexo::F => search_query.add_filter(" and sexo = :sexo", &[&params.sexo]),
+                    Sexo::M => search_query.add_statement(" and sexo = :sexo", &[&params.sexo]),
+                    Sexo::F => search_query.add_statement(" and sexo = :sexo", &[&params.sexo]),
                     Sexo::U => (),
                 };
 
-                search_query.push_str(" order by combined_rank desc ");
+                search_query.add_statement_str(" order by combined_rank desc ");
 
-                search_query.add_filter(" limit :limit ", &[&params.limit]);
-                search_query.add_filter(" offset :offset ", &[&offset]);
-                search_query.push_str(
+                search_query.add_statement(" limit :limit ", &[&params.limit]);
+                search_query.add_statement(" offset :offset ", &[&offset]);
+                search_query.add_statement_str(
                     ") 
                     select * from final;",
                 );
 
-                let query = search_query.build();
-
-                let (_, count_table) = query.execute()?;
-                total_results = count_table.len();
-
-                let query = search_query.build();
-                query.execute()?
-            }
-
-            SearchStrategy::KeywordFirst => {
-                let embedding = {
-                    match params.vector {
-                        Some(emb) => engine.decode(emb).expect("Deberia poder decodificarse"),
-                        None => embed_single(query.clone(), client)
-                            .await
-                            .map_err(|err| tracing::error!("{err}"))
-                            .expect("Fallo al crear un embedding del query")
-                            .as_bytes()
-                            .to_owned(),
-                    }
-                };
-                embedding_base64 = Some(engine.encode(&embedding));
-
-                let k = params.k_neighbors;
-
-                let mut search_query = SearchQueryBuilder::new(
-                    &db,
-                    "
-                with fts_matches as (
-                select
-                    rowid as row_id,
-                    rank as score
-                from fts_tnea
-                where vec_input match '\"' || :query || '\"'
-                ),
-
-                vec_matches as (
-                select
-                    row_id,
-                    distance as score
-                from vec_tnea
-                where
-                    vec_input_embedding match :embedding
-                    and k = :k
-                order by distance
-                ),
-
-                combined as (
-                select 'fts' as match_type, * from fts_matches
-                union all
-                select 'vec' as match_type, * from vec_matches
-                ),
-
-                final as (
-                select distinct
-                    tnea.vec_input,
-                    tnea.email,
-                    tnea.provincia,
-                    tnea.ciudad,
-                    tnea.edad,
-                    tnea.sexo,
-                    combined.score,
-                    combined.match_type
-                from combined
-                left join tnea on tnea.id = combined.row_id
-                where cast(tnea.edad as integer) between :edad_min and :edad_max
-                ",
-                );
-                search_query.add_bindings(&[
-                    &query,
-                    &k,
-                    &embedding,
-                    &params.edad_min,
-                    &params.edad_max,
-                ]);
-
-                if provincia.is_some() {
-                    search_query.add_filter(" and tnea.provincia like :provincia", &[&provincia]);
-                }
-
-                if ciudad.is_some() {
-                    search_query.add_filter(" and tnea.ciudad like :ciudad", &[&ciudad]);
-                }
-
-                match params.sexo {
-                    Sexo::M => search_query.add_filter(" and sexo = :sexo", &[&params.sexo]),
-                    Sexo::F => search_query.add_filter(" and sexo = :sexo", &[&params.sexo]),
-                    Sexo::U => (),
-                };
-
-                search_query.add_filter(" limit :limit ", &[&params.limit]);
-                search_query.add_filter(" offset :offset ", &[&offset]);
-
-                search_query.push_str(" ) select * from final;");
-
-                let query = search_query.build();
-                let (_, count_table) = query.execute()?;
-                total_results = count_table.len();
-
-                let query = search_query.build();
-                query.execute()?
-            }
-            SearchStrategy::ReRankBySemantics => {
-                let embedding = {
-                    match params.vector {
-                        Some(emb) => engine.decode(emb).expect("Deberia poder decodificarse"),
-                        None => embed_single(query.clone(), client)
-                            .await
-                            .map_err(|err| tracing::error!("{err}"))
-                            .expect("Fallo al crear un embedding del query")
-                            .as_bytes()
-                            .to_owned(),
-                    }
-                };
-                embedding_base64 = Some(engine.encode(&embedding));
-
-                let k = params.k_neighbors;
-
-                let mut search_query = SearchQueryBuilder::new(
-                    &db,
-                    "
-                with fts_matches as (
-                select
-                    rowid,
-                    rank as score
-                from fts_tnea
-                where vec_input match '\"' || :query || '\"'
-                ),
-
-                embeddings AS (
-                    SELECT
-                        row_id as rowid,
-                        vec_input_embedding
-                    FROM vec_tnea
-                    WHERE row_id IN (SELECT rowid FROM fts_matches)
-                ),
-
-                final as (
-                select
-                    tnea.vec_input,
-                    tnea.email,
-                    tnea.provincia,
-                    tnea.ciudad,
-                    tnea.edad,
-                    tnea.sexo,
-                    fts_matches.score,
-                    'fts' as match_type
-                from fts_matches
-                left join tnea on tnea.id = fts_matches.rowid
-                left join embeddings on embeddings.rowid = fts_matches.rowid
-                where cast(tnea.edad as integer) between :edad_min and :edad_max
-            ",
-                );
-                search_query.add_bindings(&[&query, &k, &params.edad_min, &params.edad_max]);
-
-                if provincia.is_some() {
-                    search_query.add_filter(" and tnea.provincia like :provincia", &[&provincia]);
-                }
-
-                if ciudad.is_some() {
-                    search_query.add_filter(" and tnea.ciudad like :ciudad", &[&ciudad]);
-                }
-
-                match params.sexo {
-                    Sexo::M => search_query.add_filter(" and sexo = :sexo", &[&params.sexo]),
-                    Sexo::F => search_query.add_filter(" and sexo = :sexo", &[&params.sexo]),
-                    Sexo::U => (),
-                };
-
-                search_query.add_filter(
-                    " order by vec_distance_cosine(:embedding, embeddings.vec_input_embedding) ",
-                    &[&embedding],
-                );
-
-                search_query.add_filter(" limit :limit ", &[&params.limit]);
-                search_query.add_filter(" offset :offset ", &[&offset]);
-
-                search_query.push_str(
-                    " )
-                select * from final;",
-                );
-
-                let query = search_query.build();
-                let (_, count_table) = query.execute()?;
-                total_results = count_table.len();
-
-                let query = search_query.build();
-                query.execute()?
+                search_query.build()
             }
         };
 
+        let (column_names, table, total) = search_query.execute()?;
+
         let pages = total_results.div_ceil(params.limit);
-        let total = table.len();
 
         info!(
             "Busqueda para el query: `{}`, exitosa! {} registros",
@@ -518,8 +326,8 @@ impl TryFrom<String> for SearchStrategy {
             "fts" => Ok(Self::Fts),
             "semantic_search" => Ok(Self::Semantic),
             "rrf" => Ok(Self::ReciprocalRankFusion),
-            "hkf" => Ok(Self::KeywordFirst),
-            "rrs" => Ok(Self::ReRankBySemantics),
+            // "hkf" => Ok(Self::KeywordFirst),
+            // "rrs" => Ok(Self::ReRankBySemantics),
             other => Err(SearchStrategyError::UnsupportedSearchStrategy(other.to_owned()).into()),
         }
     }

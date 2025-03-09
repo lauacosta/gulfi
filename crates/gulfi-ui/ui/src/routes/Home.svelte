@@ -147,8 +147,7 @@
 
         for (const [key, value] of formData.entries()) {
             searchParams.append(key, value.toString());
-            console.log(key);
-            console.log(value.toString());
+            console.log(`[k]: ${key} - [v]: ${value.toString()}`);
         }
 
         searchParams.append("page", page.toString());
@@ -171,7 +170,9 @@
                 tableContent.set(data.table);
                 total_pages = data.pages;
                 base64_embedding = data.embedding;
-                console.log(`After GET REQUEST: ${base64_embedding}`);
+                console.log(
+                    `After GET REQUEST: ${base64_embedding === null || base64_embedding === undefined}`,
+                );
 
                 requestAnimationFrame(() => {
                     insertPaginationButtons();
@@ -477,6 +478,8 @@
                         />
                     </div>
                 </div>
+            {:else}
+                <input type="hidden" name="k" value={k} />
             {/if}
 
             {#if showBalanceSlider}
@@ -511,8 +514,6 @@
                         >
                     </p>
                 </div>
-            {:else}
-                <input type="hidden" name="k" value={k} />
             {/if}
 
             <input type="hidden" name="limit" value="10" />
