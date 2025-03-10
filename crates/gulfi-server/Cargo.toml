@@ -4,12 +4,9 @@ edition = "2024"
 version.workspace = true
 
 [dependencies]
-dotenvy = "0.15.7"
 tower = "0.5.0"
 tower-http = { version = "0.5.2", features = ["compression-gzip", "cors", "fs", "trace"] }
 tower-request-id = "0.3.0"
-tracing-tree = "0.4.0"
-tracing-error = "0.2.0"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json"] }
 mime_guess = "2.0.5"
 
@@ -17,7 +14,6 @@ eyre.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 color-eyre.workspace = true
-clap.workspace = true
 axum.workspace = true
 tokio.workspace = true
 rusqlite.workspace = true
@@ -32,10 +28,7 @@ chrono.workspace = true
 gulfi-sqlite = { path = "../gulfi-sqlite/"}
 gulfi-common = { path = "../gulfi-common/"}
 gulfi-openai = { path = "../gulfi-openai/"}
-# gulfi-helper = { path = "../gulfi-helper/"}
-# gulfi-ui = { path = "../gulfi-ui/"}
-# gulfi-cli = { path = "../gulfi-cli/"}
+
 axum-extra = { version = "0.9.6", features = ["typed-header"] }
 webbrowser = "1.0.3"
-tower-serve-static = "0.1.1"
 include_dir = "0.7.4"

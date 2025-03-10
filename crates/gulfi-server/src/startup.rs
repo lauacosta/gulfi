@@ -1,12 +1,11 @@
 use axum::Extension;
-use clap::{crate_name, crate_version};
 use color_eyre::owo_colors::OwoColorize;
 use eyre::Result;
 use gulfi_sqlite::init_sqlite;
 use http::Method;
 use std::io;
 use std::net::IpAddr;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tower_http::cors::Any;
 use tower_http::{compression::CompressionLayer, cors::CorsLayer};
 
@@ -187,8 +186,7 @@ pub fn build_server(listener: TcpListener, state: AppState) -> Result<Serve<Rout
 }
 
 // #[instrument(skip(configuration))]
-pub async fn run_server(configuration: ApplicationSettings) -> Result<()> {
-    let time = std::time::Instant::now();
+pub async fn run_server(configuration: ApplicationSettings, start: Instant) -> Result<()> {
     match Application::build(&configuration).await {
         Ok(app) => {
             let url = format!("http://{}:{}", app.host(), app.port());
@@ -200,9 +198,9 @@ pub async fn run_server(configuration: ApplicationSettings) -> Result<()> {
 
             println!(
                 "\n\n  {} {} listo en {} ms\n",
-                crate_name!().to_uppercase().bold().bright_green(),
-                format!("v{}", crate_version!()).green(),
-                time.elapsed().as_millis().bold().bright_white(),
+                configuration.name.to_uppercase().bold().bright_green(),
+                format!("v{}", configuration.version).green(),
+                start.elapsed().as_millis().bold().bright_white(),
             );
 
             println!(

@@ -21,6 +21,8 @@ pub static ASSETS: Dir = include_dir!("$CARGO_MANIFEST_DIR/ui/dist");
 
 #[derive(Debug, Clone)]
 pub struct ApplicationSettings {
+    pub name: String,
+    pub version: String,
     pub port: u16,
     pub host: IpAddr,
     pub open: bool,
@@ -28,8 +30,14 @@ pub struct ApplicationSettings {
 
 impl ApplicationSettings {
     #[must_use]
-    pub fn new(port: u16, host: IpAddr, open: bool) -> Self {
-        Self { port, host, open }
+    pub fn new(name: String, version: String, port: u16, host: IpAddr, open: bool) -> Self {
+        Self {
+            name,
+            version,
+            port,
+            host,
+            open,
+        }
     }
 }
 

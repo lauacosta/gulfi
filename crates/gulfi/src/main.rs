@@ -1,6 +1,6 @@
 use std::fs::File;
 
-use clap::Parser;
+use clap::{Parser, crate_name, crate_version};
 use color_eyre::owo_colors::OwoColorize;
 use eyre::eyre;
 use gulfi_cli::{Cli, Command, SyncStrategy};
@@ -54,7 +54,11 @@ fn main() -> eyre::Result<()> {
             #[cfg(debug_assertions)]
             mode,
         } => {
-            let configuration = ApplicationSettings::new(port, interface, open);
+            let start = std::time::Instant::now();
+            let name = crate_name!().to_owned();
+            let version = crate_version!().to_owned();
+
+            let configuration = ApplicationSettings::new(name, version, port, interface, open);
 
             debug!(?configuration);
             let rt = tokio::runtime::Runtime::new()?;
@@ -78,9 +82,11 @@ fn main() -> eyre::Result<()> {
                         Ok::<(), Report>(())
                     };
 
-                    rt.block_on(async { try_join!(run_server(configuration), frontend_future) })?;
+                    rt.block_on(async {
+                        try_join!(run_server(configuration, start), frontend_future)
+                    })?;
                 }
-                Mode::Prod => rt.block_on(run_server(configuration))?,
+                Mode::Prod => rt.block_on(run_server(configuration, start))?,
             }
 
             #[cfg(not(debug_assertions))]
