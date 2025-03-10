@@ -26,7 +26,14 @@ fn main() {
     );
 
     let status = Command::new("pnpm")
-        .args(["build", "--", "--outDir", output_dir.to_str().unwrap()])
+        .args([
+            "build",
+            "--",
+            "--outDir",
+            output_dir
+                .to_str()
+                .expect("El directorio tendria que existir"),
+        ])
         .current_dir(ui_dir)
         .status()
         .expect("El proceso de build falló.");

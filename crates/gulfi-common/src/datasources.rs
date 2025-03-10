@@ -106,7 +106,7 @@ pub fn parse_sources<T: AsRef<Path> + Debug>(path: T) -> eyre::Result<Vec<(PathB
         }
         Ok(metadata) => {
             if metadata.is_dir() {
-                let entries = std::fs::read_dir(&path).unwrap();
+                let entries = std::fs::read_dir(&path).expect("Deberia poder leer el directorio");
                 if entries.into_iter().count() == 0 {
                     warn!("El directorio {path:?}` existe, pero no tiene archivos.");
                 }

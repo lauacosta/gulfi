@@ -1,5 +1,6 @@
 use axum::Json;
 use axum::extract::Query;
+use chrono::NaiveDateTime;
 use eyre::{Result, eyre};
 use serde::Serialize;
 use std::collections::HashMap;
@@ -7,13 +8,14 @@ use tracing::debug;
 
 use axum::extract::State;
 use gulfi_common::HttpError;
-use gulfi_sqlite::get_favoritos;
 use http::StatusCode;
 use rusqlite::Connection;
 use rusqlite::params;
 use serde::Deserialize;
 
 use crate::startup::AppState;
+use crate::views::FavoritosView;
+use crate::views::ResultadosView;
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Resultados {
@@ -59,7 +61,7 @@ pub async fn favoritos(State(app): State<AppState>) -> Result<Json<FavoritosClie
 }
 
 #[derive(Deserialize, Debug)]
-pub struct Params {
+pub struct FavParams {
     nombre: String,
     data: String,
     busquedas: String,
@@ -74,7 +76,7 @@ struct FavoritesReponse {
 #[tracing::instrument(skip(app), name = "añadiendo busqueda a favoritos")]
 pub async fn add_favoritos(
     State(app): State<AppState>,
-    Json(payload): Json<Params>,
+    Json(payload): Json<FavParams>,
 ) -> Result<(StatusCode, String), HttpError> {
     let db = Connection::open(app.db_path)
         .expect("Deberia ser un path valido a una base de datos SQLite");
@@ -130,4 +132,36 @@ pub async fn delete_favoritos(
     statement.execute(params![nombre])?;
 
     Ok(StatusCode::OK)
+}
+
+fn get_favoritos(db: &Connection) -> Result<FavoritosView, HttpError> {
+    let mut statement = db.prepare(
+        "select id, nombre, data, timestamp, busquedas, tipos from favoritos order by timestamp desc",
+    )?;
+
+    let rows = statement
+        .query_map([], |row| {
+            let id: u64 = row.get(0).unwrap_or_default();
+            let nombre: String = row.get(1).unwrap_or_default();
+            let data: String = row.get(2).unwrap_or_default();
+            let timestamp_str: String = row.get(3).unwrap_or_default();
+            let bus: String = row.get(4).unwrap_or_default();
+            let tipo: String = row.get(5).unwrap_or_default();
+
+            let timestamp = NaiveDateTime::parse_from_str(&timestamp_str, "%Y-%m-%d %H:%M:%S")
+                .unwrap_or_else(|_| Default::default());
+
+            let busquedas: Vec<String> =
+                serde_json::from_str(&bus).expect("busquedas tendria que poder ser serializado");
+
+            let tipos: Vec<String> =
+                serde_json::from_str(&tipo).expect("tipos tendria que poder ser serializado");
+
+            let data = ResultadosView::new(id, nombre, data, tipos, timestamp, busquedas);
+
+            Ok(data)
+        })?
+        .collect::<Result<Vec<ResultadosView>, _>>()?;
+
+    Ok(FavoritosView { favoritos: rows })
 }

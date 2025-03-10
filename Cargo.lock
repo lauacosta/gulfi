@@ -760,8 +760,8 @@ dependencies = [
  "gulfi-common",
  "gulfi-helper",
  "gulfi-openai",
+ "gulfi-server",
  "gulfi-sqlite",
- "gulfi-ui",
  "http",
  "mime_guess",
  "reqwest",
@@ -835,6 +835,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "gulfi-server"
+version = "1.1.0"
+dependencies = [
+ "axum",
+ "axum-extra",
+ "chrono",
+ "clap",
+ "color-eyre",
+ "dotenvy",
+ "eyre",
+ "gulfi-common",
+ "gulfi-openai",
+ "gulfi-sqlite",
+ "http",
+ "include_dir",
+ "mime_guess",
+ "reqwest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "thiserror 2.0.11",
+ "tokio",
+ "tower",
+ "tower-http",
+ "tower-request-id",
+ "tower-serve-static",
+ "tracing",
+ "tracing-error",
+ "tracing-subscriber",
+ "tracing-tree",
+ "webbrowser",
+ "zerocopy 0.8.14",
+]
+
+[[package]]
 name = "gulfi-sqlite"
 version = "1.1.0"
 dependencies = [
@@ -845,7 +881,6 @@ dependencies = [
  "gulfi-cli",
  "gulfi-common",
  "gulfi-openai",
- "gulfi-ui",
  "reqwest",
  "rusqlite",
  "serde",
@@ -853,17 +888,6 @@ dependencies = [
  "sqlite-vec",
  "tracing",
  "zerocopy 0.8.14",
-]
-
-[[package]]
-name = "gulfi-ui"
-version = "1.1.0"
-dependencies = [
- "axum",
- "chrono",
- "include_dir",
- "rusqlite",
- "serde",
 ]
 
 [[package]]

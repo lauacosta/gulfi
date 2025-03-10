@@ -119,7 +119,9 @@ async fn request_embeddings(
                 .await
                 .unwrap_or_else(|_| "No response body".to_string());
             error!("El request ha fallado con status: {status}. Respuesta: {err_body} [{proc_id}]");
-            Err(EmbeddingError::RequestError(error_status.unwrap()))
+            Err(EmbeddingError::RequestError(
+                error_status.expect("No tendria que haber un error!."),
+            ))
         }
     }
 }

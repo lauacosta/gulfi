@@ -9,14 +9,12 @@ use std::{
     },
 };
 
-use chrono::NaiveDateTime;
 use csv::ReaderBuilder;
 use eyre::{Result, eyre};
 use futures::StreamExt;
 use gulfi_common::{DataSources, Document, HttpError, clean_html, normalize, parse_sources};
 use gulfi_openai::embed_vec;
-use gulfi_ui::{Favoritos, Historial, Resultados};
-use rusqlite::{Connection, ToSql, ffi::sqlite3_auto_extension, params, types::ValueRef};
+use rusqlite::{Connection, ToSql, ffi::sqlite3_auto_extension, types::ValueRef};
 use serde_json::{Map, Value};
 use sqlite_vec::sqlite3_vec_init;
 use tracing::{Level, debug, error, info, span};
@@ -159,6 +157,13 @@ pub fn setup_sqlite(db: &rusqlite::Connection, doc: &Document) -> Result<()> {
             create table if not exists historial(
                 id integer primary key,
                 query text not null unique,
+                strategy text,
+                sexo text,
+                edad_min number,
+                edad_max number,
+                peso_fts real,
+                peso_semantic real,
+                neighbors number,
                 timestamp datetime default current_timestamp
             );
 
@@ -499,12 +504,12 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
                     match v {
                         Value::String(s) => bindings.push(s as &dyn rusqlite::ToSql),
                         Value::Number(n) if n.is_i64() => {
-                            let val = n.as_i64().unwrap();
+                            let val = n.as_i64().expect("Deberia poder castearlo a i64");
                             let leaked: &'static i64 = Box::leak(Box::new(val));
                             bindings.push(leaked as &dyn rusqlite::ToSql);
                         }
                         Value::Number(n) if n.is_f64() => {
-                            let val = n.as_f64().unwrap();
+                            let val = n.as_f64().expect("Deberia poder castearlo a f64");
                             let leaked: &'static f64 = Box::leak(Box::new(val));
                             bindings.push(leaked as &dyn rusqlite::ToSql);
                         }
@@ -523,65 +528,6 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
     }
 
     Ok(inserted)
-}
-
-pub fn update_historial(db: &Connection, query: &str) -> Result<(), HttpError> {
-    let updated = db.execute(
-        "insert or replace into historial(query) values (?)",
-        params![query],
-    )?;
-    info!("{} registros fueron añadidos al historial!", updated);
-
-    Ok(())
-}
-
-pub fn get_historial(db: &Connection) -> Result<Vec<Historial>, HttpError> {
-    let mut statement = db.prepare("select id, query from historial order by timestamp desc")?;
-
-    let rows = statement
-        .query_map([], |row| {
-            let id: u64 = row.get(0).unwrap_or_default();
-            let query: String = row.get(1).unwrap_or_default();
-
-            let data = Historial::new(id, query);
-
-            Ok(data)
-        })?
-        .collect::<Result<Vec<Historial>, _>>()?;
-
-    Ok(rows)
-}
-
-pub fn get_favoritos(db: &Connection) -> Result<Favoritos, HttpError> {
-    let mut statement = db.prepare(
-        "select id, nombre, data, timestamp, busquedas, tipos from favoritos order by timestamp desc",
-    )?;
-
-    let rows = statement
-        .query_map([], |row| {
-            let id: u64 = row.get(0).unwrap_or_default();
-            let nombre: String = row.get(1).unwrap_or_default();
-            let data: String = row.get(2).unwrap_or_default();
-            let timestamp_str: String = row.get(3).unwrap_or_default();
-            let bus: String = row.get(4).unwrap_or_default();
-            let tipo: String = row.get(5).unwrap_or_default();
-
-            let timestamp = NaiveDateTime::parse_from_str(&timestamp_str, "%Y-%m-%d %H:%M:%S")
-                .unwrap_or_else(|_| Default::default());
-
-            let busquedas: Vec<String> =
-                serde_json::from_str(&bus).expect("busquedas tendria que poder ser serializado");
-
-            let tipos: Vec<String> =
-                serde_json::from_str(&tipo).expect("tipos tendria que poder ser serializado");
-
-            let data = Resultados::new(id, nombre, data, tipos, timestamp, busquedas);
-
-            Ok(data)
-        })?
-        .collect::<Result<Vec<Resultados>, _>>()?;
-
-    Ok(Favoritos { favoritos: rows })
 }
 
 pub struct SearchQuery<'a> {
@@ -663,7 +609,6 @@ impl<'a> SearchQueryBuilder<'a> {
             bindings: self.bindings.clone(),
         }
     }
-
 }
 
 pub trait QueryMarker {}

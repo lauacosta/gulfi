@@ -3,11 +3,10 @@ use std::fs::File;
 use clap::Parser;
 use color_eyre::owo_colors::OwoColorize;
 use eyre::eyre;
-use gulfi::ApplicationSettings;
-use gulfi::startup::run_server;
 use gulfi_cli::{Cli, Command, SyncStrategy};
 use gulfi_common::Document;
 use gulfi_helper::initialize_meta_file;
+use gulfi_server::{ApplicationSettings, startup::run_server};
 use gulfi_sqlite::{init_sqlite, insert_base_data, setup_sqlite, sync_fts_tnea, sync_vec_tnea};
 use rusqlite::Connection;
 use tracing::{Level, debug, info, level_filters::LevelFilter};
@@ -68,7 +67,7 @@ fn main() -> eyre::Result<()> {
                             .arg("run")
                             .arg("dev")
                             .arg("--clearScreen=false")
-                            .current_dir("./crates/gulfi-ui/ui")
+                            .current_dir("./crates/gulfi-server/ui")
                             .stdout(std::process::Stdio::inherit())
                             .stderr(std::process::Stdio::inherit())
                             .spawn()

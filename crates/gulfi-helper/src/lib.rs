@@ -45,7 +45,9 @@ where
             "",
             stage = " Builder ".bright_white().bold().on_magenta() // stage = White.bold().on(rgb(PURPLE)).paint(" Builder "),
         );
-        io::stdout().flush().unwrap();
+        io::stdout()
+            .flush()
+            .expect("Tendria que poder hacer flush.");
         let mut buffer = String::new();
         io::stdin()
             .read_line(&mut buffer)
@@ -76,7 +78,11 @@ fn prompt_options(msg: &str, opts: Vec<char>) -> char {
         if entry.len() != 1 {
             return Err(format!("Input invalida. Las opciones son ({})", options));
         }
-        let c = entry.chars().next().unwrap().to_ascii_uppercase();
+        let c = entry
+            .chars()
+            .next()
+            .expect("Deberia poder iterarlo.")
+            .to_ascii_uppercase();
         if !opts.contains(&c) {
             return Err(format!("Input invalida. Las opciones son ({})", options));
         }
@@ -85,7 +91,11 @@ fn prompt_options(msg: &str, opts: Vec<char>) -> char {
 
     let entry = prompt_input(&format!("{} ({})", msg, options), validate_fn);
 
-    entry.chars().next().unwrap().to_ascii_uppercase()
+    entry
+        .chars()
+        .next()
+        .expect("Deberia poder iterarlo.")
+        .to_ascii_uppercase()
 }
 
 fn prompt_for_field(fields: &mut Vec<Field>) {

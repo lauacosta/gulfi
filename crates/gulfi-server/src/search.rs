@@ -1,48 +1,21 @@
-mod assets;
-mod serve_ui;
-pub use serve_ui::*;
-mod favoritos;
-pub use favoritos::*;
-pub use health_check::*;
-mod health_check;
-mod historial;
-pub use historial::*;
-mod index;
-pub(crate) mod search;
-pub use search::*;
-
-use axum::{Json, async_trait, extract::FromRequestParts};
-use color_eyre::Report;
-use gulfi_openai::embed_single;
-use http::{Uri, request::Parts};
-
+use axum::Json;
+use eyre::Report;
 use gulfi_common::{HttpError, IntoHttp, SearchResult, SearchString};
+use gulfi_openai::embed_single;
 use gulfi_sqlite::SearchQueryBuilder;
-use gulfi_ui::{Sexo, Table};
 use reqwest::Client;
-use rusqlite::Connection;
-
-use serde::{Deserialize, de::DeserializeOwned};
+use rusqlite::{
+    Connection, ToSql, params,
+    types::{FromSql, FromSqlError, ToSqlOutput, ValueRef},
+};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 use zerocopy::IntoBytes;
 
-#[derive(Deserialize, Debug, Clone)]
-pub struct Params {
-    #[serde(rename = "query")]
-    search_str: String,
-    // doc: String,
-    strategy: SearchStrategy,
-    sexo: Sexo,
-    edad_min: u64,
-    edad_max: u64,
-    peso_fts: f32,
-    peso_semantic: f32,
-    #[serde(rename = "k")]
-    k_neighbors: u64,
-}
+use crate::{Sexo, views::TableView};
 
-#[derive(Deserialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum SearchStrategy {
     Fts,
     Semantic,
@@ -51,8 +24,27 @@ pub enum SearchStrategy {
     // ReRankBySemantics,
 }
 
+#[derive(Deserialize, Debug, Clone)]
+pub struct SearchParams {
+    #[serde(rename = "query")]
+    pub search_str: String,
+    pub strategy: SearchStrategy,
+    pub sexo: Sexo,
+    pub edad_min: u64,
+    pub edad_max: u64,
+    pub peso_fts: f32,
+    pub peso_semantic: f32,
+    #[serde(rename = "k")]
+    pub k_neighbors: u64,
+}
+
 impl SearchStrategy {
-    pub async fn search(self, db_path: &str, client: &Client, params: Params) -> SearchResult {
+    pub async fn search(
+        self,
+        db_path: &str,
+        client: &Client,
+        params: SearchParams,
+    ) -> SearchResult {
         let db = Connection::open(db_path)
             .expect("Deberia ser un path valido a una base de datos sqlite.");
 
@@ -276,13 +268,13 @@ impl SearchStrategy {
             query, total_query_count,
         );
 
-        let table = Table {
+        let table = TableView {
             msg: format!("Hay un total de {} resultados.", total_query_count),
             columns: column_names,
             rows: table,
         };
 
-        gulfi_sqlite::update_historial(&db, &params.search_str)?;
+        update_historial(&db, &params)?;
 
         Json(table).into_http()
     }
@@ -303,36 +295,51 @@ impl TryFrom<String> for SearchStrategy {
     }
 }
 
+impl ToSql for SearchStrategy {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+        let value = match self {
+            SearchStrategy::Fts => "Fts",
+            SearchStrategy::Semantic => "Semantic",
+            SearchStrategy::ReciprocalRankFusion => "ReciprocalRankFusion",
+        };
+        Ok(ToSqlOutput::from(value))
+    }
+}
+
+impl FromSql for SearchStrategy {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        match value {
+            ValueRef::Text(text) => match text {
+                b"Fts" => Ok(SearchStrategy::Fts),
+                b"Semantic" => Ok(SearchStrategy::Semantic),
+                b"Rrf" => Ok(SearchStrategy::ReciprocalRankFusion),
+                _ => Err(FromSqlError::InvalidType),
+            },
+            _ => Err(FromSqlError::InvalidType),
+        }
+    }
+}
+
+impl Default for SearchStrategy {
+    fn default() -> Self {
+        SearchStrategy::Fts
+    }
+}
+
 #[derive(Debug, Error)]
 enum SearchStrategyError {
     #[error(
-        "'{0}' No es una estrategia de búsqueda soportada, usa 'fts', 'semantic_search', 'HKF' o 'rrf'"
+        "'{0}' No es una estrategia de búsqueda soportada, usa 'fts', 'semantic_search' o 'rrf'"
     )]
     UnsupportedSearchStrategy(String),
 }
 
-pub struct SearchExtractor<T>(pub T);
+fn update_historial(db: &Connection, values: &SearchParams) -> Result<(), HttpError> {
+    let updated = db.execute(
+        "insert or replace into historial(query, strategy, sexo, edad_min, edad_max, peso_fts, peso_semantic, neighbors) values (?,?,?,?,?,?,?,?)",
+        params![values.search_str, values.strategy, values.sexo, values.edad_min, values.edad_max, values.peso_fts, values.peso_semantic, values.k_neighbors],
+    )?;
+    info!("{} registros fueron añadidos al historial!", updated);
 
-impl<T> SearchExtractor<T>
-where
-    T: DeserializeOwned,
-{
-    pub fn try_from_uri(value: &Uri) -> Result<Self, HttpError> {
-        let query = value.query().unwrap_or_default();
-        let params = serde_urlencoded::from_str(query)?;
-        Ok(SearchExtractor(params))
-    }
-}
-
-#[async_trait]
-impl<T, S> FromRequestParts<S> for SearchExtractor<T>
-where
-    T: DeserializeOwned,
-    S: Send + Sync,
-{
-    type Rejection = HttpError;
-
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        Self::try_from_uri(&parts.uri)
-    }
+    Ok(())
 }

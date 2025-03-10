@@ -1,6 +1,8 @@
 use axum::{http::Uri, response::IntoResponse};
-use gulfi_ui::ASSETS;
+
 use tracing::{info, instrument, warn};
+
+use crate::ASSETS;
 
 #[instrument]
 pub async fn serve_ui(uri: Uri) -> impl IntoResponse {

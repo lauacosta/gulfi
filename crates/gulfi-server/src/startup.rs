@@ -19,8 +19,8 @@ use tracing::{Level, error, error_span, info};
 
 use crate::ApplicationSettings;
 use crate::routes::{
-    add_favoritos, delete_favoritos, delete_historial, favoritos, health_check, historial, search,
-    serve_ui,
+    add_favoritos, delete_favoritos, delete_historial, favoritos, health_check, historial,
+    historial_full, search, serve_ui,
 };
 
 #[derive(Debug, Clone)]
@@ -43,7 +43,6 @@ impl Application {
     /// # Panics
     /// Entrará en panicos si no es capaz de:
     /// 1. Vincular un `tokio::net::TcpListener` a la dirección dada.
-    /// 2. Falla en conectarse con el servidor de `MeiliSearch`.
     pub async fn build(configuration: &ApplicationSettings) -> Result<Self> {
         let address = format!("{}:{}", configuration.host, configuration.port);
 
@@ -133,7 +132,8 @@ pub fn build_server(listener: TcpListener, state: AppState) -> Result<Serve<Rout
             get(favoritos).post(add_favoritos).delete(delete_favoritos),
         )
         .route("/api/search", get(search))
-        .route("/api/historial", get(historial).delete(delete_historial));
+        .route("/api/historial", get(historial).delete(delete_historial))
+        .route("/api/historial-full", get(historial_full));
 
     let frontend_routes = Router::new()
         .route("/assets/*path", get(serve_ui))
