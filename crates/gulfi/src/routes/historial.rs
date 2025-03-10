@@ -22,6 +22,7 @@ pub async fn historial(
     let db = Connection::open(app.db_path)
         .expect("Deberia ser un path valido a una base de datos SQLite");
     let result = gulfi_sqlite::get_historial(&db)?;
+    dbg!("{:?}", &result);
     Ok(Json(result))
 }
 

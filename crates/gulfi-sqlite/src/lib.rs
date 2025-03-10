@@ -663,6 +663,7 @@ impl<'a> SearchQueryBuilder<'a> {
             bindings: self.bindings.clone(),
         }
     }
+
 }
 
 pub trait QueryMarker {}

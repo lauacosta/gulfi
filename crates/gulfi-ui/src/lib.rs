@@ -53,7 +53,7 @@ impl Resultados {
             nombre,
             data,
             tipos,
-            fecha: fecha.format("%b %d, %Y").to_string(),
+            fecha: fecha.format("%b %d, %Y %H:%M").to_string(),
             busquedas,
         }
     }

@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import Table from "../lib/Table.svelte";
+    import Historial from "../lib/Historial.svelte";
     import type { TableContent } from "../lib/types";
     import type { favoritesResponse } from "../lib/types";
     import type { searchStrategy } from "../lib/types";
@@ -59,59 +60,6 @@
 
     function handleStrategyChange() {
         hideElements();
-    }
-
-    // async function updateHistorial() {
-    //     try {
-    //         const response = await fetch(`${apiUrl}/api/historial`);
-    //
-    //         if (!response.ok) {
-    //             historialItems = [
-    //                 { query: "Ha ocurrido un error.", isError: true },
-    //             ];
-    //             return;
-    //         }
-    //
-    //         const data = await response.json();
-    //
-    //         if (data.length === 0) {
-    //             historialItems = [
-    //                 { query: "No se encuentran elementos.", isError: true },
-    //             ];
-    //             return;
-    //         }
-    //
-    //         historialItems = data.map((item) => ({ ...item, isError: false }));
-    //     } catch (error) {
-    //         historialItems = [
-    //             { query: "Ha ocurrido un error.", isError: true },
-    //         ];
-    //     }
-    // }
-
-    function selectHistorialItem(queryText: string) {
-        query = queryText.trim();
-    }
-
-    async function deleteHistorialItem(queryText: string, index: number) {
-        try {
-            const deleteResponse = await fetch(
-                `${apiUrl}/api/historial?query=${encodeURIComponent(queryText)}`,
-                {
-                    method: "DELETE",
-                },
-            );
-
-            if (deleteResponse.ok) {
-                historialItems = historialItems.filter((_, i) => i !== index);
-            } else {
-                throw Error("Error al eliminar el elemento.");
-            }
-        } catch (error) {
-            console.error(
-                "Ha ocurrido un error al intentar eliminar el elemento.",
-            );
-        }
     }
 
     function initKeyboard() {
@@ -356,9 +304,44 @@
         const bytes = new Blob([jsonData]).size;
         return (bytes / 1024).toFixed(2);
     }
+
+    const HandleQuery = (event: CustomEvent<{ query_trimmed: string }>) => {
+        let input = document.getElementById(
+            "search-input",
+        ) as HTMLInputElement | null;
+        if (input) {
+            input.value = event.detail.query_trimmed;
+            input.focus();
+        }
+    };
+
+    onMount(() => {
+        document.addEventListener("select-query", HandleQuery);
+        return () => {
+            document.removeEventListener("select-query", HandleQuery);
+        };
+    });
 </script>
 
 <main class="main-content">
+    <Historial />
+    <div class="legend">
+        <div class="legend-title">Atajos</div>
+        <div class="legend-item">
+            <span class="kbssample">Ctrl+h</span>
+            <span class="legend-text">Abrir Historial</span>
+        </div>
+        <div class="legend-item">
+            <span class="kbssample">Ctrl+Shift+s</span>
+            <span class="legend-text">Descargar CSV</span>
+        </div>
+
+        <div class="legend-item">
+            <span class="kbssample"> Ctrl+b</span>
+            <span class="legend-text">Buscar</span>
+        </div>
+    </div>
+
     <div class="form-container">
         <form onsubmit={handleSearch} class="search-form" id="search-form">
             <div class="search-group">

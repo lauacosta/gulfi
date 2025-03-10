@@ -9,6 +9,7 @@
     import Layout from "./lib/Layout.svelte";
     import Sidebar from "./lib/Sidebar.svelte";
     import Favoritos from "./routes/Favoritos.svelte";
+    import { onMount } from "svelte";
 
     const RouteName = {
         Home: "home",
@@ -39,6 +40,25 @@
     ] as const;
 
     export const options: RouterOptions<RouteNames> = { routes } as const;
+
+    // function initKeyboard() {
+    //     window.addEventListener(
+    //         "keydown",
+    //         (event) => {
+    //             if (event.ctrlKey && event.key.toLowerCase() === "h") {
+    //                 event.preventDefault();
+    //                 event.stopImmediatePropagation();
+    //                 console.log("Hola");
+    //                 return false;
+    //             }
+    //         },
+    //         { capture: true, passive: false },
+    //     );
+    // }
+    //
+    // onMount(() => {
+    //     initKeyboard();
+    // });
 </script>
 
 <Layout>
