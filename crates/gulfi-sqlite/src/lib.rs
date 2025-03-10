@@ -167,6 +167,7 @@ pub fn setup_sqlite(db: &rusqlite::Connection, doc: &Document) -> Result<()> {
                 nombre text not null unique,
                 data text,
                 busquedas text,
+                tipos text,
                 timestamp datetime default current_timestamp
             );
 
@@ -553,7 +554,7 @@ pub fn get_historial(db: &Connection) -> Result<Vec<Historial>, HttpError> {
 
 pub fn get_favoritos(db: &Connection) -> Result<Favoritos, HttpError> {
     let mut statement = db.prepare(
-        "select id, nombre, data, timestamp, busquedas from favoritos order by timestamp desc",
+        "select id, nombre, data, timestamp, busquedas, tipos from favoritos order by timestamp desc",
     )?;
 
     let rows = statement
@@ -563,15 +564,18 @@ pub fn get_favoritos(db: &Connection) -> Result<Favoritos, HttpError> {
             let data: String = row.get(2).unwrap_or_default();
             let timestamp_str: String = row.get(3).unwrap_or_default();
             let bus: String = row.get(4).unwrap_or_default();
-            dbg!(&bus);
+            let tipo: String = row.get(5).unwrap_or_default();
 
             let timestamp = NaiveDateTime::parse_from_str(&timestamp_str, "%Y-%m-%d %H:%M:%S")
                 .unwrap_or_else(|_| Default::default());
 
             let busquedas: Vec<String> =
-                serde_json::from_str(&bus).expect("Tendria que poder ser serializado");
+                serde_json::from_str(&bus).expect("busquedas tendria que poder ser serializado");
 
-            let data = Resultados::new(id, nombre, data, timestamp, busquedas);
+            let tipos: Vec<String> =
+                serde_json::from_str(&tipo).expect("tipos tendria que poder ser serializado");
+
+            let data = Resultados::new(id, nombre, data, tipos, timestamp, busquedas);
 
             Ok(data)
         })?
@@ -663,13 +667,13 @@ impl<'a> SearchQueryBuilder<'a> {
 
 pub trait QueryMarker {}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // #[test]
-    // fn it_works() {
-    //     let result = add(2, 2);
-    //     assert_eq!(result, 4);
-    // }
-}
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//
+//     // #[test]
+//     // fn it_works() {
+//     //     let result = add(2, 2);
+//     //     assert_eq!(result, 4);
+//     // }
+// }

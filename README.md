@@ -63,3 +63,7 @@ Options:
   -V, --version               Print version
 ```
 
+## TODO
+- Una mejor api para la construccion de queries en la busqueda.
+- Hacer mas pequeña la cantidad de tipos necesarios / diseñar mejores tipos.
+- Reducir el codigo del cliente web.

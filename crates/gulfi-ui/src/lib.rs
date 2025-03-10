@@ -33,6 +33,7 @@ pub struct Resultados {
     pub id: u64,
     pub nombre: String,
     pub data: String,
+    pub tipos: Vec<String>,
     pub fecha: String,
     pub busquedas: Vec<String>,
 }
@@ -43,6 +44,7 @@ impl Resultados {
         id: u64,
         nombre: String,
         data: String,
+        tipos: Vec<String>,
         fecha: NaiveDateTime,
         busquedas: Vec<String>,
     ) -> Self {
@@ -50,6 +52,7 @@ impl Resultados {
             id,
             nombre,
             data,
+            tipos,
             fecha: fecha.format("%b %d, %Y").to_string(),
             busquedas,
         }
@@ -116,13 +119,13 @@ impl Display for Sexo {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // #[test]
-    // fn it_works() {
-    //     let result = add(2, 2);
-    //     assert_eq!(result, 4);
-    // }
-}
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//
+//     // #[test]
+//     // fn it_works() {
+//     //     let result = add(2, 2);
+//     //     assert_eq!(result, 4);
+//     // }
+// }

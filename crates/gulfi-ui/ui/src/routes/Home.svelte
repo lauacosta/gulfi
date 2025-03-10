@@ -2,10 +2,13 @@
     import { onMount } from "svelte";
     import Table from "../lib/Table.svelte";
     import type { TableContent } from "../lib/types";
+    import type { favoritesResponse } from "../lib/types";
+    import type { searchStrategy } from "../lib/types";
     import { writable } from "svelte/store";
 
     const apiUrl = import.meta.env.VITE_API_URL;
 
+    let heldSearches: favoritesResponse[] = [];
     const tableContent = writable<TableContent>({
         msg: "",
         columns: [],
@@ -14,7 +17,6 @@
 
     let heldData: Array<string> = [];
     let heldHeaders = [];
-    let heldSearches = [];
     let isHolding = false;
     let historialItems = [];
     let itemsCount = $state(0);
@@ -22,7 +24,7 @@
     let downloadBtnDisabled = $state(true);
 
     let query = $state("");
-    let strategy = $state("Fts");
+    let strategy: searchStrategy = $state("Fts");
     let sexo = $state("U");
     let edad_min = $state(0);
     let edad_max = $state(100);
@@ -277,7 +279,7 @@
                     downloadBtnDisabled = false;
 
                     if (query.trim()) {
-                        heldSearches.push(query);
+                        heldSearches.push({ query, strategy: strategy });
                     }
                 }
             });
@@ -322,10 +324,11 @@
         const name = input?.replace(/[^a-zA-Z_\-\s]/g, "") || "ERROR";
 
         if (name !== null && name !== "") {
+            let json_str = JSON.stringify(heldSearches);
             const data = {
                 nombre: name,
                 data: JSON.stringify(heldData),
-                busquedas: JSON.stringify(heldSearches),
+                busquedas: json_str,
             };
 
             try {
@@ -393,10 +396,6 @@
                     <option value="Semantic">Semántica</option>
                     <option value="ReciprocalRankFusion"
                         >Reciprocal Rank Fusion</option
-                    >
-                    <option value="KeywordFirst">Keyword First</option>
-                    <option value="ReRankBySemantics"
-                        >Re-Ranking by Semantics</option
                     >
                 </select>
             </div>

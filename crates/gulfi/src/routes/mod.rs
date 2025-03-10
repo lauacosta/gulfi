@@ -11,8 +11,6 @@ mod index;
 pub(crate) mod search;
 pub use search::*;
 
-use serde_json::json;
-
 use axum::{Json, async_trait, extract::FromRequestParts};
 use color_eyre::Report;
 use gulfi_openai::embed_single;
@@ -121,41 +119,12 @@ impl SearchStrategy {
                 (c, t, tqc)
             }
             SearchStrategy::Semantic => {
-                let start = std::time::Instant::now();
-                let query_emb = match db.query_row(
-                    "select embedding from historial where query = ?",
-                    [&params.search_str],
-                    |row| row.get(0),
-                ) {
-                    Err(_) => {
-                        info!("Creando nuevo embedding!");
-                        let embedding = embed_single(query.clone(), client)
-                            .await
-                            .map_err(|err| tracing::error!("{err}"))
-                            .expect("Fallo al crear un embedding del query")
-                            .as_bytes()
-                            .to_owned();
+                let query_emb = embed_single(query.clone(), client)
+                    .await
+                    .map_err(|err| tracing::error!("{err}"))
+                    .expect("Fallo al crear un embedding del query");
 
-                        embedding
-                    }
-                    Ok(embedding) => {
-                        info!("Re-utilizando el embedding!");
-                        embedding
-                    }
-                };
-
-                println!(
-                    "Tiempo hasta que tengo el embedding {} ms",
-                    start.elapsed().as_millis()
-                );
-
-                let start = std::time::Instant::now();
                 let embedding = query_emb.as_bytes();
-
-                println!(
-                    "Tiempo hasta que actualice la db {} ms",
-                    start.elapsed().as_millis()
-                );
 
                 let search = &"
                 select
@@ -202,38 +171,15 @@ impl SearchStrategy {
                     Sexo::U => (),
                 };
 
-                let start = std::time::Instant::now();
                 let (c, t, tqc) = search_query.build().execute()?;
-
-                println!(
-                    "Tiempo hasta que devuelo los datos {} ms",
-                    start.elapsed().as_millis()
-                );
 
                 (c, t, tqc)
             }
             SearchStrategy::ReciprocalRankFusion => {
-                let query_emb = match db.query_row(
-                    "select embedding from historial where query = ?",
-                    [&params.search_str],
-                    |row| row.get(0),
-                ) {
-                    Err(_) => {
-                        info!("Creando nuevo embedding!");
-                        let embedding = embed_single(query.clone(), client)
-                            .await
-                            .map_err(|err| tracing::error!("{err}"))
-                            .expect("Fallo al crear un embedding del query")
-                            .as_bytes()
-                            .to_owned();
-
-                        embedding
-                    }
-                    Ok(embedding) => {
-                        info!("Re-utilizando el embedding!");
-                        embedding
-                    }
-                };
+                let query_emb = embed_single(query.clone(), client)
+                    .await
+                    .map_err(|err| tracing::error!("{err}"))
+                    .expect("Fallo al crear un embedding del query");
 
                 let embedding = query_emb.as_bytes();
 

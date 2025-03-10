@@ -7,9 +7,8 @@
         nombre: string;
         data: string;
         fecha: string;
-        busquedas: string[];
+        busquedas: [string, string][];
     };
-
     type Favoritos = {
         favoritos: Resultados[];
     };
@@ -51,6 +50,7 @@
             if (response.ok) {
                 const data: Favoritos = await response.json();
                 favoritos = data;
+                console.log(data);
             } else {
                 console.error(
                     "Fallo al hacer fetch en favoritos:",
@@ -61,6 +61,18 @@
             console.error("Error al hacer fetch en favoritos:", error);
         }
     };
+    function getBgColor(strategy: string) {
+        switch (strategy) {
+            case "Fts":
+                return "fts";
+            case "ReciprocalRankFusion":
+                return "reciprocal-rank-fusion";
+            case "Semantic":
+                return "semantic";
+            default:
+                return "";
+        }
+    }
 
     onMount(() => {
         fetchFavoritos();
@@ -76,14 +88,16 @@
                     <div class="card-date">{fav.fecha}</div>
                     <div class="tag-list">
                         {#each fav.busquedas as busqueda}
-                            <span class="tag">#{busqueda}</span>
+                            <span class="tag {getBgColor(busqueda[1])}"
+                                >#{busqueda[0]}</span
+                            >
                         {/each}
                     </div>
                     <div class="card-content wrap-text">
                         {fav.data.slice(0, 300)}...
                     </div>
                     <button
-                        on:click={() => borrarFavorito(fav.nombre)}
+                        onclick={() => borrarFavorito(fav.nombre)}
                         class="btn delete-button"
                         aria-label="Borrar de favoritos"
                         title="Borrar de favoritos"
@@ -92,7 +106,7 @@
                     </button>
                     <button
                         class="btn search-button"
-                        on:click={() =>
+                        onclick={() =>
                             descargarCSVFavoritos(fav.data, fav.nombre)}
                         aria-label="Descargar"
                         title="Descargar"
@@ -160,3 +174,15 @@
         </div>
     {/if}
 </main>
+
+<style>
+    .fts {
+        background-color: lightblue;
+    }
+    .reciprocal-rank-fusion {
+        background-color: lightgreen;
+    }
+    .semantic {
+        background-color: lightcoral;
+    }
+</style>
