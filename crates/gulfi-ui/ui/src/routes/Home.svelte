@@ -2,15 +2,10 @@
     import { onMount } from "svelte";
     import Table from "../lib/Table.svelte";
     import type { TableContent } from "../lib/types";
-    import type { SearchResponse } from "../lib/types";
     import { writable } from "svelte/store";
 
     const apiUrl = import.meta.env.VITE_API_URL;
 
-    let search_form;
-    let base64_embedding: string | null = $state(null);
-    let total_pages = $state(0);
-    let page = $state(1);
     const tableContent = writable<TableContent>({
         msg: "",
         columns: [],
@@ -58,6 +53,10 @@
             showBalanceSlider = false;
             showOcultables = strategy !== "Fts";
         }
+    }
+
+    function handleStrategyChange() {
+        hideElements();
     }
 
     // async function updateHistorial() {
@@ -139,43 +138,27 @@
         );
     }
 
-    async function handleSearch(event: SubmitEvent, page: number) {
-        event?.preventDefault();
+    async function handleSearch(event: SubmitEvent) {
+        event.preventDefault();
 
-        const formData = new FormData(search_form);
+        const formData = new FormData(event.target as HTMLFormElement);
         const searchParams = new URLSearchParams();
 
         for (const [key, value] of formData.entries()) {
             searchParams.append(key, value.toString());
-            console.log(`[k]: ${key} - [v]: ${value.toString()}`);
-        }
-
-        searchParams.append("page", page.toString());
-        console.log(page.toString());
-
-        if (base64_embedding) {
-            console.log(`Base64: ${base64_embedding}`);
-            searchParams.append("vector", base64_embedding);
         }
 
         try {
             const response = await fetch(
                 `${apiUrl}/api/search?${searchParams.toString()}`,
             );
-
-            console.log(searchParams);
             if (response.ok) {
-                const data: SearchResponse = await response.json();
+                const table: TableContent = await response.json();
 
-                tableContent.set(data.table);
-                total_pages = data.pages;
-                base64_embedding = data.embedding;
-                console.log(
-                    `After GET REQUEST: ${base64_embedding === null || base64_embedding === undefined}`,
-                );
+                tableContent.set(table);
 
                 requestAnimationFrame(() => {
-                    insertPaginationButtons();
+                    initPagination();
                     guardarResultados();
                     // updateHistorial();
                 });
@@ -185,9 +168,29 @@
         }
     }
 
-    function insertPaginationButtons() {
+    function initPagination() {
         const content = document.querySelector(".modern-table");
         if (!content) return;
+
+        const itemsPerPage = 10;
+        let currentPage = 0;
+        const items = Array.from(content.getElementsByTagName("tr")).slice(1);
+        const totalPages = Math.ceil(items.length / itemsPerPage);
+
+        function showPage(page: number) {
+            const startIndex = page * itemsPerPage;
+            const endIndex = startIndex + itemsPerPage;
+
+            items.forEach((item, index) => {
+                item.style.display =
+                    index >= startIndex && index < endIndex ? "" : "none";
+            });
+
+            const pageInfo = document.querySelector(".page-info");
+            if (pageInfo) {
+                pageInfo.textContent = `Página ${page + 1} de ${totalPages}`;
+            }
+        }
 
         const paginationContainer = document.querySelector(".pagination");
         if (!paginationContainer) return;
@@ -198,47 +201,49 @@
         startButton.textContent = "<<";
         startButton.addEventListener("click", (e) => {
             e.preventDefault();
-            page = 1;
-            handleSearch(null, page);
+            currentPage = 0;
+            showPage(currentPage);
         });
 
+        // Prev button
         const prevButton = document.createElement("button");
         prevButton.textContent = "<";
         prevButton.addEventListener("click", (e) => {
             e.preventDefault();
-            if (page === 1) {
-                return;
+            if (currentPage > 0) {
+                showPage(--currentPage);
             }
-            page -= 1;
-            handleSearch(null, page);
         });
+
+        const pageInfo = document.createElement("span");
+        pageInfo.classList.add("page-info");
+        pageInfo.textContent = `Página ${currentPage + 1} de ${totalPages}`;
 
         const nextButton = document.createElement("button");
         nextButton.textContent = ">";
         nextButton.addEventListener("click", (e) => {
             e.preventDefault();
-            if (page == total_pages) {
-                return;
+            if (currentPage < totalPages - 1) {
+                showPage(++currentPage);
             }
-            page += 1;
-            handleSearch(null, page);
         });
 
         const endButton = document.createElement("button");
         endButton.textContent = ">>";
         endButton.addEventListener("click", (e) => {
             e.preventDefault();
-
-            page = total_pages;
-            handleSearch(null, page);
+            currentPage = totalPages - 1;
+            showPage(currentPage);
         });
 
         paginationContainer.append(
             startButton,
             prevButton,
+            pageInfo,
             nextButton,
             endButton,
         );
+        showPage(currentPage);
     }
 
     function guardarResultados() {
@@ -352,12 +357,7 @@
 
 <main class="main-content">
     <div class="form-container">
-        <form
-            bind:this={search_form}
-            onsubmit={(event) => handleSearch(event, page)}
-            class="search-form"
-            id="search-form"
-        >
+        <form onsubmit={handleSearch} class="search-form" id="search-form">
             <div class="search-group">
                 <label for="search-input"
                     >Búsqueda:
@@ -387,7 +387,7 @@
                     name="strategy"
                     class="search-type"
                     bind:value={strategy}
-                    onchange={hideElements}
+                    onchange={handleStrategyChange}
                 >
                     <option value="Fts">Full Text Search</option>
                     <option value="Semantic">Semántica</option>
@@ -516,8 +516,6 @@
                 </div>
             {/if}
 
-            <input type="hidden" name="limit" value="10" />
-
             <div class="search-group">
                 <input
                     type="hidden"
@@ -602,6 +600,6 @@
     </div>
 
     <div id="table-content">
-        <Table table={$tableContent} {total_pages} {page} />
+        <Table table={$tableContent} />
     </div>
 </main>

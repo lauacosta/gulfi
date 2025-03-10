@@ -11,11 +11,6 @@ mod index;
 pub(crate) mod search;
 pub use search::*;
 
-use base64::{
-    Engine,
-    alphabet::{self},
-    engine::{self, general_purpose},
-};
 use serde_json::json;
 
 use axum::{Json, async_trait, extract::FromRequestParts};
@@ -31,7 +26,7 @@ use rusqlite::Connection;
 
 use serde::{Deserialize, de::DeserializeOwned};
 use thiserror::Error;
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 use zerocopy::IntoBytes;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -39,8 +34,6 @@ pub struct Params {
     #[serde(rename = "query")]
     search_str: String,
     // doc: String,
-    page: usize,
-    limit: usize,
     strategy: SearchStrategy,
     sexo: Sexo,
     edad_min: u64,
@@ -49,7 +42,6 @@ pub struct Params {
     peso_semantic: f32,
     #[serde(rename = "k")]
     k_neighbors: u64,
-    vector: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Clone, Copy)]
@@ -70,26 +62,19 @@ impl SearchStrategy {
 
         debug!(?search);
 
-        let offset = (params.page - 1) * params.limit;
         let query = search.query.trim().to_owned();
         let provincia = search.provincia;
         let ciudad = search.ciudad;
 
-        let engine = engine::GeneralPurpose::new(&alphabet::URL_SAFE, general_purpose::NO_PAD);
-
-        let embedding: Vec<u8>;
-        let mut embedding_base64: Option<String> = None;
-
-        // Normalizo los datos que estan en un rango de 0 a 100 para que esten de 0 a 1.
         let weight_vec = params.peso_semantic / 100.0;
         let weight_fts: f32 = params.peso_fts / 100.0;
         let rrf_k: i64 = 60;
         let k = params.k_neighbors;
 
-        let (search_query, total_results) = match self {
+        // FIX: Odio tener que usar el QueryBuilder
+        let (column_names, table, total_query_count) = match self {
             SearchStrategy::Fts => {
-                let search = &format!(
-                    "select
+                let search = &"select
                     rank as score,
                     email,
                     provincia,
@@ -101,9 +86,9 @@ impl SearchStrategy {
                     from fts_tnea
                     where vec_input match '\"' || :query || '\"'
                     "
-                );
+                .to_owned();
 
-                let mut search_query = SearchQueryBuilder::new(&db, &search);
+                let mut search_query = SearchQueryBuilder::new(&db, search);
 
                 search_query.add_bindings(&[&query]);
 
@@ -131,28 +116,48 @@ impl SearchStrategy {
 
                 search_query.add_statement_str(" order by rank");
 
-                search_query.add_statement(" limit :limit ", &[&params.limit]);
-                search_query.add_statement(" offset :offset ", &[&offset]);
+                let (c, t, tqc) = search_query.build().execute()?;
 
-                search_query.build()
+                (c, t, tqc)
             }
             SearchStrategy::Semantic => {
-                embedding = {
-                    match params.vector {
-                        Some(emb) => engine.decode(emb).expect("Deberia poder decodificarse"),
-                        None => embed_single(query.clone(), client)
+                let start = std::time::Instant::now();
+                let query_emb = match db.query_row(
+                    "select embedding from historial where query = ?",
+                    [&params.search_str],
+                    |row| row.get(0),
+                ) {
+                    Err(_) => {
+                        info!("Creando nuevo embedding!");
+                        let embedding = embed_single(query.clone(), client)
                             .await
                             .map_err(|err| tracing::error!("{err}"))
                             .expect("Fallo al crear un embedding del query")
                             .as_bytes()
-                            .to_owned(),
+                            .to_owned();
+
+                        embedding
+                    }
+                    Ok(embedding) => {
+                        info!("Re-utilizando el embedding!");
+                        embedding
                     }
                 };
-                embedding_base64 = Some(engine.encode(&embedding));
 
-                let mut search_query = SearchQueryBuilder::new(
-                    &db,
-                    "
+                println!(
+                    "Tiempo hasta que tengo el embedding {} ms",
+                    start.elapsed().as_millis()
+                );
+
+                let start = std::time::Instant::now();
+                let embedding = query_emb.as_bytes();
+
+                println!(
+                    "Tiempo hasta que actualice la db {} ms",
+                    start.elapsed().as_millis()
+                );
+
+                let search = &"
                 select
                     vec_tnea.distance,
                     tnea.email,
@@ -166,8 +171,11 @@ impl SearchStrategy {
                 left join tnea on tnea.id = vec_tnea.row_id
                 where vec_input_embedding match :embedding
                 and k = 1000
-                ",
-                );
+                "
+                .to_owned();
+
+                let mut search_query = SearchQueryBuilder::new(&db, search);
+
                 search_query.add_bindings(&[&embedding]);
 
                 search_query.add_statement(
@@ -185,33 +193,51 @@ impl SearchStrategy {
                 }
 
                 match params.sexo {
-                    Sexo::M => search_query.add_statement(" and sexo = :sexo", &[&params.sexo]),
-                    Sexo::F => search_query.add_statement(" and sexo = :sexo", &[&params.sexo]),
+                    Sexo::M => {
+                        search_query.add_statement(" and sexo = :sexo", &[&params.sexo]);
+                    }
+                    Sexo::F => {
+                        search_query.add_statement(" and sexo = :sexo", &[&params.sexo]);
+                    }
                     Sexo::U => (),
                 };
 
-                search_query.add_statement(" limit :limit ", &[&params.limit]);
-                search_query.add_statement(" offset :offset ", &[&offset]);
+                let start = std::time::Instant::now();
+                let (c, t, tqc) = search_query.build().execute()?;
 
-                search_query.build()
+                println!(
+                    "Tiempo hasta que devuelo los datos {} ms",
+                    start.elapsed().as_millis()
+                );
+
+                (c, t, tqc)
             }
             SearchStrategy::ReciprocalRankFusion => {
-                embedding = {
-                    match params.vector {
-                        Some(emb) => engine.decode(emb).expect("Deberia poder decodificarse"),
-                        None => embed_single(query.clone(), client)
+                let query_emb = match db.query_row(
+                    "select embedding from historial where query = ?",
+                    [&params.search_str],
+                    |row| row.get(0),
+                ) {
+                    Err(_) => {
+                        info!("Creando nuevo embedding!");
+                        let embedding = embed_single(query.clone(), client)
                             .await
                             .map_err(|err| tracing::error!("{err}"))
                             .expect("Fallo al crear un embedding del query")
                             .as_bytes()
-                            .to_owned(),
+                            .to_owned();
+
+                        embedding
+                    }
+                    Ok(embedding) => {
+                        info!("Re-utilizando el embedding!");
+                        embedding
                     }
                 };
-                embedding_base64 = Some(engine.encode(&embedding));
 
-                let mut search_query = SearchQueryBuilder::new(
-                    &db,
-                    "
+                let embedding = query_emb.as_bytes();
+
+                let search = &"
             with vec_matches as (
                 select
                     row_id,
@@ -252,8 +278,11 @@ impl SearchStrategy {
                 full outer join vec_matches on vec_matches.row_id = fts_matches.row_id
                 join tnea on tnea.id = coalesce(fts_matches.row_id, vec_matches.row_id)
                 where cast(tnea.edad as integer) between :edad_min and :edad_max
-            ",
-                );
+            "
+                .to_owned();
+
+                let mut search_query = SearchQueryBuilder::new(&db, search);
+
                 search_query.add_bindings(&[
                     &embedding,
                     &k,
@@ -275,46 +304,41 @@ impl SearchStrategy {
                 }
 
                 match params.sexo {
-                    Sexo::M => search_query.add_statement(" and sexo = :sexo", &[&params.sexo]),
-                    Sexo::F => search_query.add_statement(" and sexo = :sexo", &[&params.sexo]),
+                    Sexo::M => {
+                        search_query.add_statement(" and sexo = :sexo", &[&params.sexo]);
+                    }
+                    Sexo::F => {
+                        search_query.add_statement(" and sexo = :sexo", &[&params.sexo]);
+                    }
                     Sexo::U => (),
                 };
 
                 search_query.add_statement_str(" order by combined_rank desc ");
 
-                search_query.add_statement(" limit :limit ", &[&params.limit]);
-                search_query.add_statement(" offset :offset ", &[&offset]);
                 search_query.add_statement_str(
                     ") 
                     select * from final;",
                 );
 
-                search_query.build()
+                let (c, t, tqc) = search_query.build().execute()?;
+                (c, t, tqc)
             }
         };
 
-        let (column_names, table, total) = search_query.execute()?;
-
-        let pages = total_results.div_ceil(params.limit);
-
         info!(
             "Busqueda para el query: `{}`, exitosa! {} registros",
-            query, total,
+            query, total_query_count,
         );
 
-        gulfi_sqlite::update_historial(&db, &params.search_str)?;
-
         let table = Table {
-            msg: format!("Hay un total de {} resultados.", total * pages),
+            msg: format!("Hay un total de {} resultados.", total_query_count),
             columns: column_names,
             rows: table,
         };
 
-        if let Some(base64_string) = embedding_base64 {
-            Json(json!({"table":table, "pages":pages, "embedding":base64_string})).into_http()
-        } else {
-            Json(json!({"table":table, "pages":pages})).into_http()
-        }
+        gulfi_sqlite::update_historial(&db, &params.search_str)?;
+
+        Json(table).into_http()
     }
 }
 

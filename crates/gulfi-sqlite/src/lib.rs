@@ -9,14 +9,14 @@ use std::{
     },
 };
 
-use chrono::{NaiveDateTime, offset};
+use chrono::NaiveDateTime;
 use csv::ReaderBuilder;
 use eyre::{Result, eyre};
 use futures::StreamExt;
 use gulfi_common::{DataSources, Document, HttpError, clean_html, normalize, parse_sources};
 use gulfi_openai::embed_vec;
 use gulfi_ui::{Favoritos, Historial, Resultados};
-use rusqlite::{Connection, ToSql, ffi::sqlite3_auto_extension, types::ValueRef};
+use rusqlite::{Connection, ToSql, ffi::sqlite3_auto_extension, params, types::ValueRef};
 use serde_json::{Map, Value};
 use sqlite_vec::sqlite3_vec_init;
 use tracing::{Level, debug, error, info, span};
@@ -483,7 +483,7 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
                             if input_fields.contains(field) {
                                 Value::String(clean_html(s.clone()))
                             } else {
-                                Value::String(normalize(&s))
+                                Value::String(normalize(s))
                             }
                         }
                         Some(other) => other.clone(),
@@ -527,7 +527,7 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
 pub fn update_historial(db: &Connection, query: &str) -> Result<(), HttpError> {
     let updated = db.execute(
         "insert or replace into historial(query) values (?)",
-        [query],
+        params![query],
     )?;
     info!("{} registros fueron añadidos al historial!", updated);
 

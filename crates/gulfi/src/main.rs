@@ -138,19 +138,19 @@ fn main() -> eyre::Result<()> {
 
             let start = std::time::Instant::now();
 
-            setup_sqlite(&db, &doc)?;
-            insert_base_data(&db, &doc)?;
+            setup_sqlite(&db, doc)?;
+            insert_base_data(&db, doc)?;
 
             match sync_strat {
-                SyncStrategy::Fts => sync_fts_tnea(&db, &doc),
+                SyncStrategy::Fts => sync_fts_tnea(&db, doc),
                 SyncStrategy::Vector => {
                     let rt = tokio::runtime::Runtime::new()?;
-                    rt.block_on(sync_vec_tnea(&db, &doc, base_delay))?;
+                    rt.block_on(sync_vec_tnea(&db, doc, base_delay))?;
                 }
                 SyncStrategy::All => {
-                    sync_fts_tnea(&db, &doc);
+                    sync_fts_tnea(&db, doc);
                     let rt = tokio::runtime::Runtime::new()?;
-                    rt.block_on(sync_vec_tnea(&db, &doc, base_delay))?;
+                    rt.block_on(sync_vec_tnea(&db, doc, base_delay))?;
                 }
             }
 

@@ -4,8 +4,3 @@ export type TableContent = {
     rows: string[][];
 };
 
-export type SearchResponse = {
-    table: TableContent;
-    pages: number;
-    embedding?: string;
-};
