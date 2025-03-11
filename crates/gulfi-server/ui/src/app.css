@@ -6,9 +6,11 @@
     --my-light-gray: #f5f5f7;
     --my-mid-gray: #86868b;
     --my-dark-gray: #1c2321;
-    --my-celestial-blue: #3E92CC;
-    --my-xanthous: #FFBC42;
-    --my-raspberry: #D81159;
+
+    --my-blue: #2589BD;
+    --sunny: #FFC857;
+    --walk-like-an-egiptian: #29339B;
+
     --my-border-radius: 10p;
     --my-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
     --my-popup-shadow: 0 2px 5px rgba(0, 0, 0, 0.2),
@@ -25,15 +27,15 @@
 }
 
 .fts {
-    background-color: var(--my-raspberry);
+    background-color: var(--walk-like-an-egiptian);
 }
 
 .reciprocal-rank-fusion {
-    background-color: var(--my-xanthous);
+    background-color: var(--sunny);
 }
 
 .semantic {
-    background-color: var(--my-celestial-blue);
+    background-color: var(--my-blue);
 }
 
 * {
@@ -66,9 +68,11 @@ aside {
     padding: 1rem;
     display: flex;
     flex-direction: column;
-    transition: width 0.5s;
+    transition: width 0.5s ease-in-out;
     height: auto;
     min-height: 100%;
+    /* min-width: 60px; */
+    /* overflow: hidden; */
 }
 
 nav a {
@@ -87,7 +91,7 @@ nav a {
 }
 
 .collapsed {
-    width: 60px;
+    width: 4rem;
     align-items: center;
 }
 
@@ -100,19 +104,19 @@ nav a {
     margin-bottom: 1rem;
 }
 
-ul {
+aside ul {
     list-style: none;
     padding: 0;
     margin: 0;
 }
 
-li {
-    padding: 10px;
+aside li {
+    padding: 1px;
     cursor: pointer;
     border-radius: 5px;
 }
 
-li:hover {
+aside li:hover {
     background-color: #444;
 }
 
