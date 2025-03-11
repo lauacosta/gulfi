@@ -7,9 +7,9 @@ version.workspace = true
 [dependencies]
 dotenvy = "0.15.7"
 tower-request-id = "0.3.0"
-tracing-tree = "0.4.0"
+tracing-tree = { version = "0.4.0", features = ["time"] }
 tracing-error = "0.2.0"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json"] }
+tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json", "time"] }
 
 eyre.workspace = true
 tracing.workspace = true
@@ -17,6 +17,7 @@ color-eyre.workspace = true
 clap.workspace = true
 axum.workspace = true
 tokio.workspace = true
+chrono.workspace = true
 rusqlite.workspace = true
 serde_json.workspace = true
 

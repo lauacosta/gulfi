@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::{fs::File, time::Duration};
 
 use clap::{Parser, crate_name, crate_version};
 use color_eyre::owo_colors::OwoColorize;
@@ -11,8 +11,8 @@ use gulfi_sqlite::{init_sqlite, insert_base_data, setup_sqlite, sync_fts_tnea, s
 use rusqlite::Connection;
 use tracing::{Level, debug, info, level_filters::LevelFilter};
 use tracing_error::ErrorLayer;
-use tracing_subscriber::{Registry, layer::SubscriberExt, util::SubscriberInitExt};
-use tracing_tree::HierarchicalLayer;
+use tracing_subscriber::{Registry, layer::SubscriberExt};
+use tracing_tree::{HierarchicalLayer, time::FormatTime};
 
 #[cfg(debug_assertions)]
 use eyre::Report;
@@ -183,16 +183,51 @@ fn setup(loglevel: &str) -> eyre::Result<()> {
         }
     };
 
-    Registry::default()
+    let subscriber = Registry::default()
         .with(LevelFilter::from_level(level))
         .with(
             HierarchicalLayer::new(2)
                 .with_targets(true)
                 .with_bracketed_fields(true)
-                .with_ansi(true),
+                .with_ansi(true)
+                .with_timer(GulfiTimer::new()),
         )
-        .with(ErrorLayer::default())
-        .init();
+        .with(ErrorLayer::default());
+
+    tracing::subscriber::set_global_default(subscriber).unwrap();
 
     Ok(())
+}
+
+use std::fmt;
+
+struct GulfiTimer;
+
+impl GulfiTimer {
+    fn new() -> Self {
+        Self
+    }
+}
+
+impl FormatTime for GulfiTimer {
+    fn format_time(&self, _: &mut impl fmt::Write) -> fmt::Result {
+        Ok(())
+    }
+
+    fn style_timestamp(
+        &self,
+        ansi: bool,
+        elapsed: Duration,
+        w: &mut impl fmt::Write,
+    ) -> fmt::Result {
+        let datetime = chrono::Local::now();
+        write!(
+            w,
+            "{} {}",
+            datetime.format("%H:%M:%S").dimmed(),
+            format!("~{}ms", elapsed.as_millis()).dimmed(),
+        )?;
+
+        Ok(())
+    }
 }
