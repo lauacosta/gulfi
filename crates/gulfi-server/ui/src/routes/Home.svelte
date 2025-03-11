@@ -385,30 +385,31 @@
             <div class="search-group">
                 <label>Sexo:</label>
                 <div class="radio-group">
-                    <label>
-                        <input
-                            type="radio"
-                            name="sexo"
-                            value="U"
-                            bind:group={sexo}
-                        /> Todos
-                    </label>
-                    <label>
-                        <input
-                            type="radio"
-                            name="sexo"
-                            value="M"
-                            bind:group={sexo}
-                        /> Masculino
-                    </label>
-                    <label>
-                        <input
-                            type="radio"
-                            name="sexo"
-                            value="F"
-                            bind:group={sexo}
-                        /> Femenino
-                    </label>
+                    <input
+                        id="radio1"
+                        type="radio"
+                        name="sexo"
+                        value="U"
+                        bind:group={sexo}
+                    />
+                    <label for="radio1">Todos</label>
+                    <input
+                        id="radio2"
+                        type="radio"
+                        name="sexo"
+                        value="M"
+                        bind:group={sexo}
+                    />
+                    <label for="radio2"> Masculino </label>
+                    <input
+                        id="radio3"
+                        type="radio"
+                        name="sexo"
+                        value="F"
+                        bind:group={sexo}
+                    />
+
+                    <label for="radio3"> Femenino </label>
                 </div>
             </div>
 

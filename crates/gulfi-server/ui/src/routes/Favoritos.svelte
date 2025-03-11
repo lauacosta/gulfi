@@ -1,5 +1,7 @@
 <script lang="ts">
     import { onMount } from "svelte";
+    import { getBgColor } from "../lib/utils";
+    import Empty from "../lib/Empty.svelte";
     const apiUrl = import.meta.env.VITE_API_URL;
 
     type Resultados = {
@@ -66,18 +68,6 @@
             console.error("Error al hacer fetch en favoritos:", error);
         }
     };
-    function getBgColor(strategy: string) {
-        switch (strategy) {
-            case "Fts":
-                return "fts";
-            case "ReciprocalRankFusion":
-                return "reciprocal-rank-fusion";
-            case "Semantic":
-                return "semantic";
-            default:
-                return "";
-        }
-    }
 
     onMount(() => {
         fetchFavoritos();
@@ -101,6 +91,10 @@
                 <span class="color-sample semantic"></span>
                 <span class="legend-text">Semantica</span>
             </div>
+        </div>
+
+        <div class="list-header">
+            <h2 class="list-title">Favoritos</h2>
         </div>
         <div class="card-container">
             {#each favoritos.favoritos as fav (fav.id)}
@@ -140,60 +134,12 @@
             {/each}
         </div>
     {:else}
-        <div
-            class="empty-state"
-            style="
-                text-align: center; 
-                padding: 2rem; 
-                max-width: 500px; 
-                margin: auto; 
-                background: #f9f9f9; 
-                border-radius: 10px; 
-                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-                position: relative;
-                top: 100px; 
-            "
-        >
-            <h1 style="color: #333; font-size: 1.8rem; margin-bottom: 1rem;">
-                No tienes favoritos guardados
-            </h1>
-
-            <p style="color: #666; font-size: 1rem; line-height: 1.5;">
-                Parece que aún no has agregado ningún favorito. Guarda tus
+        <Empty
+            titulo="No tienes ningún favorito"
+            motivo="Parece que aún no has agregado ningún favorito. Guarda tus
                 búsquedas más importantes para acceder a ellas fácilmente en el
-                futuro.
-            </p>
-
-            <div
-                class="button_group"
-                style="margin: 1.5rem 0; display: flex; justify-content: center;"
-            >
-                <p style="color: #555; font-size: 1rem;">
-                    Empieza explorando y haz clic en el botón
-                    <strong style="color: #007bff;"
-                        >"Guardar como favorito"</strong
-                    >
-                    para añadir uno.
-                </p>
-            </div>
-
-            <a
-                href="/"
-                class="button secondary_button"
-                role="button"
-                style="
-                    display: inline-block; 
-                    padding: 10px 20px; 
-                    background: #007bff; 
-                    color: white; 
-                    font-weight: bold; 
-                    text-decoration: none; 
-                    border-radius: 5px; 
-                    transition: background 0.3s ease-in-out;
-                "
-            >
-                Volver al Inicio
-            </a>
-        </div>
+                futuro."
+            solucion="Empieza explorando y haz clic en el botón 'Guardar como favorito' para añadir uno."
+        />
     {/if}
 </main>

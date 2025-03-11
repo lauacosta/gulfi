@@ -25,3 +25,4 @@ export type Historial = {
     neighbors: number;
     fecha: string;
 };
+
