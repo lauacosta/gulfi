@@ -312,7 +312,7 @@ impl FromSql for SearchStrategy {
             ValueRef::Text(text) => match text {
                 b"Fts" => Ok(SearchStrategy::Fts),
                 b"Semantic" => Ok(SearchStrategy::Semantic),
-                b"Rrf" => Ok(SearchStrategy::ReciprocalRankFusion),
+                b"ReciprocalRankFusion" => Ok(SearchStrategy::ReciprocalRankFusion),
                 _ => Err(FromSqlError::InvalidType),
             },
             _ => Err(FromSqlError::InvalidType),

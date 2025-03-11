@@ -9,11 +9,12 @@
     import Layout from "./lib/Layout.svelte";
     import Sidebar from "./lib/Sidebar.svelte";
     import Favoritos from "./routes/Favoritos.svelte";
-    import { onMount } from "svelte";
+    import Historial from "./routes/Historial.svelte";
 
     const RouteName = {
         Home: "home",
         Favoritos: "favoritos",
+        Historial: "historial",
         Fallback: "fallback",
     } as const;
 
@@ -33,6 +34,12 @@
         },
 
         {
+            name: RouteName.Historial,
+            path: "/historial",
+            component: Historial,
+        },
+
+        {
             name: RouteName.Fallback,
             path: "*",
             component: Fallback,
@@ -40,25 +47,6 @@
     ] as const;
 
     export const options: RouterOptions<RouteNames> = { routes } as const;
-
-    // function initKeyboard() {
-    //     window.addEventListener(
-    //         "keydown",
-    //         (event) => {
-    //             if (event.ctrlKey && event.key.toLowerCase() === "h") {
-    //                 event.preventDefault();
-    //                 event.stopImmediatePropagation();
-    //                 console.log("Hola");
-    //                 return false;
-    //             }
-    //         },
-    //         { capture: true, passive: false },
-    //     );
-    // }
-    //
-    // onMount(() => {
-    //     initKeyboard();
-    // });
 </script>
 
 <Layout>

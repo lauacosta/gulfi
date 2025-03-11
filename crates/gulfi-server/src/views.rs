@@ -14,6 +14,7 @@ pub struct HistorialFullView {
     peso_fts: f32,
     peso_semantic: f32,
     neighbors: u64,
+    fecha: String,
 }
 
 impl HistorialFullView {
@@ -28,6 +29,7 @@ impl HistorialFullView {
         peso_fts: f32,
         peso_semantic: f32,
         neighbors: u64,
+        fecha: NaiveDateTime,
     ) -> Self {
         Self {
             id,
@@ -39,6 +41,7 @@ impl HistorialFullView {
             peso_fts,
             peso_semantic,
             neighbors,
+            fecha: fecha.format("%b %d, %Y %H:%M").to_string(),
         }
     }
 }

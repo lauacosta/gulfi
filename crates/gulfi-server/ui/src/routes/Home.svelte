@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import Table from "../lib/Table.svelte";
-    import Historial from "../lib/Historial.svelte";
+    import HistorialFloating from "../lib/HistorialFloating.svelte";
     import type { TableContent } from "../lib/types";
     import type { favoritesResponse } from "../lib/types";
     import type { searchStrategy } from "../lib/types";
@@ -19,7 +19,6 @@
     let heldData: Array<string> = [];
     let heldHeaders = [];
     let isHolding = false;
-    let historialItems = [];
     let itemsCount = $state(0);
     let dataWeight = $state("0 KB");
     let downloadBtnDisabled = $state(true);
@@ -324,7 +323,7 @@
 </script>
 
 <main class="main-content">
-    <Historial />
+    <HistorialFloating />
     <div class="legend">
         <div class="legend-title">Atajos</div>
         <div class="legend-item">

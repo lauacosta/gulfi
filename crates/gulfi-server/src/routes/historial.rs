@@ -1,3 +1,4 @@
+use chrono::NaiveDateTime;
 use eyre::eyre;
 use rusqlite::{Row, params};
 use std::collections::HashMap;
@@ -52,7 +53,7 @@ pub async fn historial_full(
 
     let result = get_historial(
         &db,
-        "select id, query, strategy, sexo, edad_min, edad_max, peso_fts, peso_semantic, neighbors from historial order by timestamp desc",
+        "select id, query, strategy, sexo, edad_min, edad_max, peso_fts, peso_semantic, neighbors, timestamp from historial order by timestamp desc",
         |row| {
             let id: u64 = row.get(0).unwrap_or_default();
             let query: String = row.get(1).unwrap_or_default();
@@ -63,6 +64,10 @@ pub async fn historial_full(
             let peso_fts: f32 = row.get(6).unwrap_or_default();
             let peso_semantic: f32 = row.get(7).unwrap_or_default();
             let neighbors: u64 = row.get(8).unwrap_or_default();
+            let timestamp_str: String = row.get(9).unwrap_or_default();
+
+            let timestamp = NaiveDateTime::parse_from_str(&timestamp_str, "%Y-%m-%d %H:%M:%S")
+                .unwrap_or_else(|_| Default::default());
 
             let data = HistorialFullView::new(
                 id,
@@ -74,6 +79,7 @@ pub async fn historial_full(
                 peso_fts,
                 peso_semantic,
                 neighbors,
+                timestamp,
             );
 
             Ok(data)
