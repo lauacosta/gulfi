@@ -1,5 +1,6 @@
 use std::{fs::File, time::Duration};
 
+use chrono::format;
 use clap::{Parser, crate_name, crate_version};
 use color_eyre::owo_colors::OwoColorize;
 use eyre::eyre;
@@ -220,13 +221,12 @@ impl FormatTime for GulfiTimer {
         elapsed: Duration,
         w: &mut impl fmt::Write,
     ) -> fmt::Result {
-        let datetime = chrono::Local::now();
-        write!(
-            w,
-            "{} {}",
-            datetime.format("%H:%M:%S").dimmed(),
-            format!("~{}ms", elapsed.as_millis()).dimmed(),
-        )?;
+        let datetime = chrono::Local::now().format("%H:%M:%S");
+        let time = format!("~{}ms", elapsed.as_millis());
+
+        let str = format!("{datetime} {time}");
+
+        write!(w, "{}", str.dimmed())?;
 
         Ok(())
     }
