@@ -42,7 +42,7 @@ export function inputPopUp(msg: string): Promise<string | null> {
         modalBox.innerHTML = `
             <p style="margin: 0 0 16px; font-size: 16px; color: #333; font-weight: 500;">${msg}</p>
             <input type="text" id="popupInput" style="width: 100%; padding: 12px; margin: 10px 0 5px 0; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; box-sizing: border-box; outline: none; transition: all 0.2s;" />
-            <p id="validationMessage" style="color: #e74c3c; font-size: 12px; margin: 0 0 10px 0; text-align: left; visibility: hidden; height: 16px;">Por favor ingrese un valor</p>
+            <p id="validationMessage" class="validation-message">Por favor ingrese un valor</p>
             <div style="display: flex; justify-content: space-between; margin-top: 5px;">
                 <button id="cancelBtn" class="btn delete-button">Cancelar</button>
                 <button id="confirmBtn" class="btn search-button">Confirmar</button>
@@ -64,7 +64,6 @@ export function inputPopUp(msg: string): Promise<string | null> {
         const confirmBtn = document.getElementById("confirmBtn");
         const cancelBtn = document.getElementById("cancelBtn");
 
-        // Input styling on focus/blur
         if (inputElement) {
             inputElement.onfocus = () => {
                 inputElement.style.borderColor = "#4361ee";
@@ -76,7 +75,6 @@ export function inputPopUp(msg: string): Promise<string | null> {
                     inputElement.style.boxShadow = "none";
                 }
             };
-            // Hide validation message when user starts typing
             inputElement.oninput = () => {
                 if (validationMessage) {
                     validationMessage.style.visibility = "hidden";
@@ -87,28 +85,14 @@ export function inputPopUp(msg: string): Promise<string | null> {
             };
         }
 
-        // Function to validate input
         const validateInput = (): boolean => {
             if (!inputElement || inputElement.value.trim() === '') {
-                // Show validation message
                 if (validationMessage) {
                     validationMessage.style.visibility = "visible";
                 }
-                // Highlight input in red
                 inputElement.style.borderColor = "#e74c3c";
                 inputElement.style.boxShadow = "0 0 0 2px rgba(231, 76, 60, 0.2)";
                 inputElement.focus();
-
-                // Shake effect
-                modalBox.style.animation = "shake 0.5s";
-                modalBox.style.animationIterationCount = "1";
-
-
-                // Remove shake animation after it completes
-                setTimeout(() => {
-                    modalBox.style.animation = "";
-                }, 500);
-
                 return false;
             }
             return true;

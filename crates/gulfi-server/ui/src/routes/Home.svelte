@@ -408,6 +408,9 @@
                     bind:value={query}
                     required
                 />
+                <p id="validationMessage" class="validation-message">
+                    Por favor ingrese un valor
+                </p>
             </div>
 
             <div class="search-group">

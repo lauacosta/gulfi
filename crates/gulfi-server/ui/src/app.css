@@ -15,6 +15,15 @@
         inset 0 0 0 1px rgba(0, 0, 0, 0.1);
 }
 
+.validation-message {
+    color: #e74c3c;
+    font-size: 12px;
+    margin: 0 0 10px 0;
+    text-align: left;
+    visibility: hidden;
+    height: 16px;
+}
+
 .fts {
     background-color: var(--my-raspberry);
 }
