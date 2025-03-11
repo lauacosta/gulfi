@@ -306,10 +306,14 @@
     async function saveFavorite() {
         if (heldData.length === 0 || heldSearches.length === 0) return;
 
-        // const input = prompt("Ingresa un nombre para guardarlo");
-
         const input = await inputPopUp("Ingresa un nombre para guardarlo");
-        const name = input?.replace(/[^a-zA-Z_\-\s]/g, "") || "ERROR";
+
+        if (input === null) {
+            return;
+        }
+        console.log(input);
+        const name = input?.replace(/[^a-zA-Z_\-\s]/g, "");
+        console.log(`name ${name}`);
 
         if (name !== null && name !== "") {
             let json_str = JSON.stringify(heldSearches);
