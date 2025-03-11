@@ -4,8 +4,9 @@
     import HistorialFloating from "../lib/HistorialFloating.svelte";
     import type { TableContent } from "../lib/types";
     import type { favoritesResponse } from "../lib/types";
-    import type { searchStrategy } from "../lib/types";
+    import type { searchStrategy as SearchStrategy } from "../lib/types";
     import { writable } from "svelte/store";
+    import { inputPopUp } from "../lib/utils";
 
     const apiUrl = import.meta.env.VITE_API_URL;
 
@@ -24,7 +25,8 @@
     let downloadBtnDisabled = $state(true);
 
     let query = $state("");
-    let strategy: searchStrategy = $state("Fts");
+
+    let strategy: SearchStrategy = $state("Fts");
     let sexo = $state("U");
     let edad_min = $state(0);
     let edad_max = $state(100);
@@ -38,9 +40,29 @@
 
     onMount(async () => {
         // await updateHistorial();
+        checkUrlParams();
         hideElements();
         initKeyboard();
     });
+
+    function checkUrlParams() {
+        const params = new URLSearchParams(window.location.search);
+
+        if (!params.toString()) {
+            return;
+        }
+
+        query = params.get("query") || "";
+        strategy = (params.get("strategy") as SearchStrategy) || "Fts";
+        sexo = params.get("sexo") || "U";
+        edad_min = Number(params.get("edad_min")) || 0;
+        edad_max = Number(params.get("edad_max")) || 100;
+        peso_fts = Number(params.get("peso_fts")) || 50;
+        peso_semantic = Number(params.get("peso_semantic")) || 50;
+        k = Number(params.get("neighbors")) || 1000;
+
+        sliderValue = peso_fts;
+    }
 
     function updateSliderValues() {
         peso_fts = sliderValue;
@@ -80,6 +102,23 @@
                     event.preventDefault();
                     event.stopImmediatePropagation();
                     descargarCSVGlobal();
+                    return false;
+                }
+            },
+            { capture: true, passive: false },
+        );
+
+        window.addEventListener(
+            "keydown",
+            (event) => {
+                if (
+                    event.ctrlKey &&
+                    event.shiftKey &&
+                    event.key.toLowerCase() === "f"
+                ) {
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                    saveFavorite();
                     return false;
                 }
             },
@@ -267,7 +306,9 @@
     async function saveFavorite() {
         if (heldData.length === 0 || heldSearches.length === 0) return;
 
-        const input = prompt("Ingresa un nombre para guardarlo");
+        // const input = prompt("Ingresa un nombre para guardarlo");
+
+        const input = await inputPopUp("Ingresa un nombre para guardarlo");
         const name = input?.replace(/[^a-zA-Z_\-\s]/g, "") || "ERROR";
 
         if (name !== null && name !== "") {
@@ -327,6 +368,10 @@
     <div class="legend">
         <div class="legend-title">Atajos</div>
         <div class="legend-item">
+            <span class="kbssample"> Ctrl+b</span>
+            <span class="legend-text">Buscar</span>
+        </div>
+        <div class="legend-item">
             <span class="kbssample">Ctrl+h</span>
             <span class="legend-text">Abrir Historial</span>
         </div>
@@ -336,8 +381,8 @@
         </div>
 
         <div class="legend-item">
-            <span class="kbssample"> Ctrl+b</span>
-            <span class="legend-text">Buscar</span>
+            <span class="kbssample">Ctrl+Shift+f</span>
+            <span class="legend-text">Añadir a Favoritos</span>
         </div>
     </div>
 
@@ -536,6 +581,7 @@
                     title="Resetear descarga"
                     id="resetDownloadBtn"
                     class="btn btn-icon"
+                    disabled={downloadBtnDisabled}
                     onclick={resetHeldData}
                 >
                     <svg
@@ -557,6 +603,7 @@
                     title="Agregar búsqueda a favoritos"
                     id="saveBtn"
                     class="btn btn-icon"
+                    disabled={downloadBtnDisabled}
                     onclick={saveFavorite}
                 >
                     <svg

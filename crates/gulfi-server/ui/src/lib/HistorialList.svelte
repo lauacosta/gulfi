@@ -7,7 +7,7 @@
     const apiUrl = import.meta.env.VITE_API_URL;
 
     const strategyLabels = {
-        Fts: "Búsqueda de texto completo",
+        Fts: "Full Text Search",
         Semantic: "Búsqueda semántica",
         ReciprocalRankFusion: "ReciprocalRankFusion",
     };

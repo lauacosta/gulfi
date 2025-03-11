@@ -13,5 +13,5 @@
         <p>{solucion}</p>
     </div>
 
-    <a href="/" role="button"> Volver al Inicio </a>
+    <a href="/" class="search-button"> Volver al Inicio </a>
 </div>

@@ -91,7 +91,7 @@ fn main() -> eyre::Result<()> {
 
             #[cfg(not(debug_assertions))]
             {
-                rt.block_on(run_server(configuration))?;
+                rt.block_on(run_server(configuration, start))?;
             }
         }
         Command::Sync {

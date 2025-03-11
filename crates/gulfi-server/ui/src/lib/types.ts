@@ -5,18 +5,18 @@ export type TableContent = {
     rows: string[][];
 };
 
-export type searchStrategy = "Fts" | "Semantic" | "ReciprocalRankFusion";
+export type SearchStrategy = "Fts" | "Semantic" | "ReciprocalRankFusion";
 
 export type favoritesResponse = {
     query: string;
-    strategy: searchStrategy;
+    strategy: SearchStrategy;
 };
 
 
 export type Historial = {
     id: number;
     query: string;
-    strategy: searchStrategy;
+    strategy: SearchStrategy;
     sexo: "U" | "M" | "F";
     edad_min: number;
     edad_max: number;

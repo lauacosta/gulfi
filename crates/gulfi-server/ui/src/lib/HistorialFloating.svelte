@@ -137,7 +137,7 @@
                         {/each}
                     </ul>
                 {:else}
-                    <div class="empty-state">
+                    <div class="empty-historial">
                         No hay búsquedas en el historial
                     </div>
                 {/if}

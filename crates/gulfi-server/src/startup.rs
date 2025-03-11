@@ -190,11 +190,6 @@ pub async fn run_server(configuration: ApplicationSettings, start: Instant) -> R
     match Application::build(&configuration).await {
         Ok(app) => {
             let url = format!("http://{}:{}", app.host(), app.port());
-            if configuration.open
-                && webbrowser::open_browser(webbrowser::Browser::Default, &url).is_ok()
-            {
-                info!("Se abrirá la aplicación en el navegador predeterminado.");
-            }
 
             println!(
                 "\n\n  {} {} listo en {} ms\n",
@@ -204,11 +199,17 @@ pub async fn run_server(configuration: ApplicationSettings, start: Instant) -> R
             );
 
             println!(
-                "  {}  {}:  {}",
+                "  {}  {}:  {}\n\n",
                 "➜".bold().bright_green(),
                 "Local".bold().bright_white(),
                 url.bright_cyan().underline()
             );
+
+            if configuration.open
+                && webbrowser::open_browser(webbrowser::Browser::Default, &url).is_ok()
+            {
+                info!("Se abrirá la aplicación en el navegador predeterminado.");
+            }
 
             if let Err(e) = app.run_until_stopped().await {
                 error!("Error ejecutando el servidor HTTP: {:?}", e);

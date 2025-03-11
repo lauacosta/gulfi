@@ -73,7 +73,7 @@ struct FavoritesReponse {
     strategy: String,
 }
 
-#[tracing::instrument(skip(app), name = "añadiendo busqueda a favoritos")]
+#[tracing::instrument(skip(app, payload), name = "añadiendo busqueda a favoritos")]
 pub async fn add_favoritos(
     State(app): State<AppState>,
     Json(payload): Json<FavParams>,
