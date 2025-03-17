@@ -80,6 +80,7 @@ pub async fn add_favoritos(
 ) -> Result<(StatusCode, String), HttpError> {
     let db = Connection::open(app.db_path)
         .expect("Deberia ser un path valido a una base de datos SQLite");
+
     let nombre = payload.nombre.replace(|c: char| c.is_whitespace(), "_");
     let data = payload.data;
     let resp: Vec<FavoritesReponse> = serde_json::from_str(&payload.busquedas)?;

@@ -19,14 +19,17 @@
 
     const descargarCSVFavoritos = (data: string, nombre: string) => {
         data = data.trim();
-
         data = data.replace(/^(\[)+|(\])+/g, "");
-        const blob = new Blob([data], { type: "text/csv" });
+        const items = data.split(",").map((item) => item.trim());
+        const csvString = items.join("\n");
+
+        const blob = new Blob([csvString], { type: "text/csv" });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
         link.download = `${nombre}.csv`;
         link.click();
+        URL.revokeObjectURL(url);
     };
 
     const borrarFavorito = async (nombre: string) => {

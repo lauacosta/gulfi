@@ -287,8 +287,7 @@
     function descargarCSVGlobal() {
         if (heldData.length === 0) return;
 
-        const csvRows = [];
-        csvRows.push(heldData.join(","));
+        const csvRows = heldData.map((item) => item.toString());
 
         const csvString = csvRows.join("\n");
         const blob = new Blob([csvString], { type: "text/csv" });
@@ -312,7 +311,7 @@
             return;
         }
         console.log(input);
-        const name = input?.replace(/[^a-zA-Z_\-\s]/g, "");
+        const name = input?.replace(/[^a-zA-Z0-9_\-\s]/g, "");
         console.log(`name ${name}`);
 
         if (name !== null && name !== "") {
