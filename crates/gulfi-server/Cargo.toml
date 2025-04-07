@@ -1,0 +1,34 @@
+[package]
+name = "gulfi-server"
+edition = "2024"
+version.workspace = true
+
+[dependencies]
+tower = "0.5.0"
+tower-http = { version = "0.5.2", features = ["compression-gzip", "cors", "fs", "trace"] }
+tower-request-id = "0.3.0"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json"] }
+mime_guess = "2.0.5"
+
+eyre.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+color-eyre.workspace = true
+axum.workspace = true
+tokio.workspace = true
+rusqlite.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+http.workspace = true
+zerocopy.workspace = true
+serde_urlencoded.workspace = true
+chrono.workspace = true
+
+gulfi-sqlite = { path = "../gulfi-sqlite/"}
+gulfi-common = { path = "../gulfi-common/"}
+gulfi-openai = { path = "../gulfi-openai/"}
+
+axum-extra = { version = "0.9.6", features = ["typed-header"] }
+webbrowser = "1.0.3"
+include_dir = "0.7.4"

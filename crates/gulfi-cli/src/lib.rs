@@ -1,9 +1,8 @@
+use clap::{Parser, Subcommand, ValueEnum, command, crate_version};
 use std::net::IpAddr;
 
-use clap::{Parser, Subcommand, ValueEnum, command, crate_version};
-
 #[derive(Parser)]
-#[command(version, about, long_about = None, before_help = format!(r"
+#[command(version, about,  long_about = None, before_help = format!(r"
  _____       _  __ _ 
 |  __ \     | |/ _(_)
 | |  \/_   _| | |_ _ 
@@ -15,17 +14,26 @@ use clap::{Parser, Subcommand, ValueEnum, command, crate_version};
     ))
 ]
 pub struct Cli {
-    #[arg(long = "log-level", default_value = "INFO")]
+    #[arg(long = "level", default_value = "INFO")]
     pub loglevel: String,
 
     #[command(subcommand)]
-    pub command: Commands,
+    command: Option<Command>,
 }
 
-#[derive(Subcommand)]
-pub enum Commands {
+impl Cli {
+    pub fn command(&self) -> Command {
+        self.command.clone().unwrap_or(Command::List)
+    }
+}
+
+#[derive(Subcommand, Clone, Debug)]
+pub enum Command {
     /// Inicia el servidor HTTP y expone la interfaz web
     Serve {
+        #[cfg(debug_assertions)]
+        #[arg(value_enum)]
+        mode: Mode,
         /// Establece la dirección IP.
         #[clap(short = 'I', long, default_value = "127.0.0.1")]
         interface: IpAddr,
@@ -42,21 +50,31 @@ pub enum Commands {
     },
     /// Actualiza la base de datos
     Sync {
+        document: String,
+
         /// Fuerza la actualización incluso cuando la base de datos no está vacía.
         #[arg(long, default_value = "false")]
         clean_slate: bool,
 
         /// Determina la estrategia para actualizar la base de datos.
-        #[arg(value_enum, short = 'S', long, default_value_t = SyncStrategy::Fts)]
+        #[arg(value_enum,  default_value_t = SyncStrategy::Fts)]
         sync_strat: SyncStrategy,
 
         /// Determina la cantidad de tiempo base al hacer backoff en los requests. En millisegundos.
         #[arg(short = 'T', long, default_value_t = 2)]
         base_delay: u64,
     },
+    List,
 }
 
-#[derive(Clone, ValueEnum)]
+#[cfg(debug_assertions)]
+#[derive(Debug, Clone, ValueEnum)]
+pub enum Mode {
+    Prod,
+    Dev,
+}
+
+#[derive(Debug, Clone, ValueEnum)]
 pub enum SyncStrategy {
     Fts,
     Vector,
@@ -76,13 +94,14 @@ pub enum Cache {
     Disabled,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // #[test]
-    // fn it_works() {
-    //     let result = add(2, 2);
-    //     assert_eq!(result, 4);
-    // }
-}
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//
+//     // #[test]
+//     // fn it_works() {
+//     //     let result = add(2, 2);
+//     //     assert_eq!(result, 4);
+//     // }
+// }
+//

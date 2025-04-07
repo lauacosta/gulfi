@@ -14,8 +14,9 @@ chrono.workspace = true
 reqwest.workspace = true
 tracing.workspace = true
 serde_json.workspace = true
+serde.workspace = true
+
 gulfi-openai = { path = "../gulfi-openai/" }
-gulfi-ui = { path = "../gulfi-ui/" }
+# gulfi-ui = { path = "../gulfi-ui/" }
 gulfi-cli = { path = "../gulfi-cli/" }
-gulfi-configuration = { path = "../gulfi-configuration/" }
 gulfi-common = { path = "../gulfi-common/" }

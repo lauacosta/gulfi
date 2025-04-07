@@ -1,49 +1,72 @@
-{
-    "name": "TNEA",
-    "fields": [
-        {
-            "name": "email",
-            "template_member": false
-        },
-        {
-            "name": "nombre",
-            "template_member": false
-        },
-        {
-            "name": "sexo",
-            "template_member": false
-        },
-        {
-            "name": "fecha_nacimiento",
-            "template_member": false
-        },
-        {
-            "name": "edad",
-            "template_member": false
-        },
-        {
-            "name": "provincia",
-            "template_member": false
-        },
-        {
-            "name": "ciudad",
-            "template_member": false
-        },
-        {
-            "name": "estudios",
-            "template_member": true
-        },
-        {
-            "name": "experiencia",
-            "template_member": true
-        },
-        {
-            "name": "descripcion",
-            "template_member": true
-        },
-        {
-            "name": "estudios_mas_recientes",
-            "template_member": true
-        }
-    ]
-}
+[
+    {
+        "name": "PRUEBA",
+        "fields": [
+            {
+                "name": "email",
+                "vec_input": false,
+                "unique": true
+            }
+        ]
+    },
+    {
+        "name": "TNEA",
+        "fields": [
+            {
+                "name": "email",
+                "vec_input": false,
+                "unique": true
+            },
+            {
+                "name": "nombre",
+                "vec_input": false,
+                "unique": false
+            },
+            {
+                "name": "sexo",
+                "vec_input": false,
+                "unique": false
+            },
+            {
+                "name": "fecha_nacimiento",
+                "vec_input": false,
+                "unique": false
+            },
+            {
+                "name": "edad",
+                "vec_input": false,
+                "unique": false
+            },
+            {
+                "name": "provincia",
+                "vec_input": false,
+                "unique": false
+            },
+            {
+                "name": "ciudad",
+                "vec_input": false,
+                "unique": false
+            },
+            {
+                "name": "estudios",
+                "vec_input": true,
+                "unique": false
+            },
+            {
+                "name": "experiencia",
+                "vec_input": true,
+                "unique": false
+            },
+            {
+                "name": "descripcion",
+                "vec_input": true,
+                "unique": false
+            },
+            {
+                "name": "estudios_mas_recientes",
+                "vec_input": true,
+                "unique": false
+            }
+        ]
+    }
+]
