@@ -8,7 +8,7 @@ watch:
     watchexec -r -e rs -- cargo run
 
 run *args:
-    cargo run --release -- {{args}}
+    cargo run -- {{args}}
 
 udeps:
     cargo udeps --all-targets --backend depinfo

@@ -1,6 +1,5 @@
-use std::net::IpAddr;
-
 use clap::{Parser, Subcommand, ValueEnum, command, crate_version};
+use std::net::IpAddr;
 
 #[derive(Parser)]
 #[command(version, about,  long_about = None, before_help = format!(r"

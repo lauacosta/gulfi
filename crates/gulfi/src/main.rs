@@ -217,9 +217,9 @@ impl FormatTime for GulfiTimer {
     fn style_timestamp(&self, _: bool, elapsed: Duration, w: &mut impl fmt::Write) -> fmt::Result {
         let datetime = chrono::Local::now().format("%H:%M:%S");
         let time = format!("~{}ms", elapsed.as_millis());
-        let str = format!("{datetime} {time}");
+        let str = format!("{} {}", datetime.bright_blue(), time.dimmed());
 
-        write!(w, "{}", str.dimmed())?;
+        write!(w, "{}", str)?;
 
         Ok(())
     }

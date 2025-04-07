@@ -168,7 +168,7 @@ pub fn build_server(listener: TcpListener, state: AppState) -> Result<Serve<Rout
                             error_span!(
                                 "request",
                                 id = %request_id,
-                                method = %request.method(),
+                                method = %request.method().blue().bold(),
                                 uri = %request.uri()
                             )
                         })
