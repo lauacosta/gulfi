@@ -12,7 +12,6 @@ pub fn initialize_meta_file() -> Result<()> {
         "\n{:<WIDTH$}{stage}  No se ha encontrado un archivo `meta.json`. Creando primera base...",
         "",
         stage = " Gulfi ".bright_white().bold().on_green(),
-        // Fixed(000).bold().on(Green).paint(" Gulfi ")
     );
     run_new()
 }
