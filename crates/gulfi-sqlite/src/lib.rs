@@ -12,9 +12,9 @@ use std::{
 use csv::ReaderBuilder;
 use eyre::{Result, eyre};
 use futures::StreamExt;
-use gulfi_common::{DataSources, Document, HttpError, clean_html, normalize, parse_sources};
+use gulfi_common::{DataSources, Document, clean_html, normalize, parse_sources};
 use gulfi_openai::embed_vec;
-use rusqlite::{Connection, ToSql, ffi::sqlite3_auto_extension, types::ValueRef};
+use rusqlite::{Connection, ffi::sqlite3_auto_extension};
 use serde_json::{Map, Value};
 use sqlite_vec::sqlite3_vec_init;
 use tracing::{Level, debug, error, info, span};
@@ -529,97 +529,3 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
 
     Ok(inserted)
 }
-
-pub struct SearchQuery<'a> {
-    db: &'a rusqlite::Connection,
-    pub stmt_str: String,
-    pub bindings: Vec<&'a dyn ToSql>,
-}
-
-type QueryResult = (Vec<String>, Vec<Vec<String>>, usize);
-
-impl SearchQuery<'_> {
-    pub fn execute(&self) -> Result<QueryResult, HttpError> {
-        debug!("{:?}", self.stmt_str);
-
-        let mut statement = self.db.prepare(&self.stmt_str)?;
-
-        let column_names: Vec<String> = statement
-            .column_names()
-            .into_iter()
-            .map(String::from)
-            .collect();
-
-        let table = statement
-            .query_map(&*self.bindings, |row| {
-                let mut data = Vec::new();
-
-                for i in 0..row.as_ref().column_count() {
-                    let val = match row.get_ref(i)? {
-                        ValueRef::Text(text) => String::from_utf8_lossy(text).into_owned(),
-                        ValueRef::Real(real) => format!("{:.3}", -1. * real),
-                        ValueRef::Integer(int) => int.to_string(),
-                        _ => "Tipo de dato desconocido".to_owned(),
-                    };
-                    data.push(val);
-                }
-
-                Ok(data)
-            })?
-            .collect::<Result<Vec<Vec<String>>, _>>()?;
-
-        let count = table.len();
-
-        Ok((column_names, table, count))
-    }
-}
-
-pub struct SearchQueryBuilder<'a> {
-    db: &'a rusqlite::Connection,
-    pub stmt_str: String,
-    pub bindings: Vec<&'a dyn ToSql>,
-}
-
-impl<'a> SearchQueryBuilder<'a> {
-    pub fn new(db: &'a rusqlite::Connection, base_stmt: &str) -> Self {
-        Self {
-            db,
-            stmt_str: base_stmt.to_owned(),
-            bindings: Vec::new(),
-        }
-    }
-
-    pub fn add_statement(&mut self, filter: &str, binding: &[&'a dyn ToSql]) {
-        self.stmt_str.push_str(filter);
-        self.bindings.extend_from_slice(binding);
-    }
-
-    pub fn add_bindings(&mut self, binding: &[&'a dyn ToSql]) {
-        self.bindings.extend_from_slice(binding);
-    }
-
-    pub fn add_statement_str(&mut self, stmt: &str) {
-        self.stmt_str.push_str(stmt);
-    }
-
-    pub fn build(&self) -> SearchQuery<'a> {
-        SearchQuery {
-            db: self.db,
-            stmt_str: self.stmt_str.clone(),
-            bindings: self.bindings.clone(),
-        }
-    }
-}
-
-pub trait QueryMarker {}
-
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//
-//     // #[test]
-//     // fn it_works() {
-//     //     let result = add(2, 2);
-//     //     assert_eq!(result, 4);
-//     // }
-// }

@@ -6,7 +6,7 @@ use gulfi_query::{
     Constraint::{Exact, GreaterThan, LesserThan},
     Query,
 };
-use gulfi_sqlite::SearchQueryBuilder;
+
 use reqwest::Client;
 use rusqlite::{
     Connection, ToSql, params,
@@ -112,7 +112,7 @@ impl SearchStrategy {
                     }
                 }
 
-                conditions.push(format!("vec_input match '\"' || :query || '\"' "));
+                conditions.push("vec_input match '\"' || :query || '\"' ".to_owned());
                 binding_values.push(&query.query as &dyn ToSql);
 
                 let where_clause = if conditions.is_empty() {
@@ -201,10 +201,10 @@ impl SearchStrategy {
                     }
                 }
 
-                conditions.push(format!("k = :k"));
+                conditions.push("k = :k".to_owned());
                 binding_values.push(&k as &dyn ToSql);
 
-                conditions.push(format!("vec_input_embedding match :embedding "));
+                conditions.push("vec_input_embedding match :embedding ".to_owned());
                 binding_values.push(&embedding as &dyn ToSql);
 
                 let where_clause = if conditions.is_empty() {
@@ -242,150 +242,139 @@ impl SearchStrategy {
                 let count = table.len();
 
                 (column_names, table, count)
-
-                // let search = &"
-                // select
-                //     vec_tnea.distance,
-                //     tnea.email,
-                //     tnea.provincia,
-                //     tnea.ciudad,
-                //     tnea.edad,
-                //     tnea.sexo,
-                //     tnea.vec_input,
-                //     'vec' as match_type
-                // from vec_tnea
-                // left join tnea on tnea.id = vec_tnea.row_id
-                // where vec_input_embedding match :embedding
-                // and k = 1000
-                // "
-                // .to_owned();
-                //
-                // let mut search_query = SearchQueryBuilder::new(&db, search);
-                //
-                // search_query.add_bindings(&[&embedding]);
-                //
-                // search_query.add_statement(
-                //     " and cast(edad as integer) between :edad_min and :edad_max ",
-                //     &[&params.edad_min, &params.edad_max],
-                // );
-                //
-                // if provincia.is_some() {
-                //     search_query
-                //         .add_statement(" and tnea.provincia like :provincia", &[&provincia]);
-                // }
-                //
-                // if ciudad.is_some() {
-                //     search_query.add_statement(" and tnea.ciudad like :ciudad", &[&ciudad]);
-                // }
-                //
-                // match params.sexo {
-                //     Sexo::M => {
-                //         search_query.add_statement(" and sexo = :sexo", &[&params.sexo]);
-                //     }
-                //     Sexo::F => {
-                //         search_query.add_statement(" and sexo = :sexo", &[&params.sexo]);
-                //     }
-                //     Sexo::U => (),
-                // };
-                //
-                // let (c, t, tqc) = search_query.build().execute()?;
-                //
-                // (c, t, tqc)
             }
             SearchStrategy::ReciprocalRankFusion => {
-                todo!()
-                //     let query_emb = embed_single(query.query.to_string(), client)
-                //         .await
-                //         .map_err(|err| tracing::error!("{err}"))
-                //         .expect("Fallo al crear un embedding del query");
-                //
-                //     let embedding = query_emb.as_bytes();
-                //
-                //     let search = &"
-                // with vec_matches as (
-                //     select
-                //         row_id,
-                //         row_number() over (order by distance) as rank_number,
-                //         distance
-                //     from vec_tnea
-                //     where
-                //         vec_input_embedding match :embedding
-                //         and k = :k
-                //     ),
-                //
-                // fts_matches as (
-                //     select
-                //         rowid as row_id,
-                //         row_number() over (order by rank) as rank_number,
-                //         rank as score
-                //     from fts_tnea
-                //     where vec_input match '\"' || :query || '\"'
-                //     ),
-                //
-                // final as (
-                //     select
-                //         tnea.email,
-                //         tnea.edad,
-                //         tnea.sexo,
-                //         tnea.provincia,
-                //         tnea.ciudad,
-                //         tnea.vec_input,
-                //         vec_matches.rank_number as vec_rank,
-                //         fts_matches.rank_number as fts_rank,
-                //         (
-                //             coalesce(1.0 / (:rrf_k + fts_matches.rank_number), 0.0) * :weight_fts +
-                //             coalesce(1.0 / (:rrf_k + vec_matches.rank_number), 0.0) * :weight_vec
-                //         ) as combined_rank,
-                //         vec_matches.distance as vec_distance,
-                //         fts_matches.score as fts_score
-                //     from fts_matches
-                //     full outer join vec_matches on vec_matches.row_id = fts_matches.row_id
-                //     join tnea on tnea.id = coalesce(fts_matches.row_id, vec_matches.row_id)
-                //     where cast(tnea.edad as integer) between :edad_min and :edad_max
-                // "
-                //     .to_owned();
-                //
-                //     let mut search_query = SearchQueryBuilder::new(&db, search);
-                //
-                //     search_query.add_bindings(&[
-                //         &embedding,
-                //         &k,
-                //         &query.query,
-                //         &rrf_k,
-                //         &weight_fts,
-                //         &weight_vec,
-                //         &params.edad_min,
-                //         &params.edad_max,
-                //     ]);
-                //
-                //     // if provincia.is_some() {
-                //     //     search_query
-                //     //         .add_statement(" and tnea.provincia like :provincia", &[&provincia]);
-                //     // }
-                //     //
-                //     // if ciudad.is_some() {
-                //     //     search_query.add_statement(" and tnea.ciudad like :ciudad", &[&ciudad]);
-                //     // }
-                //
-                //     match params.sexo {
-                //         Sexo::M => {
-                //             search_query.add_statement(" and sexo = :sexo", &[&params.sexo]);
-                //         }
-                //         Sexo::F => {
-                //             search_query.add_statement(" and sexo = :sexo", &[&params.sexo]);
-                //         }
-                //         Sexo::U => (),
-                //     };
-                //
-                //     search_query.add_statement_str(" order by combined_rank desc ");
-                //
-                //     search_query.add_statement_str(
-                //         ")
-                //         select * from final;",
-                //     );
-                //
-                //     let (c, t, tqc) = search_query.build().execute()?;
-                //     (c, t, tqc)
+                let query_emb = embed_single(query.query.to_owned(), client)
+                    .await
+                    .map_err(|err| tracing::error!("{err}"))
+                    .expect("Fallo al crear un embedding del query");
+
+                let embedding = query_emb.as_bytes();
+
+                let build_final_query = |conditions: &str| -> String {
+                    let doc_name = document.name.clone();
+                    let mut fields = String::new();
+
+                    for field in &document.fields {
+                        if !field.vec_input {
+                            fields.push_str(&format!("{doc_name}.{},", field.name));
+                        }
+                    }
+
+                    let search_query = format!(
+                        "select 
+                            {fields}
+                            vec_matches.rank_number as vec_rank,
+                            fts_matches.rank_number as fts_rank,
+                            (
+                                coalesce(1.0 / (:rrf_k + fts_matches.rank_number), 0.0) * :weight_fts +
+                                coalesce(1.0 / (:rrf_k + vec_matches.rank_number), 0.0) * :weight_vec
+                            ) as combined_rank,
+                            vec_matches.distance as vec_distance,
+                            fts_matches.score as fts_score
+                        from fts_matches
+                        full outer join vec_matches on vec_matches.row_id = fts_matches.row_id
+                        join tnea on tnea.id = coalesce(fts_matches.row_id, vec_matches.row_id)");
+
+                    let base = format!(
+                        "with vec_matches as (
+                            select
+                                row_id,
+                                row_number() over (order by distance) as rank_number,
+                                distance
+                            from vec_{doc_name}
+                            where
+                                vec_input_embedding match :embedding
+                                and k = :k
+                        ),
+
+                        fts_matches as (
+                            select
+                                rowid as row_id,
+                                row_number() over (order by rank) as rank_number,
+                                rank as score
+                            from fts_{doc_name}
+                            where vec_input match '\"' || :query || '\"'
+                            ),
+
+                        final as ( {search_query} {conditions} order by combined_rank desc) select * from final;"
+                    );
+
+                    base
+                };
+
+                let mut conditions = Vec::new();
+
+                let mut binding_values: Vec<&dyn ToSql> = vec![
+                    &embedding as &dyn ToSql,
+                    &k as &dyn ToSql,
+                    &query.query as &dyn ToSql,
+                    &rrf_k as &dyn ToSql,
+                    &weight_fts as &dyn ToSql,
+                    &weight_vec as &dyn ToSql,
+                ];
+
+                //INFO: EL orden en que los campos son cargados en binding_values es importante.
+                //No me fascina pero por ahora no es el mayor de mis problemas.
+
+                if let Some(contraints) = &query.constraints {
+                    for (k, values) in contraints {
+                        for (i, cons) in values.iter().enumerate() {
+                            let param_name = format!(":{}_{i}", k);
+                            let condition = match cons {
+                                Exact(_) => format!("{k} = {param_name}"),
+                                GreaterThan(_) => format!("{k} > {param_name}"),
+                                LesserThan(_) => format!("{k} < {param_name}"),
+                            };
+
+                            let value = match cons {
+                                Exact(val) => val,
+                                GreaterThan(val) => val,
+                                LesserThan(val) => val,
+                            };
+
+                            conditions.push(condition);
+                            binding_values.push(value);
+                        }
+                    }
+                }
+
+                let where_clause = if conditions.is_empty() {
+                    String::new()
+                } else {
+                    format!("where {}", conditions.join(" and "))
+                };
+
+                let sql = build_final_query(&where_clause);
+
+                dbg!("{:#?}", &sql);
+                dbg!("{:#?}", &binding_values.len());
+
+                let mut stmt = db.prepare(&sql)?;
+                let column_names: Vec<String> =
+                    stmt.column_names().into_iter().map(String::from).collect();
+
+                let table = stmt
+                    .query_map(&*binding_values, |row| {
+                        let mut data = Vec::new();
+
+                        for i in 0..row.as_ref().column_count() {
+                            let val = match row.get_ref(i)? {
+                                ValueRef::Text(text) => String::from_utf8_lossy(text).into_owned(),
+                                ValueRef::Real(real) => format!("{:.3}", -1. * real),
+                                ValueRef::Integer(int) => int.to_string(),
+                                _ => "Tipo de dato desconocido".to_owned(),
+                            };
+                            data.push(val);
+                        }
+
+                        Ok(data)
+                    })?
+                    .collect::<Result<Vec<Vec<String>>, _>>()?;
+
+                let count = table.len();
+
+                (column_names, table, count)
             }
         };
 
