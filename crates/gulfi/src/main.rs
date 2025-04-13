@@ -7,7 +7,7 @@ use gulfi_cli::{Cli, Command, SyncStrategy};
 use gulfi_common::Document;
 use gulfi_helper::initialize_meta_file;
 use gulfi_server::{ApplicationSettings, startup::run_server};
-use gulfi_sqlite::{init_sqlite, insert_base_data, setup_sqlite, sync_fts_tnea, sync_vec_tnea};
+use gulfi_sqlite::{init_sqlite, insert_base_data, setup_sqlite, sync_fts_data, sync_vec_data};
 use rusqlite::Connection;
 use tracing::{Level, debug, info, level_filters::LevelFilter};
 use tracing_error::ErrorLayer;
@@ -147,15 +147,15 @@ fn main() -> eyre::Result<()> {
             insert_base_data(&db, doc)?;
 
             match sync_strat {
-                SyncStrategy::Fts => sync_fts_tnea(&db, doc),
+                SyncStrategy::Fts => sync_fts_data(&db, doc),
                 SyncStrategy::Vector => {
                     let rt = tokio::runtime::Runtime::new()?;
-                    rt.block_on(sync_vec_tnea(&db, doc, base_delay))?;
+                    rt.block_on(sync_vec_data(&db, doc, base_delay))?;
                 }
                 SyncStrategy::All => {
-                    sync_fts_tnea(&db, doc);
+                    sync_fts_data(&db, doc);
                     let rt = tokio::runtime::Runtime::new()?;
-                    rt.block_on(sync_vec_tnea(&db, doc, base_delay))?;
+                    rt.block_on(sync_vec_data(&db, doc, base_delay))?;
                 }
             }
 

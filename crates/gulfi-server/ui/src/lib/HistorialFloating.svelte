@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onMount, onDestroy } from "svelte";
+    import { selectedDocument } from "../stores";
 
     type HistorialResponse = {
         id: number;
@@ -13,7 +14,9 @@
 
     async function fetchHistorial() {
         try {
-            const response = await fetch(`${apiUrl}/api/historial`);
+            const response = await fetch(
+                `${apiUrl}/api/${$selectedDocument}/historial`,
+            );
 
             if (response.ok) {
                 historialItems = await response.json();
@@ -21,7 +24,7 @@
                 console.error("Failed to fetch historial");
             }
         } catch (error) {
-            console.error("aaaa Error fetching historial:", error);
+            console.error("Error fetching historial:", error);
         }
     }
 

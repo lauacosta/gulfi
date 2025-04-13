@@ -2,6 +2,7 @@
     import { onMount } from "svelte";
     import type { Historial } from "../lib/types";
     import HistorialList from "../lib/HistorialList.svelte";
+    import { selectedDocument } from "../stores";
 
     const apiUrl = import.meta.env.VITE_API_URL;
 
@@ -10,20 +11,21 @@
     // WARN: Siempre se va a ver unicamente el query con su ultimo metodo de busqueda
     const fetchHistorial = async () => {
         try {
-            const response = await fetch(`${apiUrl}/api/historial-full`);
+            let fetchstr = `${apiUrl}/api/${$selectedDocument}/historial-full`;
+            console.log(fetchstr);
+            const response = await fetch(fetchstr);
 
             if (response.ok) {
                 const data: Historial[] = await response.json();
                 historial = data;
-                console.log(data);
             } else {
                 console.error(
-                    "Fallo al hacer fetch en en historial:",
+                    "Fallo al traer el historial:",
                     response.statusText,
                 );
             }
         } catch (error) {
-            console.error("Error al hacer fetch en en historial:", error);
+            console.error("Fallo al traer el historial:", error);
         }
     };
 

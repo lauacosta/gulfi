@@ -1,16 +1,12 @@
+use crate::SearchStrategy;
 use chrono::NaiveDateTime;
 use serde::Serialize;
-
-use crate::{SearchStrategy, Sexo};
 
 #[derive(Serialize, Debug, Clone)]
 pub struct HistorialFullView {
     id: u64,
     query: String,
     strategy: SearchStrategy,
-    sexo: Sexo,
-    edad_min: u64,
-    edad_max: u64,
     peso_fts: f32,
     peso_semantic: f32,
     neighbors: u64,
@@ -23,9 +19,6 @@ impl HistorialFullView {
         id: u64,
         query: String,
         strategy: SearchStrategy,
-        sexo: Sexo,
-        edad_min: u64,
-        edad_max: u64,
         peso_fts: f32,
         peso_semantic: f32,
         neighbors: u64,
@@ -35,9 +28,6 @@ impl HistorialFullView {
             id,
             query,
             strategy,
-            sexo,
-            edad_min,
-            edad_max,
             peso_fts,
             peso_semantic,
             neighbors,

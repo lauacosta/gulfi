@@ -9,7 +9,7 @@ use gulfi_query::{
 
 use reqwest::Client;
 use rusqlite::{
-    Connection, ToSql,
+    Connection, ToSql, params,
     types::{FromSql, FromSqlError, ToSqlOutput, ValueRef},
 };
 use serde::{Deserialize, Serialize};
@@ -412,7 +412,7 @@ impl SearchStrategy {
             rows: table,
         };
 
-        update_historial(&db, &params)?;
+        update_historial(&db, &params, document.name.clone())?;
 
         Json(table).into_http()
     }
@@ -466,12 +466,12 @@ enum SearchStrategyError {
     UnsupportedSearchStrategy(String),
 }
 
-fn update_historial(db: &Connection, values: &SearchParams) -> Result<(), HttpError> {
-    // let updated = db.execute(
-    //     "insert or replace into historial(query, strategy, sexo, edad_min, edad_max, peso_fts, peso_semantic, neighbors) values (?,?,?,?,?,?,?,?)",
-    //     params![values.search_str, values.strategy, values.sexo, values.edad_min, values.edad_max, values.peso_fts, values.peso_semantic, values.k_neighbors],
-    // )?;
-    // info!("{} registros fueron añadidos al historial!", updated);
+fn update_historial(db: &Connection, values: &SearchParams, doc: String) -> Result<(), HttpError> {
+    let updated = db.execute(
+        "insert or replace into historial(query, strategy, doc, peso_fts, peso_semantic, neighbors) values (?,?,?,?,?,?)",
+        params![values.search_str, values.strategy,doc, values.peso_fts, values.peso_semantic, values.k_neighbors],
+    )?;
+    info!("{} registros fueron añadidos al historial!", updated);
 
     Ok(())
 }

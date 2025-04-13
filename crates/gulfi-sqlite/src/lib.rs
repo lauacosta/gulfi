@@ -22,7 +22,7 @@ use zerocopy::IntoBytes;
 
 pub const DIMENSION: usize = 1536;
 
-pub async fn sync_vec_tnea(db: &Connection, doc: &Document, base_delay: u64) -> Result<()> {
+pub async fn sync_vec_data(db: &Connection, doc: &Document, base_delay: u64) -> Result<()> {
     let doc_name = doc.name.clone();
 
     let span = span!(Level::INFO, "Sincronizando tablas VEC", doc = doc_name);
@@ -100,7 +100,7 @@ pub async fn sync_vec_tnea(db: &Connection, doc: &Document, base_delay: u64) -> 
     Ok(())
 }
 
-pub fn sync_fts_tnea(db: &Connection, doc: &Document) {
+pub fn sync_fts_data(db: &Connection, doc: &Document) {
     let doc_name = doc.name.clone();
     let span = span!(Level::INFO, "Sincronizando tablas FTS", doc = doc_name);
     let _guard = span.enter();
@@ -158,9 +158,7 @@ pub fn setup_sqlite(db: &rusqlite::Connection, doc: &Document) -> Result<()> {
                 id integer primary key,
                 query text not null unique,
                 strategy text,
-                sexo text,
-                edad_min number,
-                edad_max number,
+                doc text,
                 peso_fts real,
                 peso_semantic real,
                 neighbors number,

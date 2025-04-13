@@ -1,13 +1,13 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import Table from "../lib/Table.svelte";
-    import DocumentSelector from "../lib/DocumentSelector.svelte";
     import HistorialFloating from "../lib/HistorialFloating.svelte";
     import type { ServerError, TableContent } from "../lib/types";
     import type { favoritesResponse } from "../lib/types";
     import type { SearchStrategy } from "../lib/types";
     import { writable } from "svelte/store";
     import { inputPopUp, renderSearchError } from "../lib/utils";
+    import { selectedDocument } from "../stores";
 
     const apiUrl = import.meta.env.VITE_API_URL;
 
@@ -421,8 +421,6 @@
                     </select>
                 </div>
 
-                <DocumentSelector />
-
                 {#if showOcultables}
                     <div class="search-group ocultable">
                         <label for="vecinos">
@@ -449,6 +447,12 @@
                 {:else}
                     <input type="hidden" name="k" value={k} />
                 {/if}
+
+                <input
+                    type="hidden"
+                    name="document"
+                    value={$selectedDocument}
+                />
 
                 {#if showBalanceSlider}
                     <div class="search-group balance-slider">

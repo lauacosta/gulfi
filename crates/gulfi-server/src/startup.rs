@@ -136,8 +136,11 @@ pub fn build_server(listener: TcpListener, state: AppState) -> Result<Serve<Rout
         )
         .route("/api/search", get(search))
         .route("/api/documents", get(documents))
-        .route("/api/historial", get(historial).delete(delete_historial))
-        .route("/api/historial-full", get(historial_full));
+        .route(
+            "/api/:doc/historial",
+            get(historial).delete(delete_historial),
+        )
+        .route("/api/:doc/historial-full", get(historial_full));
 
     let frontend_routes = Router::new()
         .route("/assets/*path", get(serve_ui))

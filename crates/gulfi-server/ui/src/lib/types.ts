@@ -16,13 +16,22 @@ export type Historial = {
     id: number;
     query: string;
     strategy: SearchStrategy;
-    sexo: "U" | "M" | "F";
-    edad_min: number;
-    edad_max: number;
+    doc: string,
     peso_fts: number;
     peso_semantic: number;
     neighbors: number;
     fecha: string;
+};
+
+export type Field = {
+    name: string;
+    unique: boolean;
+    vec_input: boolean;
+};
+
+export type Document = {
+    name: string;
+    fields: Field[];
 };
 
 
