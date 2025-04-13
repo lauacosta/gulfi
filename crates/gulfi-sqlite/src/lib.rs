@@ -169,6 +169,7 @@ pub fn setup_sqlite(db: &rusqlite::Connection, doc: &Document) -> Result<()> {
                 id integer primary key,
                 nombre text not null unique,
                 data text,
+                doc text,
                 busquedas text,
                 tipos text,
                 timestamp datetime default current_timestamp

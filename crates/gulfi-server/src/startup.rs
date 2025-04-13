@@ -131,7 +131,7 @@ pub fn build_server(listener: TcpListener, state: AppState) -> Result<Serve<Rout
     let api_routes = Router::new()
         .route("/api/health", get(health_check))
         .route(
-            "/api/favoritos",
+            "/api/:doc/favoritos",
             get(favoritos).post(add_favoritos).delete(delete_favoritos),
         )
         .route("/api/search", get(search))

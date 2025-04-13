@@ -14,9 +14,8 @@
 
     async function fetchHistorial() {
         try {
-            const response = await fetch(
-                `${apiUrl}/api/${$selectedDocument}/historial`,
-            );
+            let endpoint = `${apiUrl}/api/${$selectedDocument}/historial`;
+            const response = await fetch(endpoint);
 
             if (response.ok) {
                 historialItems = await response.json();
@@ -33,7 +32,7 @@
     async function deleteHistorialItem(id: number, queryText: string) {
         try {
             const deleteResponse = await fetch(
-                `${apiUrl}/api/historial?query=${encodeURIComponent(queryText)}`,
+                `${apiUrl}/api/${$selectedDocument}/historial?query=${encodeURIComponent(queryText)}`,
                 {
                     method: "DELETE",
                 },

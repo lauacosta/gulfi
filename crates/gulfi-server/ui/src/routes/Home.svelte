@@ -307,7 +307,15 @@
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `busqueda_${query.replace(/\s+/g, "_")}_${Date.now()}.csv`;
+
+        let now = new Date();
+        let day = String(now.getDate()).padStart(2, "0");
+        let month = String(now.getMonth() + 1).padStart(2, "0");
+        let year = now.getFullYear();
+
+        let dateNumber = Number(`${day}${month}${year}`);
+
+        a.download = `busqueda_${query.replace(/\s+/g, "_")}_${dateNumber}.csv`;
         a.click();
         URL.revokeObjectURL(url);
 
@@ -334,13 +342,16 @@
             };
 
             try {
-                const response = await fetch(`${apiUrl}/api/favoritos`, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
+                const response = await fetch(
+                    `${apiUrl}/api/${$selectedDocument}/favoritos`,
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify(data),
                     },
-                    body: JSON.stringify(data),
-                });
+                );
 
                 if (response.ok) {
                     heldSearches = [];
@@ -512,11 +523,9 @@
                     Búsqueda:
                     <span class="help-icon">
                         i
-                        <span class="search-tooltip"
-                            >El formato es "<query
-                                >, <key>:<value>"</value></key></query
-                            ></span
-                        >
+                        <span class="search-tooltip">
+                            [busqueda], [filtro 1:valor], ..., [filtro n:valor]
+                        </span>
                     </span>
                 </label>
                 <input

@@ -23,7 +23,7 @@
 
 <div class="top-bar">
     <label>
-        Select an option:
+        Documento:
         <select bind:value={$selectedDocument}>
             {#each options as option}
                 <option value={option}>{option}</option>
@@ -35,11 +35,3 @@
 <div class="content-wrapper">
     <slot />
 </div>
-
-<style>
-    .top-bar {
-        padding: 1rem;
-        background: #f0f0f0;
-        border-bottom: 1px solid #ccc;
-    }
-</style>

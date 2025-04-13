@@ -1,4 +1,5 @@
 use axum::Json;
+use axum::extract::Path;
 use axum::extract::Query;
 use chrono::NaiveDateTime;
 use eyre::{Result, eyre};
@@ -6,8 +7,8 @@ use serde::Serialize;
 use std::collections::HashMap;
 use tracing::debug;
 
-use axum::extract::State;
 use crate::into_http::HttpError;
+use axum::extract::State;
 use http::StatusCode;
 use rusqlite::Connection;
 use rusqlite::params;
@@ -31,10 +32,13 @@ pub struct FavoritosClient {
     pub favoritos: Vec<Resultados>,
 }
 
-pub async fn favoritos(State(app): State<AppState>) -> Result<Json<FavoritosClient>, HttpError> {
+pub async fn favoritos(
+    Path(doc): Path<String>,
+    State(app): State<AppState>,
+) -> Result<Json<FavoritosClient>, HttpError> {
     let db = Connection::open(app.db_path)
         .expect("Deberia ser un path valido a una base de datos SQLite");
-    let favoritos = get_favoritos(&db)?;
+    let favoritos = get_favoritos(&db, doc)?;
     let mut results = Vec::with_capacity(favoritos.favoritos.len());
     for f in &favoritos.favoritos {
         let id = f.id;
@@ -75,6 +79,7 @@ struct FavoritesReponse {
 
 #[tracing::instrument(skip(app, payload), name = "añadiendo busqueda a favoritos")]
 pub async fn add_favoritos(
+    Path(doc): Path<String>,
     State(app): State<AppState>,
     Json(payload): Json<FavParams>,
 ) -> Result<(StatusCode, String), HttpError> {
@@ -99,10 +104,10 @@ pub async fn add_favoritos(
     )?;
 
     let mut statement = db.prepare(
-        "insert into favoritos (nombre, data, busquedas,tipos, timestamp) values (?,?,?,?,datetime('now', 'localtime'))",
+        "insert into favoritos (nombre, data, doc, busquedas,tipos, timestamp) values (?,?,?,?,?,datetime('now', 'localtime'))",
     )?;
 
-    statement.execute(params![nombre, data, queries, tipos])?;
+    statement.execute(params![nombre, data, doc, queries, tipos])?;
 
     Ok((
         StatusCode::OK,
@@ -112,12 +117,13 @@ pub async fn add_favoritos(
 
 #[tracing::instrument(skip(app), name = "borrando busqueda de favoritos")]
 pub async fn delete_favoritos(
+    Path(doc): Path<String>,
     State(app): State<AppState>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Result<StatusCode, HttpError> {
     let db = Connection::open(app.db_path)
         .expect("Deberia ser un path valido a una base de datos SQLite");
-    let mut statement = db.prepare("delete from favoritos where nombre = ?")?;
+    let mut statement = db.prepare("delete from favoritos where nombre = ? and doc = ?")?;
 
     let nombre = {
         if let Some(nombre) = params.get("nombre") {
@@ -130,18 +136,18 @@ pub async fn delete_favoritos(
         }
     };
 
-    statement.execute(params![nombre])?;
+    statement.execute(params![nombre, doc])?;
 
     Ok(StatusCode::OK)
 }
 
-fn get_favoritos(db: &Connection) -> Result<FavoritosView, HttpError> {
+fn get_favoritos(db: &Connection, doc: String) -> Result<FavoritosView, HttpError> {
     let mut statement = db.prepare(
-        "select id, nombre, data, timestamp, busquedas, tipos from favoritos order by timestamp desc",
+        "select id, nombre, data, timestamp, busquedas, tipos from favoritos where doc = :doc order by timestamp desc",
     )?;
 
     let rows = statement
-        .query_map([], |row| {
+        .query_map([doc], |row| {
             let id: u64 = row.get(0).unwrap_or_default();
             let nombre: String = row.get(1).unwrap_or_default();
             let data: String = row.get(2).unwrap_or_default();

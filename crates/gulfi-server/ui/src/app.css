@@ -1125,12 +1125,23 @@ select {
 }
 
 .error-box {
-    background-color: #cc241d;
-    border: 1px solid #9d0006;
-    border-radius: 6px;
-    padding: 1rem;
-    margin-top: 1rem;
-    color: white;
-    font-weight: bold;
     box-shadow: var(--my-popup-shadow);
+    background-color: #fee2e2;
+    color: #b91c1c;
+    padding: 12px;
+    border-radius: 6px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+}
+
+.top-bar {
+    padding: 1rem;
+    background-color: var(--my-dark-gray);
+    color: white;
+    width: 100%;
+}
+
+.top-bar select {
+    width: 10%;
 }
