@@ -83,10 +83,10 @@ fn main() -> eyre::Result<()> {
                     };
 
                     rt.block_on(async {
-                        try_join!(run_server(configuration, start), frontend_future)
+                        try_join!(run_server(configuration, start, documents), frontend_future)
                     })?;
                 }
-                Mode::Prod => rt.block_on(run_server(configuration, start))?,
+                Mode::Prod => rt.block_on(run_server(configuration, start, documents))?,
             }
 
             #[cfg(not(debug_assertions))]

@@ -18,17 +18,7 @@
                 "unique": true
             },
             {
-                "name": "nombre",
-                "vec_input": false,
-                "unique": false
-            },
-            {
                 "name": "sexo",
-                "vec_input": false,
-                "unique": false
-            },
-            {
-                "name": "fecha_nacimiento",
                 "vec_input": false,
                 "unique": false
             },

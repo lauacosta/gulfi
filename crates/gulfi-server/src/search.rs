@@ -2,6 +2,10 @@ use axum::Json;
 use eyre::Report;
 use gulfi_common::{HttpError, IntoHttp, SearchResult, SearchString};
 use gulfi_openai::embed_single;
+use gulfi_query::{
+    Constraint::{Exact, GreaterThan, LesserThan},
+    Query,
+};
 use gulfi_sqlite::SearchQueryBuilder;
 use reqwest::Client;
 use rusqlite::{
@@ -13,10 +17,11 @@ use thiserror::Error;
 use tracing::{debug, info};
 use zerocopy::IntoBytes;
 
-use crate::{Sexo, views::TableView};
+use crate::{Sexo, startup::AppState, views::TableView};
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default)]
 pub enum SearchStrategy {
+    #[default]
     Fts,
     Semantic,
     ReciprocalRankFusion,
@@ -28,6 +33,7 @@ pub enum SearchStrategy {
 pub struct SearchParams {
     #[serde(rename = "query")]
     pub search_str: String,
+    pub document: String,
     pub strategy: SearchStrategy,
     pub sexo: Sexo,
     pub edad_min: u64,
@@ -41,14 +47,20 @@ pub struct SearchParams {
 impl SearchStrategy {
     pub async fn search(
         self,
-        db_path: &str,
+        app_state: &AppState,
         client: &Client,
         params: SearchParams,
     ) -> SearchResult {
-        let db = Connection::open(db_path)
+        let db = Connection::open(app_state.db_path.clone())
             .expect("Deberia ser un path valido a una base de datos sqlite.");
 
         let search = SearchString::parse(&params.search_str);
+
+        let document = app_state
+            .documents
+            .iter()
+            .find(|x| x.name.to_lowercase() == params.document.to_lowercase())
+            .unwrap();
 
         debug!(?search);
 
@@ -64,51 +76,95 @@ impl SearchStrategy {
         // FIX: Odio tener que usar el QueryBuilder
         let (column_names, table, total_query_count) = match self {
             SearchStrategy::Fts => {
-                let search = &"select
-                    rank as score,
-                    email,
-                    provincia,
-                    ciudad,
-                    edad,
-                    sexo,
-                    highlight(fts_tnea, 0, '<b style=\"color: green;\">', '</b>') as input,
-                    'fts' as match_type
-                    from fts_tnea
-                    where vec_input match '\"' || :query || '\"'
-                    "
-                .to_owned();
+                let string = format!("query:{}", params.search_str);
+                let query = Query::parse(&string).unwrap();
 
-                let mut search_query = SearchQueryBuilder::new(&db, search);
+                let search = {
+                    let start = "select rank as score,";
+                    let mut rest = String::new();
 
-                search_query.add_bindings(&[&query]);
-
-                search_query.add_statement(
-                    " and cast(edad as integer) between :edad_min and :edad_max ",
-                    &[&params.edad_min, &params.edad_max],
-                );
-
-                if provincia.is_some() {
-                    search_query.add_statement(" and provincia like :provincia", &[&provincia]);
-                }
-                if ciudad.is_some() {
-                    search_query.add_statement(" and ciudad like :ciudad", &[&ciudad]);
-                }
-
-                match params.sexo {
-                    Sexo::M => {
-                        search_query.add_statement(" and sexo = :sexo", &[&params.sexo]);
+                    for field in &document.fields {
+                        if !field.vec_input {
+                            rest.push_str(&format!("{},", field.name));
+                        }
                     }
-                    Sexo::F => {
-                        search_query.add_statement(" and sexo = :sexo", &[&params.sexo]);
-                    }
-                    Sexo::U => (),
+
+                    format!(
+                        "{start}{rest}  highlight(fts_tnea, 0, '<b style=\"color: green;\">', '</b>') as input, 'fts' as match_type from fts_{}",
+                        document.name
+                    )
                 };
 
-                search_query.add_statement_str(" order by rank");
+                // dbg!("{:?}", &search);
 
-                let (c, t, tqc) = search_query.build().execute()?;
+                let mut conditions = Vec::new();
+                let mut bindings: Vec<(String, String)> = Vec::new();
 
-                (c, t, tqc)
+                if let Some(contraints) = &query.constraints {
+                    for (k, values) in contraints {
+                        for (i, cons) in values.iter().enumerate() {
+                            let param_name = format!(":{}_{i}", k);
+                            let condition = match cons {
+                                Exact(_) => format!("{k} = {param_name}"),
+                                GreaterThan(_) => format!("{k} > {param_name}"),
+                                LesserThan(_) => format!("{k} < {param_name}"),
+                            };
+
+                            let value = match cons {
+                                Exact(val) => val,
+                                GreaterThan(val) => val,
+                                LesserThan(val) => val,
+                            };
+
+                            conditions.push(condition);
+                            bindings.push((param_name.clone(), value.clone()));
+                        }
+                    }
+                }
+
+                let query_param = " :query ";
+                conditions.push(format!("vec_input match '\"' || {query_param} || '\"' "));
+                bindings.push((query_param.to_owned(), query.query.to_owned()));
+
+                let where_clause = if conditions.is_empty() {
+                    String::new()
+                } else {
+                    format!("where {}", conditions.join(" and "))
+                };
+
+                let sql = format!("{search} {where_clause}");
+
+                dbg!("{:#?}", &sql);
+
+                let mut stmt = db.prepare(&sql)?;
+
+                let binding_values: Vec<&dyn ToSql> =
+                    bindings.iter().map(|(_, val)| val as &dyn ToSql).collect();
+
+                let column_names: Vec<String> =
+                    stmt.column_names().into_iter().map(String::from).collect();
+
+                let table = stmt
+                    .query_map(&*binding_values, |row| {
+                        let mut data = Vec::new();
+
+                        for i in 0..row.as_ref().column_count() {
+                            let val = match row.get_ref(i)? {
+                                ValueRef::Text(text) => String::from_utf8_lossy(text).into_owned(),
+                                ValueRef::Real(real) => format!("{:.3}", -1. * real),
+                                ValueRef::Integer(int) => int.to_string(),
+                                _ => "Tipo de dato desconocido".to_owned(),
+                            };
+                            data.push(val);
+                        }
+
+                        Ok(data)
+                    })?
+                    .collect::<Result<Vec<Vec<String>>, _>>()?;
+
+                let count = table.len();
+
+                (column_names, table, count)
             }
             SearchStrategy::Semantic => {
                 let query_emb = embed_single(query.clone(), client)
@@ -317,12 +373,6 @@ impl FromSql for SearchStrategy {
             },
             _ => Err(FromSqlError::InvalidType),
         }
-    }
-}
-
-impl Default for SearchStrategy {
-    fn default() -> Self {
-        SearchStrategy::Fts
     }
 }
 

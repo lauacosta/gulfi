@@ -515,6 +515,9 @@
                 <input type="hidden" name="k" value={k} />
             {/if}
 
+            <!-- HIDDEN -->
+            <input type="hidden" name="document" value="tnea" />
+
             {#if showBalanceSlider}
                 <div class="search-group balance-slider">
                     <label for="balanceSlider"

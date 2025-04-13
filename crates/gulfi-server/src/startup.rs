@@ -1,6 +1,7 @@
 use axum::Extension;
 use color_eyre::owo_colors::OwoColorize;
 use eyre::Result;
+use gulfi_common::Document;
 use gulfi_sqlite::init_sqlite;
 use http::Method;
 use std::io;
@@ -25,7 +26,7 @@ use crate::routes::{
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub db_path: String,
-    // pub cache: Cache,
+    pub documents: Vec<Document>, // pub cache: Cache,
 }
 
 #[derive(Debug)]
@@ -42,7 +43,10 @@ impl Application {
     /// # Panics
     /// Entrará en panicos si no es capaz de:
     /// 1. Vincular un `tokio::net::TcpListener` a la dirección dada.
-    pub async fn build(configuration: &ApplicationSettings) -> Result<Self> {
+    pub async fn build(
+        configuration: &ApplicationSettings,
+        documents: Vec<Document>,
+    ) -> Result<Self> {
         let address = format!("{}:{}", configuration.host, configuration.port);
 
         let listener = match TcpListener::bind(&address).await {
@@ -69,7 +73,7 @@ impl Application {
         let db_path = init_sqlite()?;
         // let cache = configuration.cache.clone();
 
-        let state = AppState { db_path };
+        let state = AppState { db_path, documents };
 
         let server = build_server(listener, state)?;
 
@@ -186,8 +190,12 @@ pub fn build_server(listener: TcpListener, state: AppState) -> Result<Serve<Rout
 }
 
 // #[instrument(skip(configuration))]
-pub async fn run_server(configuration: ApplicationSettings, start: Instant) -> Result<()> {
-    match Application::build(&configuration).await {
+pub async fn run_server(
+    configuration: ApplicationSettings,
+    start: Instant,
+    documents: Vec<Document>,
+) -> Result<()> {
+    match Application::build(&configuration, documents).await {
         Ok(app) => {
             let url = format!("http://{}:{}", app.host(), app.port());
 

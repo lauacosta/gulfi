@@ -13,5 +13,5 @@ pub async fn search(
 ) -> SearchResult {
     debug!(?params);
 
-    SearchStrategy::search(params.strategy, &app.db_path, &client, params).await
+    SearchStrategy::search(params.strategy, &app, &client, params).await
 }

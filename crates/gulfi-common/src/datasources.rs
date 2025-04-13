@@ -11,7 +11,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use tracing::{error, info, warn};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Document {
     #[serde(deserialize_with = "to_lowercase")]
     pub name: String,
@@ -68,7 +68,7 @@ impl Document {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Field {
     pub name: String,
     pub vec_input: bool,

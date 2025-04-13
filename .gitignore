@@ -6,7 +6,7 @@ gulfi.db
 /configuration
 /dist
 /sql
-/datasources
+datasources
 /backup
 
 /release
