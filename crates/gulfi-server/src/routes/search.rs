@@ -1,5 +1,5 @@
 use axum::{Extension, extract::State};
-use gulfi_common::SearchResult;
+use crate::into_http::SearchResult;
 use tracing::{debug, instrument};
 
 use crate::{SearchStrategy, extractors::SearchExtractor, search::SearchParams, startup::AppState};

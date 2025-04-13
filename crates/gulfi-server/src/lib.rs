@@ -1,4 +1,5 @@
 pub mod extractors;
+pub mod into_http;
 pub mod routes;
 pub mod search;
 pub mod startup;

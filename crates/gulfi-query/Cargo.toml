@@ -6,3 +6,5 @@ version.workspace = true
 [dependencies]
 thiserror = "2.0.12"
 gulfi-common = {path="../gulfi-common/"}
+
+ammonia = "4.0.0"

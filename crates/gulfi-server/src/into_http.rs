@@ -4,6 +4,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use chrono::Local;
+use gulfi_query::ParsingError;
 use serde_json::json;
 use std::io::Write;
 use termcolor::{ColorChoice, StandardStream};
@@ -23,7 +24,15 @@ impl<T: IntoResponse> IntoHttp for T {
 
 #[derive(Debug)]
 pub enum HttpError {
-    Internal { err: String },
+    Internal {
+        err: String,
+    },
+    BadRequest {
+        message: String,
+        valid_fields: Vec<String>,
+        invalid_fields: Vec<String>,
+    },
+    Parsing(ParsingError),
 }
 
 impl HttpError {
@@ -47,6 +56,18 @@ impl HttpError {
 
         HttpError::Internal {
             err: err.to_string(),
+        }
+    }
+
+    pub fn bad_request(
+        message: impl Into<String>,
+        valid_fields: Vec<String>,
+        invalid_fields: Vec<String>,
+    ) -> Self {
+        HttpError::BadRequest {
+            message: message.into(),
+            valid_fields,
+            invalid_fields,
         }
     }
 }
@@ -76,6 +97,50 @@ impl IntoResponse for HttpError {
                 Json(json!( { "err":err, "date":date })),
             )
                 .into_response(),
+            HttpError::BadRequest {
+                message,
+                valid_fields,
+                invalid_fields,
+            } => (
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "err": message,
+                    "type": "invalid_fields",
+                    "valid_fields": valid_fields,
+                    "invalid_fields": invalid_fields,
+                    "date": date
+                })),
+            )
+                .into_response(),
+            HttpError::Parsing(e) => match e {
+                ParsingError::InvalidToken(_) => (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({
+                        "err": e.to_string(),
+                        "type": "invalid_token",
+                        "date": date
+
+                    })),
+                )
+                    .into_response(),
+                ParsingError::MissingQuery
+                | ParsingError::MissingValue
+                | ParsingError::MissingKey => (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({
+                        "err": e.to_string(),
+                        "type": "parsing_error",
+                        "date": date
+                    })),
+                )
+                    .into_response(),
+            },
         }
+    }
+}
+
+impl From<ParsingError> for HttpError {
+    fn from(e: ParsingError) -> Self {
+        HttpError::Parsing(e)
     }
 }

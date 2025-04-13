@@ -19,8 +19,8 @@ use tracing::{Level, error, error_span, info};
 
 use crate::ApplicationSettings;
 use crate::routes::{
-    add_favoritos, delete_favoritos, delete_historial, favoritos, health_check, historial,
-    historial_full, search, serve_ui,
+    add_favoritos, delete_favoritos, delete_historial, documents, favoritos, health_check,
+    historial, historial_full, search, serve_ui,
 };
 
 #[derive(Debug, Clone)]
@@ -135,6 +135,7 @@ pub fn build_server(listener: TcpListener, state: AppState) -> Result<Serve<Rout
             get(favoritos).post(add_favoritos).delete(delete_favoritos),
         )
         .route("/api/search", get(search))
+        .route("/api/documents", get(documents))
         .route("/api/historial", get(historial).delete(delete_historial))
         .route("/api/historial-full", get(historial_full));
 

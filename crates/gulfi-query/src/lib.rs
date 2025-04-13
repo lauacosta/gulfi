@@ -1,4 +1,3 @@
-use gulfi_common::clean_html;
 use std::collections::HashMap;
 use thiserror::Error;
 
@@ -240,5 +239,14 @@ mod tests {
             Err(ParsingError::InvalidToken(token)) => assert_eq!(token, "city; Corrientes"),
             _ => panic!("Expected InvalidToken error"),
         }
+    }
+}
+
+#[inline]
+pub fn clean_html(str: String) -> String {
+    if ammonia::is_html(&str) {
+        ammonia::clean(&str)
+    } else {
+        str
     }
 }

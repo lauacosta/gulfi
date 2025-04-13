@@ -14,5 +14,4 @@ rusqlite.workspace = true
 tracing.workspace = true
 serde_urlencoded.workspace = true
 chrono.workspace = true
-termcolor = "1.4.1"
 ammonia = "4.0.0"

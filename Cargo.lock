@@ -782,7 +782,6 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_urlencoded",
- "termcolor",
  "tracing",
 ]
 
@@ -814,6 +813,7 @@ dependencies = [
 name = "gulfi-query"
 version = "1.2.0"
 dependencies = [
+ "ammonia",
  "gulfi-common",
  "thiserror 2.0.12",
 ]
@@ -839,6 +839,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_urlencoded",
+ "termcolor",
  "thiserror 2.0.12",
  "tokio",
  "tower",

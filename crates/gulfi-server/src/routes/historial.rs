@@ -7,7 +7,7 @@ use axum::{
     Json,
     extract::{Query, State},
 };
-use gulfi_common::HttpError;
+use crate::into_http::HttpError;
 use http::StatusCode;
 use rusqlite::Connection;
 use tracing::debug;

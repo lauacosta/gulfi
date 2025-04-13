@@ -1,15 +1,5 @@
 [
     {
-        "name": "PRUEBA",
-        "fields": [
-            {
-                "name": "email",
-                "vec_input": false,
-                "unique": true
-            }
-        ]
-    },
-    {
         "name": "TNEA",
         "fields": [
             {

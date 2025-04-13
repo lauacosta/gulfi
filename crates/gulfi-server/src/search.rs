@@ -1,6 +1,6 @@
+use crate::into_http::{HttpError, IntoHttp, SearchResult};
 use axum::Json;
 use eyre::Report;
-use gulfi_common::{HttpError, IntoHttp, SearchResult};
 use gulfi_openai::embed_single;
 use gulfi_query::{
     Constraint::{Exact, GreaterThan, LesserThan},
@@ -9,7 +9,7 @@ use gulfi_query::{
 
 use reqwest::Client;
 use rusqlite::{
-    Connection, ToSql, params,
+    Connection, ToSql,
     types::{FromSql, FromSqlError, ToSqlOutput, ValueRef},
 };
 use serde::{Deserialize, Serialize};
@@ -17,7 +17,7 @@ use thiserror::Error;
 use tracing::{debug, info};
 use zerocopy::IntoBytes;
 
-use crate::{Sexo, startup::AppState, views::TableView};
+use crate::{startup::AppState, views::TableView};
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Default)]
 pub enum SearchStrategy {
@@ -33,9 +33,6 @@ pub struct SearchParams {
     pub search_str: String,
     pub document: String,
     pub strategy: SearchStrategy,
-    pub sexo: Sexo,
-    pub edad_min: u64,
-    pub edad_max: u64,
     pub peso_fts: f32,
     pub peso_semantic: f32,
     #[serde(rename = "k")]
@@ -64,7 +61,35 @@ impl SearchStrategy {
         let k = params.k_neighbors;
 
         let string = format!("query:{}", params.search_str);
-        let query = Query::parse(&string).unwrap();
+        let query = Query::parse(&string).map_err(HttpError::from)?;
+
+        let (valid_fields, invalid_fields) = {
+            let mut invalid = Vec::new();
+            let fields: Vec<_> = document
+                .fields
+                .iter()
+                .filter(|v| !v.vec_input)
+                .map(|v| v.name.clone())
+                .collect();
+
+            if let Some(constraints) = &query.constraints {
+                for (k, _) in constraints.iter() {
+                    if !fields.contains(k) {
+                        invalid.push(k.clone());
+                    }
+                }
+            }
+
+            (fields, invalid)
+        };
+
+        if !invalid_fields.is_empty() {
+            return Err(HttpError::BadRequest {
+                message: "Buscas campos que no existen en tu documento.".to_owned(),
+                valid_fields,
+                invalid_fields,
+            });
+        }
 
         debug!(?query);
 
@@ -123,7 +148,7 @@ impl SearchStrategy {
 
                 let sql = format!("{search} {where_clause}");
 
-                dbg!("{:#?}", &sql);
+                // dbg!("{:#?}", &sql);
 
                 let mut stmt = db.prepare(&sql)?;
                 let column_names: Vec<String> =
@@ -214,8 +239,6 @@ impl SearchStrategy {
                 };
 
                 let sql = format!("{search} {where_clause}");
-
-                dbg!("{:#?}", &sql);
 
                 let mut stmt = db.prepare(&sql)?;
                 let column_names: Vec<String> =
@@ -347,8 +370,8 @@ impl SearchStrategy {
 
                 let sql = build_final_query(&where_clause);
 
-                dbg!("{:#?}", &sql);
-                dbg!("{:#?}", &binding_values.len());
+                // dbg!("{:#?}", &sql);
+                // dbg!("{:#?}", &binding_values.len());
 
                 let mut stmt = db.prepare(&sql)?;
                 let column_names: Vec<String> =
@@ -444,11 +467,11 @@ enum SearchStrategyError {
 }
 
 fn update_historial(db: &Connection, values: &SearchParams) -> Result<(), HttpError> {
-    let updated = db.execute(
-        "insert or replace into historial(query, strategy, sexo, edad_min, edad_max, peso_fts, peso_semantic, neighbors) values (?,?,?,?,?,?,?,?)",
-        params![values.search_str, values.strategy, values.sexo, values.edad_min, values.edad_max, values.peso_fts, values.peso_semantic, values.k_neighbors],
-    )?;
-    info!("{} registros fueron añadidos al historial!", updated);
+    // let updated = db.execute(
+    //     "insert or replace into historial(query, strategy, sexo, edad_min, edad_max, peso_fts, peso_semantic, neighbors) values (?,?,?,?,?,?,?,?)",
+    //     params![values.search_str, values.strategy, values.sexo, values.edad_min, values.edad_max, values.peso_fts, values.peso_semantic, values.k_neighbors],
+    // )?;
+    // info!("{} registros fueron añadidos al historial!", updated);
 
     Ok(())
 }

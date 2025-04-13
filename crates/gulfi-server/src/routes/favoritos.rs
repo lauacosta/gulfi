@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use tracing::debug;
 
 use axum::extract::State;
-use gulfi_common::HttpError;
+use crate::into_http::HttpError;
 use http::StatusCode;
 use rusqlite::Connection;
 use rusqlite::params;

@@ -1,12 +1,13 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import Table from "../lib/Table.svelte";
+    import DocumentSelector from "../lib/DocumentSelector.svelte";
     import HistorialFloating from "../lib/HistorialFloating.svelte";
-    import type { TableContent } from "../lib/types";
+    import type { ServerError, TableContent } from "../lib/types";
     import type { favoritesResponse } from "../lib/types";
-    import type { searchStrategy as SearchStrategy } from "../lib/types";
+    import type { SearchStrategy } from "../lib/types";
     import { writable } from "svelte/store";
-    import { inputPopUp } from "../lib/utils";
+    import { inputPopUp, renderSearchError } from "../lib/utils";
 
     const apiUrl = import.meta.env.VITE_API_URL;
 
@@ -25,8 +26,10 @@
     let downloadBtnDisabled = $state(true);
 
     let query = $state("");
+    let error: ServerError | null = $state(null);
 
     let strategy: SearchStrategy = $state("Fts");
+
     let sexo = $state("U");
     let edad_min = $state(0);
     let edad_max = $state(100);
@@ -140,19 +143,29 @@
             const response = await fetch(
                 `${apiUrl}/api/search?${searchParams.toString()}`,
             );
-            if (response.ok) {
-                const table: TableContent = await response.json();
 
-                tableContent.set(table);
-
-                requestAnimationFrame(() => {
-                    initPagination();
-                    guardarResultados();
-                    // updateHistorial();
-                });
+            if (!response.ok) {
+                const json = await response.json();
+                error = json as ServerError;
+                return;
             }
+
+            error = null;
+            const table: TableContent = await response.json();
+
+            tableContent.set(table);
+
+            requestAnimationFrame(() => {
+                initPagination();
+                guardarResultados();
+                // updateHistorial();
+            });
         } catch (error) {
             console.error("Error en la búsqueda:", error);
+            error = {
+                err: "Error desconocido",
+                date: new Date().toISOString(),
+            };
         }
     }
 
@@ -294,7 +307,7 @@
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = "busqueda.csv";
+        a.download = `busqueda_${query.replace(/\s+/g, "_")}_${Date.now()}.csv`;
         a.click();
         URL.revokeObjectURL(url);
 
@@ -310,9 +323,7 @@
         if (input === null) {
             return;
         }
-        console.log(input);
         const name = input?.replace(/[^a-zA-Z0-9_\-\s]/g, "");
-        console.log(`name ${name}`);
 
         if (name !== null && name !== "") {
             let json_str = JSON.stringify(heldSearches);
@@ -391,14 +402,116 @@
 
     <div class="form-container">
         <form onsubmit={handleSearch} class="search-form" id="search-form">
-            <div class="search-group">
-                <label for="search-input"
-                    >Búsqueda:
+            <!-- Top row: Configuration options -->
+            <div class="config-options">
+                <div class="search-group">
+                    <label for="strategy">Método de Búsqueda:</label>
+                    <select
+                        id="strategy"
+                        name="strategy"
+                        class="search-type"
+                        bind:value={strategy}
+                        onchange={handleStrategyChange}
+                    >
+                        <option value="Fts">Full Text Search</option>
+                        <option value="Semantic">Semántica</option>
+                        <option value="ReciprocalRankFusion"
+                            >Reciprocal Rank Fusion</option
+                        >
+                    </select>
+                </div>
+
+                <DocumentSelector />
+
+                {#if showOcultables}
+                    <div class="search-group ocultable">
+                        <label for="vecinos">
+                            N° de Vecinos:
+                            <span class="help-icon">
+                                i
+                                <span class="search-tooltip"
+                                    >Representa el número de resultados más
+                                    cercanos que se quiere buscar.</span
+                                >
+                            </span>
+                        </label>
+                        <div class="age-range">
+                            <input
+                                type="number"
+                                id="vecinos"
+                                name="k"
+                                min="1"
+                                max="10000"
+                                bind:value={k}
+                            />
+                        </div>
+                    </div>
+                {:else}
+                    <input type="hidden" name="k" value={k} />
+                {/if}
+
+                {#if showBalanceSlider}
+                    <div class="search-group balance-slider">
+                        <label for="balanceSlider">
+                            Pesos:
+                            <span class="help-icon">
+                                i
+                                <span class="search-tooltip"
+                                    >Representa el compromiso de asignarle más
+                                    importancia a los resultados de cada
+                                    búsqueda.</span
+                                >
+                            </span>
+                        </label>
+                        <input
+                            type="range"
+                            id="balanceSlider"
+                            min="0"
+                            max="100"
+                            bind:value={sliderValue}
+                            oninput={updateSliderValues}
+                        />
+                        <p>
+                            Peso FTS: <span
+                                id="value1Display"
+                                class="slider-value">{peso_fts}</span
+                            >
+                        </p>
+                        <p>
+                            Peso Semantic: <span
+                                id="value2Display"
+                                class="slider-value">{peso_semantic}</span
+                            >
+                        </p>
+                    </div>
+                {/if}
+
+                <div class="search-group">
+                    <input
+                        type="hidden"
+                        id="hiddenValue1"
+                        name="peso_fts"
+                        value={peso_fts}
+                    />
+                    <input
+                        type="hidden"
+                        id="hiddenValue2"
+                        name="peso_semantic"
+                        value={peso_semantic}
+                    />
+                </div>
+            </div>
+
+            <!-- Middle row: Search bar (full width) -->
+            <div class="search-group search-bar full-width">
+                <label for="search-input">
+                    Búsqueda:
                     <span class="help-icon">
                         i
                         <span class="search-tooltip"
-                            >El formato es "query | provincia, ciudad", los
-                            campos provincia y ciudad son opcionales.</span
+                            >El formato es "<query
+                                >, <key>:<value>"</value></key></query
+                            ></span
                         >
                     </span>
                 </label>
@@ -416,157 +529,13 @@
                 </p>
             </div>
 
-            <div class="search-group">
-                <label for="strategy">Método de Búsqueda:</label>
-                <select
-                    id="strategy"
-                    name="strategy"
-                    class="search-type"
-                    bind:value={strategy}
-                    onchange={handleStrategyChange}
-                >
-                    <option value="Fts">Full Text Search</option>
-                    <option value="Semantic">Semántica</option>
-                    <option value="ReciprocalRankFusion"
-                        >Reciprocal Rank Fusion</option
-                    >
-                </select>
-            </div>
-
-            <div class="search-group">
-                <label>Sexo:</label>
-                <div class="radio-group">
-                    <input
-                        id="radio1"
-                        type="radio"
-                        name="sexo"
-                        value="U"
-                        bind:group={sexo}
-                    />
-                    <label for="radio1">Todos</label>
-                    <input
-                        id="radio2"
-                        type="radio"
-                        name="sexo"
-                        value="M"
-                        bind:group={sexo}
-                    />
-                    <label for="radio2"> Masculino </label>
-                    <input
-                        id="radio3"
-                        type="radio"
-                        name="sexo"
-                        value="F"
-                        bind:group={sexo}
-                    />
-
-                    <label for="radio3"> Femenino </label>
-                </div>
-            </div>
-
-            <div class="search-group">
-                <label>Rango de Edad:</label>
-                <div class="age-range">
-                    <input
-                        type="number"
-                        id="age_min"
-                        name="edad_min"
-                        min="0"
-                        max="100"
-                        bind:value={edad_min}
-                        placeholder="Mínimo"
-                    />
-                    <input
-                        type="number"
-                        id="age_max"
-                        name="edad_max"
-                        min="0"
-                        max="100"
-                        bind:value={edad_max}
-                        placeholder="Máximo"
-                    />
-                </div>
-            </div>
-
-            {#if showOcultables}
-                <div class="search-group ocultable">
-                    <label for="vecinos"
-                        >N° de Vecinos:
-                        <span class="help-icon">
-                            i
-                            <span class="search-tooltip"
-                                >Representa el número de resultados más cercanos
-                                que se quiere buscar.</span
-                            >
-                        </span>
-                    </label>
-                    <div class="age-range">
-                        <input
-                            type="number"
-                            id="vecinos"
-                            name="k"
-                            min="1"
-                            max="10000"
-                            bind:value={k}
-                        />
-                    </div>
-                </div>
-            {:else}
-                <input type="hidden" name="k" value={k} />
-            {/if}
-
-            <!-- HIDDEN -->
-            <input type="hidden" name="document" value="tnea" />
-
-            {#if showBalanceSlider}
-                <div class="search-group balance-slider">
-                    <label for="balanceSlider"
-                        >Pesos:
-                        <span class="help-icon">
-                            i
-                            <span class="search-tooltip"
-                                >Representa el compromiso de asignarle más
-                                importancia a los resultados de cada búsqueda.</span
-                            >
-                        </span>
-                    </label>
-                    <input
-                        type="range"
-                        id="balanceSlider"
-                        min="0"
-                        max="100"
-                        bind:value={sliderValue}
-                        oninput={updateSliderValues}
-                    />
-                    <p>
-                        Peso FTS: <span id="value1Display" class="slider-value"
-                            >{peso_fts}</span
-                        >
-                    </p>
-                    <p>
-                        Peso Semantic: <span
-                            id="value2Display"
-                            class="slider-value">{peso_semantic}</span
-                        >
-                    </p>
+            {#if error}
+                <div class="error-box">
+                    <p>{renderSearchError(error)}</p>
                 </div>
             {/if}
 
-            <div class="search-group">
-                <input
-                    type="hidden"
-                    id="hiddenValue1"
-                    name="peso_fts"
-                    value={peso_fts}
-                />
-                <input
-                    type="hidden"
-                    id="hiddenValue2"
-                    name="peso_semantic"
-                    value={peso_semantic}
-                />
-            </div>
-
+            <!-- Bottom row: Buttons -->
             <div class="button-container">
                 <button
                     aria-label="Buscar"
@@ -630,11 +599,12 @@
                     >
                 </button>
             </div>
+
+            <div class="tooltip">
+                Presiona Ctrl + b para empezar a buscar. Presiona Ctrl + Shift +
+                s para descargar.
+            </div>
         </form>
-        <div class="tooltip">
-            Presiona Ctrl + b para empezar a buscar. Presiona Ctrl + Shift + s
-            para descargar.
-        </div>
     </div>
 
     <div id="table-content">

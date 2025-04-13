@@ -9,3 +9,6 @@ pub use historial::*;
 mod index;
 pub(crate) mod search;
 pub use search::*;
+
+mod documentos;
+pub use documentos::*;
