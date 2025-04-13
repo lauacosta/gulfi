@@ -1,3 +1,4 @@
+use gulfi_common::clean_html;
 use std::collections::HashMap;
 use thiserror::Error;
 
@@ -21,13 +22,16 @@ pub enum ParsingError {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Query<'a> {
-    pub query: &'a str,
+pub struct Query {
+    pub query: String,
     pub constraints: Option<HashMap<String, Vec<Constraint>>>,
 }
 
-impl<'a> Query<'a> {
-    pub fn parse(input: &'a str) -> Result<Self, ParsingError> {
+impl Query {
+    pub fn parse(input: &str) -> Result<Self, ParsingError> {
+        let input_clean = clean_html(input.to_owned());
+        let input = input_clean.as_str();
+
         let mut constraints: HashMap<String, Vec<Constraint>> = HashMap::new();
 
         let (lhs, rest) = match input.split_once(',') {
@@ -86,7 +90,7 @@ impl<'a> Query<'a> {
         }
 
         Ok(Self {
-            query,
+            query: query.to_owned(),
             constraints: if constraints.is_empty() {
                 None
             } else {
@@ -116,7 +120,7 @@ mod tests {
         assert_eq!(
             result,
             Query {
-                query: "Lautaro",
+                query: "Lautaro".to_owned(),
                 constraints: None,
             }
         )
@@ -139,7 +143,7 @@ mod tests {
         assert_eq!(
             result,
             Query {
-                query: "Lautaro",
+                query: "Lautaro".to_owned(),
                 constraints: Some(expected),
             }
         )
@@ -160,7 +164,7 @@ mod tests {
         assert_eq!(
             result,
             Query {
-                query: "Lautaro",
+                query: "Lautaro".to_owned(),
                 constraints: Some(expected),
             }
         )
@@ -193,7 +197,7 @@ mod tests {
         assert_eq!(
             result,
             Query {
-                query: "Lautaro",
+                query: "Lautaro".to_owned(),
                 constraints: Some(expected),
             }
         )
