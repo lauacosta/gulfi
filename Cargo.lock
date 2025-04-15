@@ -790,6 +790,7 @@ dependencies = [
 name = "gulfi-helper"
 version = "1.2.0"
 dependencies = [
+ "camino",
  "color-eyre",
  "eyre",
  "gulfi-common",

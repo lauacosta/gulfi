@@ -1,5 +1,6 @@
-use std::fs::File;
-use std::io::{self, Write};
+use std::fs::{File, OpenOptions};
+use std::io::{self, BufReader, Seek, Write};
+use std::path::Path;
 
 use color_eyre::owo_colors::OwoColorize;
 use eyre::Result;
@@ -9,15 +10,15 @@ pub const WIDTH: usize = 4;
 
 pub fn initialize_meta_file() -> Result<()> {
     println!(
-        "\n{:<WIDTH$}{stage}  No se ha encontrado un archivo `meta.json`. Creando primera base...",
+        "\n{:<WIDTH$}{stage}  No se ha encontrado un archivo `meta.json`. Creando primer documento...",
         "",
         stage = " Gulfi ".bright_white().bold().on_green(),
     );
     run_new()
 }
 
-fn run_new() -> Result<()> {
-    let name = prompt_input("Cual sera el nombre de la base?", validate_field_name);
+pub fn run_new() -> Result<()> {
+    let name = prompt_input("Cual sera el nombre del documento?", validate_field_name);
 
     let mut fields = vec![];
     loop {
@@ -27,9 +28,30 @@ fn run_new() -> Result<()> {
         }
     }
 
-    let records = Document { name, fields };
-    let file = File::create("meta.json")?;
-    serde_json::to_writer(file, &records)?;
+    let new_doc = Document { name, fields };
+    let path = Path::new("meta.json");
+
+    let mut all_docs: Vec<Document> = if path.exists() {
+        let file = File::open(path)?;
+        let reader = BufReader::new(file);
+        match serde_json::from_reader(reader) {
+            Ok(docs) => docs,
+            Err(_) => vec![],
+        }
+    } else {
+        vec![]
+    };
+
+    all_docs.push(new_doc);
+
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(path)?;
+    file.seek(io::SeekFrom::Start(0))?;
+
+    serde_json::to_writer_pretty(file, &all_docs)?;
 
     Ok(())
 }
@@ -42,7 +64,7 @@ where
         print!(
             "\n{:<WIDTH$}{stage}  {prompt} ",
             "",
-            stage = " Builder ".bright_white().bold().on_magenta() // stage = White.bold().on(rgb(PURPLE)).paint(" Builder "),
+            stage = " Builder ".bright_white().bold().on_magenta()
         );
         io::stdout()
             .flush()
@@ -100,7 +122,7 @@ fn prompt_options(msg: &str, opts: Vec<char>) -> char {
 fn prompt_for_field(fields: &mut Vec<Field>) {
     println!();
     let name = prompt_input("Nombre del campo:", validate_field_name);
-    let vec_input = prompt_confirm("¿Quieres que sea vectorizado?");
+    let vec_input = prompt_confirm("¿Quieres que sea usado en la busqueda?");
     let unique = prompt_confirm("¿Este campo debería ser único?");
 
     fields.push(Field {

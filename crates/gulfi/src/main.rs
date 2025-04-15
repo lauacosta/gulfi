@@ -47,6 +47,10 @@ fn main() -> eyre::Result<()> {
             }
         }
 
+        Command::Add => {
+            gulfi_helper::run_new()?;
+        }
+
         Command::Serve {
             interface,
             port,
