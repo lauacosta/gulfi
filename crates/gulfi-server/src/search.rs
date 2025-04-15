@@ -196,7 +196,7 @@ impl SearchStrategy {
 
                     let doc_name = document.name.clone();
                     format!(
-                        "{start} {rest} 'vec' as match_type from vec_{doc_name} left join {doc_name} on {doc_name}.id = vec_{doc_name}.row_id"
+                        "{start} {rest} {doc_name}.vec_input as input, 'vec' as match_type from vec_{doc_name} left join {doc_name} on {doc_name}.id = vec_{doc_name}.row_id"
                     )
                 };
 
@@ -287,6 +287,7 @@ impl SearchStrategy {
                     let search_query = format!(
                         "select 
                             {fields}
+                            {doc_name}.vec_input as input,
                             vec_matches.rank_number as vec_rank,
                             fts_matches.rank_number as fts_rank,
                             (

@@ -180,6 +180,7 @@ button:active {
 }
 
 
+
 .form-container input[type="text"],
 .form-container input[type="number"],
 .form-container select {
@@ -202,7 +203,7 @@ button:active {
 
 .form-container {
     max-width: 100%;
-    margin: 0 auto;
+    margin: 1rem 2rem auto;
     background-color: white;
     padding: 20px;
     border: 1px solid var(--my-light-gray);
@@ -328,12 +329,12 @@ button:active {
     color: var(--my-mid-gray);
     padding: 16px;
     font-size: 13px;
-    border-top: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .table-header {
     display: flex;
     justify-content: space-between;
+    margin: 2rem;
     align-items: center;
     margin-bottom: 16px;
     font-size: 16px;
@@ -391,11 +392,11 @@ button:active {
     font-size: 40px;
     text-align: center;
     font-weight: bold;
-
 }
 
 .modern-table {
-    width: 100%;
+    width: 98.5%;
+    margin: 2rem;
     background: white;
     border-collapse: collapse;
     background-color: white;
