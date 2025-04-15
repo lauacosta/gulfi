@@ -1,3 +1,5 @@
+pub mod helper;
+
 use clap::{Parser, Subcommand, ValueEnum, command, crate_version};
 use std::net::IpAddr;
 
@@ -68,6 +70,8 @@ pub enum Command {
     List,
     /// Añade un nuevo documento.
     Add,
+    /// Borra un documento.
+    Delete { document: String },
 }
 
 #[cfg(debug_assertions)]

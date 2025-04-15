@@ -1,23 +1,57 @@
-use std::fs::{File, OpenOptions};
-use std::io::{self, BufReader, Seek, Write};
+use std::fs::OpenOptions;
+use std::io::{self, Seek, Write};
 use std::path::Path;
 
 use color_eyre::owo_colors::OwoColorize;
-use eyre::Result;
+use eyre::{Result, eyre};
 use gulfi_common::{Document, Field};
 
 pub const WIDTH: usize = 4;
 
+pub fn delete_document(name: &str) -> Result<()> {
+    let path = Path::new("meta.json");
+
+    let mut all_docs: Vec<Document> = if path.exists() {
+        let json_str = std::fs::read_to_string(path)?;
+        match serde_json::from_str(&json_str) {
+            Ok(docs) => docs,
+            Err(_) => vec![],
+        }
+    } else {
+        return Err(eyre!("No se ha encontrado un archivo `meta.json`."));
+    };
+
+    if let Some(pos) = all_docs
+        .iter()
+        .position(|doc| doc.name.to_lowercase() == name.to_lowercase())
+    {
+        all_docs.remove(pos);
+        let file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(path)?;
+
+        Ok(serde_json::to_writer_pretty(file, &all_docs)?)
+    } else {
+        Err(eyre!("No se encuentra ningun documento con nombre {name}."))
+    }
+}
+
 pub fn initialize_meta_file() -> Result<()> {
-    println!(
-        "\n{:<WIDTH$}{stage}  No se ha encontrado un archivo `meta.json`. Creando primer documento...",
-        "",
-        stage = " Gulfi ".bright_white().bold().on_green(),
-    );
     run_new()
 }
 
 pub fn run_new() -> Result<()> {
+    let path = Path::new("meta.json");
+    if !path.exists() {
+        println!(
+            "\n{:<WIDTH$}{stage}  No se ha encontrado un archivo `meta.json`. Creando primer documento...",
+            "",
+            stage = " Gulfi ".bright_white().bold().on_green(),
+        );
+    }
+
     let name = prompt_input("Cual sera el nombre del documento?", validate_field_name);
 
     let mut fields = vec![];
@@ -29,12 +63,10 @@ pub fn run_new() -> Result<()> {
     }
 
     let new_doc = Document { name, fields };
-    let path = Path::new("meta.json");
 
     let mut all_docs: Vec<Document> = if path.exists() {
-        let file = File::open(path)?;
-        let reader = BufReader::new(file);
-        match serde_json::from_reader(reader) {
+        let json_str = std::fs::read_to_string(path)?;
+        match serde_json::from_str(&json_str) {
             Ok(docs) => docs,
             Err(_) => vec![],
         }
