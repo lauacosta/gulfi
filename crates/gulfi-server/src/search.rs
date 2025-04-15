@@ -120,7 +120,7 @@ impl SearchStrategy {
                         for (i, cons) in values.iter().enumerate() {
                             let param_name = format!(":{}_{i}", k);
                             let condition = match cons {
-                                Exact(_) => format!("{k} = {param_name}"),
+                                Exact(_) => format!("LOWER({k}) = LOWER({param_name})"),
                                 GreaterThan(_) => format!("{k} > {param_name}"),
                                 LesserThan(_) => format!("{k} < {param_name}"),
                             };
@@ -209,7 +209,7 @@ impl SearchStrategy {
                         for (i, cons) in values.iter().enumerate() {
                             let param_name = format!(":{}_{i}", k);
                             let condition = match cons {
-                                Exact(_) => format!("{k} = {param_name}"),
+                                Exact(_) => format!("LOWER({k}) = LOWER({param_name})"),
                                 GreaterThan(_) => format!("{k} > {param_name}"),
                                 LesserThan(_) => format!("{k} < {param_name}"),
                             };
@@ -345,7 +345,7 @@ impl SearchStrategy {
                         for (i, cons) in values.iter().enumerate() {
                             let param_name = format!(":{}_{i}", k);
                             let condition = match cons {
-                                Exact(_) => format!("{k} = {param_name}"),
+                                Exact(_) => format!("LOWER({k}) = LOWER({param_name})"),
                                 GreaterThan(_) => format!("{k} > {param_name}"),
                                 LesserThan(_) => format!("{k} < {param_name}"),
                             };

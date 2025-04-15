@@ -215,7 +215,7 @@ pub fn setup_sqlite(db: &rusqlite::Connection, doc: &Document) -> Result<()> {
             .iter()
             .map(|x| {
                 if x.unique {
-                    // WARN: Es una buena idea?
+                    // WARN: Es una buena idea decidir usar conflict ignore?
                     format!("{} text unique on conflict ignore", x.name.clone())
                 } else {
                     format!("{} text", x.name.clone())
@@ -230,7 +230,7 @@ pub fn setup_sqlite(db: &rusqlite::Connection, doc: &Document) -> Result<()> {
             .filter(|x| !x.vec_input)
             .map(|x| {
                 if x.unique {
-                    // WARN: Es una buena idea?
+                    // WARN: Es una buena idea decidir usar conflict ignore?
                     format!("{} text unique on conflict ignore", x.name.clone())
                 } else {
                     format!("{} text", x.name.clone())
@@ -284,6 +284,9 @@ pub fn setup_sqlite(db: &rusqlite::Connection, doc: &Document) -> Result<()> {
         .expect(
             "Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite",
         );
+
+    // TODO: Decidir si es necesario crear un index por cada campo que pueda ser comparado en un
+    // where. Esto porque en la busqueda hago LOWER() sobre esos campos.
 
     Ok(())
 }
