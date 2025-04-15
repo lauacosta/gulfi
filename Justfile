@@ -7,6 +7,9 @@ dev:
 watch: 
     watchexec -r -e rs -- cargo run -- serve dev
 
+build: 
+    watchexec -r -e rs -- cargo build
+
 run *args:
     cargo run -- {{args}}
 

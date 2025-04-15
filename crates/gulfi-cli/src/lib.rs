@@ -48,7 +48,7 @@ pub enum Command {
         #[arg(long, default_value = "false")]
         open: bool,
     },
-    /// Actualiza la base de datos
+    /// Actualiza la base de datos.
     Sync {
         document: String,
 
@@ -64,7 +64,10 @@ pub enum Command {
         #[arg(short = 'T', long, default_value_t = 2)]
         base_delay: u64,
     },
+    /// Lista todos los documentos disponibles documento.
     List,
+    /// Añade un nuevo documento.
+    Add,
 }
 
 #[cfg(debug_assertions)]
