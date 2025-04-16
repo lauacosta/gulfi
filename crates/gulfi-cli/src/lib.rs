@@ -88,12 +88,6 @@ pub enum SyncStrategy {
     All,
 }
 
-#[derive(Clone, ValueEnum)]
-pub enum Model {
-    OpenAI,
-    Local,
-}
-
 #[allow(unused)]
 #[derive(Debug, Clone, ValueEnum)]
 pub enum Cache {
