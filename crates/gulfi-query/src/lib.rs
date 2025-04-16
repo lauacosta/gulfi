@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 use thiserror::Error;
 
 #[derive(PartialEq, Debug)]
@@ -6,6 +6,16 @@ pub enum Constraint {
     Exact(String),
     GreaterThan(String),
     LesserThan(String),
+}
+
+impl Display for Constraint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Constraint::Exact(str) => write!(f, ": {}", str),
+            Constraint::GreaterThan(str) => write!(f, "> {}", str),
+            Constraint::LesserThan(str) => write!(f, "< {}", str),
+        }
+    }
 }
 
 #[derive(Error, Debug)]

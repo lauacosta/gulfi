@@ -67,9 +67,29 @@ pub async fn historial_full(
             let timestamp = NaiveDateTime::parse_from_str(&timestamp_str, "%Y-%m-%d %H:%M:%S")
                 .unwrap_or_else(|_| Default::default());
 
+            let proper_str = format!("query:{query}");
+            let query = gulfi_query::Query::parse(&proper_str).expect("the query is malformed");
+
+            let search_str = query.query;
+
+            let filters = match query.constraints {
+                Some(map) => Some(
+                    map.into_iter()
+                        .flat_map(|(field, constraints)| {
+                            constraints
+                                .into_iter()
+                                .map(move |constraint| format!("{field} {constraint}"))
+                        })
+                        .collect::<Vec<_>>()
+                        .join(","),
+                ),
+                None => None,
+            };
+
             let data = HistorialFullView::new(
                 id,
-                query,
+                search_str,
+                filters,
                 strategy,
                 peso_fts,
                 peso_semantic,

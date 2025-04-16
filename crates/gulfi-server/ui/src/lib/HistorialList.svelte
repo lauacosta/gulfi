@@ -36,7 +36,7 @@
 
     function buildQueryString(item: Historial) {
         const params = new URLSearchParams();
-        params.append("query", item.query);
+        params.append("query", `${item.query}, ${item.filters}`);
         params.append("strategy", item.strategy);
         params.append("doc", item.doc);
         params.append("peso_fts", item.peso_fts.toString());
@@ -75,6 +75,13 @@
                     </div>
 
                     <div class="details-grid">
+                        {#if item.filters}
+                            <div class="detail-item">
+                                <span class="detail-label">Filtros</span>
+                                <span class="detail-value">{item.filters}</span>
+                            </div>
+                        {/if}
+
                         <div class="detail-item">
                             <span class="detail-label">Nº Vecinos</span>
                             <span class="detail-value">{item.neighbors}</span>

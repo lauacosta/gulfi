@@ -15,6 +15,7 @@ export type favoritesResponse = {
 export type Historial = {
     id: number;
     query: string;
+    filters?: string;
     strategy: SearchStrategy;
     doc: string,
     peso_fts: number;

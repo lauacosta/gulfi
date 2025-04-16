@@ -6,6 +6,7 @@ use serde::Serialize;
 pub struct HistorialFullView {
     id: u64,
     query: String,
+    filters: Option<String>,
     strategy: SearchStrategy,
     peso_fts: f32,
     peso_semantic: f32,
@@ -18,6 +19,7 @@ impl HistorialFullView {
     pub fn new(
         id: u64,
         query: String,
+        filters: Option<String>,
         strategy: SearchStrategy,
         peso_fts: f32,
         peso_semantic: f32,
@@ -27,6 +29,7 @@ impl HistorialFullView {
         Self {
             id,
             query,
+            filters,
             strategy,
             peso_fts,
             peso_semantic,
