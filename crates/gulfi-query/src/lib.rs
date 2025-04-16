@@ -12,10 +12,10 @@ pub enum Constraint {
 pub enum ParsingError {
     #[error("La busqueda no contiene un 'query'")]
     MissingQuery,
-    #[error("No hay un valor luego del ':'")]
-    MissingValue,
-    #[error("No hay un valor antes del ':'")]
-    MissingKey,
+    #[error("No hay un valor luego del '{0}'")]
+    MissingValue(char),
+    #[error("No hay un campo antes del '{0}'")]
+    MissingKey(char),
     #[error("'{0}' es un token invalido")]
     InvalidToken(String),
 }
@@ -47,10 +47,11 @@ impl Query {
             for token in rhs.split(',').map(str::trim).filter(|t| !t.is_empty()) {
                 if let Some((k, v)) = token.split_once(':') {
                     if k.is_empty() {
-                        return Err(ParsingError::MissingKey);
+                        return Err(ParsingError::MissingKey(':'));
                     }
+
                     if v.is_empty() {
-                        return Err(ParsingError::MissingValue);
+                        return Err(ParsingError::MissingValue(':'));
                     }
 
                     Self::update_constraints(
@@ -60,11 +61,13 @@ impl Query {
                     )
                 } else if let Some((k, v)) = token.split_once('<') {
                     if k.is_empty() {
-                        return Err(ParsingError::MissingKey);
+                        return Err(ParsingError::MissingKey('<'));
                     }
+
                     if v.is_empty() {
-                        return Err(ParsingError::MissingValue);
+                        return Err(ParsingError::MissingValue('<'));
                     }
+
                     Self::update_constraints(
                         &mut constraints,
                         k.trim().to_owned(),
@@ -72,11 +75,13 @@ impl Query {
                     )
                 } else if let Some((k, v)) = token.split_once('>') {
                     if k.is_empty() {
-                        return Err(ParsingError::MissingKey);
+                        return Err(ParsingError::MissingKey('>'));
                     }
+
                     if v.is_empty() {
-                        return Err(ParsingError::MissingValue);
+                        return Err(ParsingError::MissingValue('>'));
                     }
+
                     Self::update_constraints(
                         &mut constraints,
                         k.trim().to_owned(),
@@ -223,13 +228,25 @@ mod tests {
     #[test]
     fn fails_with_token_missing_value() {
         let result = Query::parse("query: Lautaro, city:");
-        assert!(matches!(result, Err(ParsingError::MissingValue)));
+        assert!(matches!(result, Err(ParsingError::MissingValue(':'))));
+
+        let result = Query::parse("query: Lautaro, edad>");
+        assert!(matches!(result, Err(ParsingError::MissingValue('>'))));
+
+        let result = Query::parse("query: Lautaro, edad<");
+        assert!(matches!(result, Err(ParsingError::MissingValue('<'))));
     }
 
     #[test]
     fn fails_with_token_missing_key() {
         let result = Query::parse("query: Lautaro, :Berlin");
-        assert!(matches!(result, Err(ParsingError::MissingKey)));
+        assert!(matches!(result, Err(ParsingError::MissingKey(':'))));
+
+        let result = Query::parse("query: Lautaro, >30");
+        assert!(matches!(result, Err(ParsingError::MissingKey('>'))));
+
+        let result = Query::parse("query: Lautaro, <30");
+        assert!(matches!(result, Err(ParsingError::MissingKey('<'))));
     }
 
     #[test]

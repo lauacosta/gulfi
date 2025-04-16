@@ -123,13 +123,22 @@ impl IntoResponse for HttpError {
                     })),
                 )
                     .into_response(),
-                ParsingError::MissingQuery
-                | ParsingError::MissingValue
-                | ParsingError::MissingKey => (
+                ParsingError::MissingQuery => (
                     StatusCode::BAD_REQUEST,
                     Json(json!({
                         "err": e.to_string(),
                         "type": "parsing_error",
+                        "date": date
+                    })),
+                )
+                    .into_response(),
+
+                ParsingError::MissingValue(c) | ParsingError::MissingKey(c) => (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({
+                        "err": e.to_string(),
+                        "type": "parsing_error",
+                        "token": c.to_string(),
                         "date": date
                     })),
                 )

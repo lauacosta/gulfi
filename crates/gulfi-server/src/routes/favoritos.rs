@@ -88,16 +88,17 @@ pub async fn add_favoritos(
 
     let nombre = payload.nombre.replace(|c: char| c.is_whitespace(), "_");
     let data = payload.data;
-    let resp: Vec<FavoritesReponse> = serde_json::from_str(&payload.busquedas)?;
-    let queries = serde_json::to_string(
-        &resp
-            .iter()
-            .map(|x| x.query.clone())
-            .collect::<Vec<String>>(),
-    )?;
+    let busquedas: Vec<FavoritesReponse> = serde_json::from_str(&payload.busquedas)?;
+
+    let queries = busquedas
+        .iter()
+        .map(|x| gulfi_query::Query::parse(&x.query).map(|parsed| parsed.query))
+        .collect::<Result<Vec<String>, _>>()?;
+
+    let queries = serde_json::to_string(&queries)?;
 
     let tipos = serde_json::to_string(
-        &resp
+        &busquedas
             .iter()
             .map(|x| x.strategy.clone())
             .collect::<Vec<String>>(),
