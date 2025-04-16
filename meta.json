@@ -1,52 +1,52 @@
 [
-  {
-    "name": "tnea",
-    "fields": [
-      {
-        "name": "email",
-        "vec_input": false,
-        "unique": true
-      },
-      {
-        "name": "sexo",
-        "vec_input": false,
-        "unique": false
-      },
-      {
-        "name": "edad",
-        "vec_input": false,
-        "unique": false
-      },
-      {
-        "name": "provincia",
-        "vec_input": false,
-        "unique": false
-      },
-      {
-        "name": "ciudad",
-        "vec_input": false,
-        "unique": false
-      },
-      {
-        "name": "estudios",
-        "vec_input": true,
-        "unique": false
-      },
-      {
-        "name": "experiencia",
-        "vec_input": true,
-        "unique": false
-      },
-      {
-        "name": "descripcion",
-        "vec_input": true,
-        "unique": false
-      },
-      {
-        "name": "estudios_mas_recientes",
-        "vec_input": true,
-        "unique": false
-      }
-    ]
-  }
+    {
+        "name": "tnea",
+        "fields": [
+            {
+                "name": "email",
+                "vec_input": false,
+                "unique": true
+            },
+            {
+                "name": "sexo",
+                "vec_input": false,
+                "unique": false
+            },
+            {
+                "name": "edad",
+                "vec_input": false,
+                "unique": false
+            },
+            {
+                "name": "provincia",
+                "vec_input": false,
+                "unique": false
+            },
+            {
+                "name": "ciudad",
+                "vec_input": false,
+                "unique": false
+            },
+            {
+                "name": "estudios",
+                "vec_input": true,
+                "unique": false
+            },
+            {
+                "name": "experiencia",
+                "vec_input": true,
+                "unique": false
+            },
+            {
+                "name": "descripcion",
+                "vec_input": true,
+                "unique": false
+            },
+            {
+                "name": "estudios_mas_recientes",
+                "vec_input": true,
+                "unique": false
+            }
+        ]
+    }
 ]
