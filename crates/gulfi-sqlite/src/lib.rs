@@ -79,7 +79,7 @@ pub async fn sync_vec_data(db: &Connection, doc: &Document, base_delay: u64) -> 
                     for (id, embedding) in data {
                         insertions += statement.execute(
                             rusqlite::params![id, embedding.as_bytes()],
-                        ).expect("Error insertando en vec_tnea");
+                        ).expect(&format!("Error insertando en vec_{sent_doc_name}"));
 
                     }
                     db.execute("COMMIT", []).expect(
@@ -121,7 +121,7 @@ pub fn sync_fts_data(db: &Connection, doc: &Document) {
         "
             insert into fts_{doc_name}(rowid, {field_names}, vec_input)
             select rowid, {field_names}, vec_input 
-            from tnea;
+            from {doc_name};
 
             insert into fts_{doc_name}(fts_{doc_name}) values('optimize');
             "

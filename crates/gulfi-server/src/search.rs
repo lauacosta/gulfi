@@ -106,9 +106,9 @@ impl SearchStrategy {
                         }
                     }
 
+                    let doc_name = document.name.clone();
                     format!(
-                        "{start}{rest}  highlight(fts_tnea, 0, '<b style=\"color: green;\">', '</b>') as input, 'fts' as match_type from fts_{}",
-                        document.name
+                        "{start}{rest}  highlight(fts_{doc_name}, 0, '<b style=\"color: green;\">', '</b>') as input, 'fts' as match_type from fts_{doc_name}",
                     )
                 };
 
@@ -298,7 +298,7 @@ impl SearchStrategy {
                             fts_matches.score as fts_score
                         from fts_matches
                         full outer join vec_matches on vec_matches.row_id = fts_matches.row_id
-                        join tnea on tnea.id = coalesce(fts_matches.row_id, vec_matches.row_id)");
+                        join {doc_name} on {doc_name}.id = coalesce(fts_matches.row_id, vec_matches.row_id)");
 
                     let base = format!(
                         "with vec_matches as (
