@@ -5,7 +5,6 @@ use color_eyre::owo_colors::OwoColorize;
 use eyre::eyre;
 use gulfi_cli::{Cli, Command, SyncStrategy};
 use gulfi_common::Document;
-use gulfi_helper::initialize_meta_file;
 use gulfi_server::{ApplicationSettings, startup::run_server};
 use gulfi_sqlite::{init_sqlite, insert_base_data, setup_sqlite, sync_fts_data, sync_vec_data};
 use rusqlite::Connection;
@@ -29,7 +28,7 @@ fn main() -> eyre::Result<()> {
     let file = match File::open("meta.json") {
         Ok(file) => Ok(file),
         Err(_) => {
-            initialize_meta_file()?;
+            gulfi_cli::helper::initialize_meta_file()?;
             File::open("meta.json")
         }
     }?;
@@ -48,7 +47,11 @@ fn main() -> eyre::Result<()> {
         }
 
         Command::Add => {
-            gulfi_helper::run_new()?;
+            gulfi_cli::helper::run_new()?;
+        }
+
+        Command::Delete { document } => {
+            gulfi_cli::helper::delete_document(&document)?;
         }
 
         Command::Serve {

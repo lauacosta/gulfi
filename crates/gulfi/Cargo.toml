@@ -23,6 +23,5 @@ serde_json.workspace = true
 
 gulfi-sqlite = { path = "../gulfi-sqlite/"}
 gulfi-common = { path = "../gulfi-common/"}
-gulfi-helper = { path = "../gulfi-helper/"}
 gulfi-server = { path = "../gulfi-server/"}
 gulfi-cli = { path = "../gulfi-cli/"}

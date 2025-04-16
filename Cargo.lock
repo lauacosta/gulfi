@@ -748,7 +748,6 @@ dependencies = [
  "eyre",
  "gulfi-cli",
  "gulfi-common",
- "gulfi-helper",
  "gulfi-server",
  "gulfi-sqlite",
  "rusqlite",
@@ -766,6 +765,11 @@ name = "gulfi-cli"
 version = "1.2.0"
 dependencies = [
  "clap",
+ "color-eyre",
+ "eyre",
+ "gulfi-common",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -783,18 +787,6 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "tracing",
-]
-
-[[package]]
-name = "gulfi-helper"
-version = "1.2.0"
-dependencies = [
- "camino",
- "color-eyre",
- "eyre",
- "gulfi-common",
- "serde",
- "serde_json",
 ]
 
 [[package]]
