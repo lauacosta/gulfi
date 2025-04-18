@@ -13,10 +13,7 @@ pub fn delete_document(name: &str) -> Result<()> {
 
     let mut all_docs: Vec<Document> = if path.exists() {
         let json_str = std::fs::read_to_string(path)?;
-        match serde_json::from_str(&json_str) {
-            Ok(docs) => docs,
-            Err(_) => vec![],
-        }
+        serde_json::from_str(&json_str).unwrap_or_default()
     } else {
         return Err(eyre!("No se ha encontrado un archivo `meta.json`."));
     };
@@ -66,10 +63,7 @@ pub fn run_new() -> Result<()> {
 
     let mut all_docs: Vec<Document> = if path.exists() {
         let json_str = std::fs::read_to_string(path)?;
-        match serde_json::from_str(&json_str) {
-            Ok(docs) => docs,
-            Err(_) => vec![],
-        }
+        serde_json::from_str(&json_str).unwrap_or_default()
     } else {
         vec![]
     };

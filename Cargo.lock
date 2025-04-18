@@ -813,7 +813,9 @@ dependencies = [
 name = "gulfi-openai"
 version = "1.2.0"
 dependencies = [
+ "color-eyre",
  "eyre",
+ "indicatif",
  "rand 0.9.0",
  "reqwest",
  "serde",
@@ -867,6 +869,7 @@ name = "gulfi-sqlite"
 version = "1.2.0"
 dependencies = [
  "chrono",
+ "color-eyre",
  "csv",
  "eyre",
  "futures",
@@ -879,6 +882,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sqlite-vec",
+ "tokio",
  "tracing",
  "zerocopy 0.8.14",
 ]

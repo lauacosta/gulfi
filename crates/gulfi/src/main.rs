@@ -8,7 +8,7 @@ use gulfi_common::Document;
 use gulfi_server::{ApplicationSettings, startup::run_server};
 use gulfi_sqlite::{init_sqlite, insert_base_data, setup_sqlite, sync_fts_tnea, sync_vec_tnea};
 use rusqlite::Connection;
-use tracing::{Level, debug, info, level_filters::LevelFilter};
+use tracing::{Level, debug, level_filters::LevelFilter};
 use tracing_error::ErrorLayer;
 use tracing_subscriber::{Registry, layer::SubscriberExt};
 use tracing_tree::{HierarchicalLayer, time::FormatTime};

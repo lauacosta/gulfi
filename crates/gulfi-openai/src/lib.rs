@@ -3,10 +3,12 @@ use std::{
     time::{Duration, Instant},
 };
 
+use color_eyre::owo_colors::OwoColorize;
 use eyre::Result;
 use rand::Rng;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc::Sender;
 use tracing::{debug, error, info, instrument, warn};
 
 const MAX_INTENTOS: u32 = 5;
@@ -56,10 +58,6 @@ pub enum EmbeddingError {
     MaxRetriesExceeded,
 }
 
-#[instrument(
-    name = "Solicitando embeddings a la API",
-    skip(client, token, request, max_retries)
-)]
 async fn request_embeddings(
     client: &Client,
     token: &str,
@@ -127,16 +125,23 @@ async fn request_embeddings(
 }
 
 // https://community.openai.com/t/does-the-index-field-on-an-embedding-response-correlate-to-the-index-of-the-input-text-it-was-generated-from/526099
-// TODO: Check por un bug, siempre hay una request que devuelve 400 no 429.
-#[instrument(name = "Generando Embeddings", skip(input, client, indices))]
-pub async fn embed_vec(
+// FIX: Siempre hay una request que devuelve 400 no 429.
+pub async fn embed_vec_with_progress(
     indices: Vec<u64>,
     input: Vec<String>,
     client: &Client,
     proc_id: usize,
     base_delay: u64,
-) -> Result<Vec<(u64, Vec<f32>)>> {
+    tx: Sender<String>,
+) -> Result<(Vec<(u64, Vec<f32>)>, u128)> {
     let global_start = Instant::now();
+
+    let _ = tx
+        .send(format!(
+            "Preparando embedding para {} registros",
+            input.len()
+        ))
+        .await;
 
     let request = RequestBody {
         input,
@@ -146,13 +151,18 @@ pub async fn embed_vec(
     };
 
     let token = var("OPENAI_KEY").expect("`OPENAI_KEY debería estar definido en el .env");
-
     let mut intento = 0;
     let mut response = None;
 
     while intento <= MAX_INTENTOS {
         let req_start = Instant::now();
-        info!("Enviando request a Open AI... [{proc_id}]");
+        let _ = tx
+            .send(format!(
+                "Enviando request a OpenAI (intento {}/{})",
+                intento + 1,
+                MAX_INTENTOS + 1
+            ))
+            .await;
         match request_embeddings(
             client,
             &token,
@@ -165,42 +175,61 @@ pub async fn embed_vec(
         .await
         {
             Ok(resp) => {
-                info!(
-                    "El request tomó {} ms [{proc_id}]",
-                    req_start.elapsed().as_millis()
-                );
+                let elapsed = req_start.elapsed().as_millis();
+                let _ = tx.send(format!("Request exitoso en {} ms", elapsed)).await;
                 response = Some(resp);
                 break;
             }
             Err(EmbeddingError::RateLimit) => {
+                let _ = tx
+                    .send(format!(
+                        "{} Rate limit alcanzado, reintentando ({}/{})",
+                        "⚠️".bright_yellow(),
+                        intento + 1,
+                        MAX_INTENTOS + 1
+                    ))
+                    .await;
                 intento += 1;
             }
-            Err(e) => return Err(e.into()),
+            Err(e) => {
+                let _ = tx.send(format!("{} Error: {}", "❌".bright_red(), e)).await;
+                return Err(e.into());
+            }
         }
     }
 
-    let response = response.ok_or(EmbeddingError::MaxRetriesExceeded)?;
+    let response = match response {
+        Some(r) => r,
+        None => {
+            let _ = tx
+                .send(format!("{} Máximo de intentos excedido", "❌".bright_red()))
+                .await;
+            return Err(EmbeddingError::MaxRetriesExceeded.into());
+        }
+    };
 
     let start = Instant::now();
+    let _ = tx.send("Deserializando respuesta...".to_string()).await;
 
     let response: ResponseBody = response.json().await?;
+    let elapsed = start.elapsed().as_millis();
+    let _ = tx
+        .send(format!("Deserialización completada en {} ms", elapsed))
+        .await;
 
-    info!(
-        "Deserializar la response a ResponseBody tomó {} ms [{proc_id}]",
-        start.elapsed().as_millis()
-    );
-
-    let embedding = std::iter::zip(
+    let _ = tx.send("Procesando embeddings...".to_string()).await;
+    let embedding: Vec<(u64, Vec<f32>)> = std::iter::zip(
         indices,
         EmbeddingObject::embeddings_iter(response.embeddings),
     )
     .collect();
 
-    info!(
-        "Embedding generado correctamente! en total tomó {} ms [{proc_id}]",
-        global_start.elapsed().as_millis()
-    );
-    Ok(embedding)
+    let total_elapsed = global_start.elapsed().as_millis();
+    let _ = tx
+        .send(format!("Embeddings completados en ({}) ms", total_elapsed))
+        .await;
+
+    Ok((embedding, total_elapsed))
 }
 
 #[instrument(name = "Generando embedding a partir del query", skip(input, client))]

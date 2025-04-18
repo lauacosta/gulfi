@@ -7,31 +7,33 @@ use std::{
         Arc,
         atomic::{AtomicUsize, Ordering},
     },
-    thread::{JoinHandle, ScopedJoinHandle},
+    thread::ScopedJoinHandle,
     time::Duration,
 };
 
+use color_eyre::owo_colors::OwoColorize;
 use csv::ReaderBuilder;
 use eyre::{Result, eyre};
 use futures::StreamExt;
 use gulfi_common::{DataSources, Document, clean_html, normalize, parse_sources};
-use gulfi_openai::embed_vec;
+use gulfi_openai::embed_vec_with_progress;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rusqlite::{Connection, ffi::sqlite3_auto_extension};
 use serde_json::{Map, Value};
 use sqlite_vec::sqlite3_vec_init;
-use tracing::{Level, debug, error, info, span};
+use tokio::sync::Mutex;
+use tracing::{debug, error};
 use zerocopy::IntoBytes;
 
 pub const DIMENSION: usize = 1536;
 
 pub async fn sync_vec_tnea(db: &Connection, doc: &Document, base_delay: u64) -> Result<()> {
     let doc_name = doc.name.clone();
+    let mp = MultiProgress::new();
 
-    eprintln!("Sincronizando tablas VEC en {}", doc_name);
+    eprintln!("Sincronizando tablas VEC en {doc_name}");
 
     let mut statement = db.prepare(&format!("select id, vec_input from {doc_name}"))?;
-
     let v_inputs: Vec<(u64, String)> = match statement.query_map([], |row| {
         let id: u64 = row.get(0)?;
         let input: String = row.get::<_, String>(1)?;
@@ -43,40 +45,91 @@ pub async fn sync_vec_tnea(db: &Connection, doc: &Document, base_delay: u64) -> 
         Err(err) => return Err(eyre!(err)),
     };
 
+    eprintln!(
+        "{}  Recopilados {} registros para procesamiento",
+        "ⓘ".bright_green(),
+        v_inputs.len()
+    );
+
     let chunk_size = 2048;
+    let chunks = v_inputs.chunks(chunk_size).count();
 
     let client = reqwest::ClientBuilder::new()
         .deflate(true)
         .gzip(true)
         .build()?;
 
-    let jh = v_inputs
+    let embed_pb = mp.add(ProgressBar::new(chunks as u64));
+    let embed_style = ProgressStyle::with_template(
+        "   {spinner:.cyan} [{bar:40.green}] {pos}/{len} chunks ({percent}%) [{elapsed_precise}]",
+    )
+    .expect("Deberia ser un template valido")
+    .progress_chars("##-");
+
+    embed_pb.set_style(embed_style);
+    embed_pb.enable_steady_tick(Duration::from_millis(100));
+    embed_pb.set_message("Generando embeddings");
+
+    let futures_iterator = v_inputs
         .chunks(chunk_size)
         .enumerate()
         .map(|(proc_id, chunk)| {
             let indices: Vec<u64> = chunk.iter().map(|(id, _)| *id).collect();
             let v_inputs: Vec<String> = chunk.iter().map(|(_, input)| input.clone()).collect();
-            embed_vec(indices, v_inputs, &client, proc_id, base_delay)
+
+            let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(10);
+
+            let status_pb = mp.insert_before(&embed_pb, ProgressBar::new_spinner());
+            status_pb.set_style(
+                ProgressStyle::with_template("      {spinner:.yellow} {wide_msg}")
+                    .expect("Deberia ser un template valido")
+                    .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ "),
+            );
+            status_pb.enable_steady_tick(Duration::from_millis(100));
+            status_pb.set_message(format!("Procesando chunk {} - preparando...", proc_id + 1));
+
+            tokio::spawn(async move {
+                while let Some(msg) = rx.recv().await {
+                    if msg.contains("completados") {
+                        status_pb.set_message(format!(
+                            "{} Chunk {} - {}",
+                            "✔".bright_green().bold(),
+                            proc_id + 1,
+                            msg,
+                        ));
+                    } else {
+                        status_pb.set_message(format!("Chunk {} - {}", proc_id + 1, msg));
+                    }
+                }
+                status_pb.finish();
+            });
+
+            embed_vec_with_progress(indices, v_inputs, &client, proc_id, base_delay, tx)
         });
 
-    let stream = futures::stream::iter(jh);
+    let futures_stream = futures::stream::iter(futures_iterator);
+    let total_inserted = Arc::new(AtomicUsize::new(0));
+    let acc_time_per_chunk = Arc::new(AtomicUsize::new(0));
 
     let start = std::time::Instant::now();
 
-    let total_inserted = Arc::new(AtomicUsize::new(0));
-
-    stream.for_each_concurrent(Some(5), |future| {
+    futures_stream.for_each_concurrent(Some(6), |future| {
         let total_inserted = total_inserted.clone();
+        let acc_time_per_chunk = acc_time_per_chunk.clone();
         let sent_doc_name =doc_name.clone();
+        let embed_pb = Mutex::new(embed_pb.clone());
+
         async move {
             match future.await {
-                Ok(data) => {
+                Ok((data, millis)) => {
+
                     let mut statement =
                         db.prepare(&format!("insert into vec_{sent_doc_name}(row_id, vec_input_embedding) values (?,?)")).unwrap();
 
                     db.execute("BEGIN TRANSACTION", []).expect(
                         "Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite",
                     );
+
                     let mut insertions = 0;
                     for (id, embedding) in data {
                         insertions += statement.execute(
@@ -88,23 +141,55 @@ pub async fn sync_vec_tnea(db: &Connection, doc: &Document, base_delay: u64) -> 
                         "Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite",
                     );
 
-                    total_inserted.fetch_add(insertions, Ordering::Relaxed);
+                     total_inserted.fetch_add(insertions, Ordering::Relaxed);
+
+                     let millis = millis.try_into().unwrap_or_default();
+                     acc_time_per_chunk.fetch_add(millis, Ordering::Relaxed);
+
+                    embed_pb.lock().await.inc(1);
                 }
-                Err(err) => error!("Error procesando el chunk: {err}"),
+                Err(err) => {
+                    error!("Error procesando el chunk: {err}");
+                },
             }
         }
     }).await;
 
+    embed_pb.finish_with_message(format!(
+        "{} Embeddings completados",
+        "✔".bright_green().bold(),
+    ));
+
     let total = total_inserted.load(Ordering::Relaxed);
+    let total_acc_chunks = acc_time_per_chunk.load(Ordering::Relaxed);
+
+    let media = total_acc_chunks as f32 / chunks as f32;
+
+    eprintln!("\nⓘ  Media por chunk {media} ms");
+
     let elapsed = start.elapsed().as_millis();
-    eprintln!("Se han insertado {total} nuevos registros en vec_{doc_name} ({elapsed} ms)");
+    eprintln!(
+        "{} Sincronización finalizada: {} registros almacenados en vec_{} ({} ms) ",
+        "✔".bright_green().bold(),
+        total,
+        doc_name,
+        elapsed
+    );
 
     Ok(())
 }
 
 pub fn sync_fts_tnea(db: &Connection, doc: &Document) {
     let doc_name = doc.name.clone();
-    eprintln!("Sincronizando tablas FTS en {}", doc_name);
+
+    let pb = ProgressBar::new_spinner();
+    let style = ProgressStyle::with_template("{spinner:.green}{wide_msg}")
+        .expect("Deberia ser un template valido")
+        .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ ");
+
+    pb.set_style(style);
+    pb.enable_steady_tick(Duration::from_millis(100));
+    pb.set_message(format!("Sincronizando tablas FTS en {doc_name}..."));
 
     let field_names = {
         let fields: Vec<String> = doc
@@ -131,7 +216,11 @@ pub fn sync_fts_tnea(db: &Connection, doc: &Document) {
     .expect("Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite");
 
     let elapsed = start.elapsed().as_millis();
-    eprintln!("Se han insertado nuevos registros en fts_{doc_name}. ({elapsed} ms)",);
+
+    pb.finish_with_message(format!(
+        "{} Se han sincronizado los registros para fts_{doc_name}. ({elapsed} ms) ",
+        "✔".bright_green().bold(),
+    ));
 }
 
 pub fn init_sqlite() -> Result<String> {
@@ -293,27 +382,26 @@ pub fn setup_sqlite(db: &rusqlite::Connection, doc: &Document) -> Result<()> {
 pub fn insert_base_data(db: &rusqlite::Connection, doc: &Document) -> Result<()> {
     let doc_name = doc.name.clone();
 
-    eprintln!("📂 Procesando el documento: {doc_name}");
-
     let num: usize = db.query_row(&format!("select count(*) from {doc_name}"), [], |row| {
         row.get(0)
     })?;
+
     if num != 0 {
-        eprintln!(
-            "    La base de datos del documento contiene {num} registros. Buscando nuevos registros."
-        );
+        eprintln!("📦 La base de datos de '{doc_name}' contiene {num} registros.");
     } else {
-        eprintln!("    Se encuentra vacio. Buscando nuevos registros.");
+        eprintln!("📦 La base de datos de '{doc_name}' está vacía.");
     }
 
     let start = std::time::Instant::now();
     let db_path = db.path().expect("Deberia poder ver el path a la db");
+
+    eprintln!("📁 Buscando archivos disponibles en \"./datasources/{doc_name}\"...");
+
     let inserted = parse_and_insert(format!("./datasources/{doc_name}"), db_path, doc)?;
     let elapsed = start.elapsed().as_millis();
 
-    #[cfg(debug_assertions)]
     eprintln!(
-        "    Se insertaron {inserted} columnas en {doc_name}_raw! ({elapsed} ms). {}",
+        "ⓘ  Se insertaron {inserted} registros en {doc_name}_raw! ({elapsed} ms). {}",
         if inserted == 0 {
             "No hubo nuevos registros."
         } else {
@@ -339,11 +427,8 @@ pub fn insert_base_data(db: &rusqlite::Connection, doc: &Document) -> Result<()>
 
     let sql_statement = doc.generate_vec_input();
     let mut statement = db.prepare(&format!(
-        "
-                insert or ignore into {doc_name} ({fields_str}, vec_input)
-                select {fields_str}, {sql_statement} as vec_input
-                from {doc_name}_raw;
-                "
+        "insert or ignore into {doc_name} ({fields_str}, vec_input)
+            select {fields_str}, {sql_statement} as vec_input from {doc_name}_raw; "
     ))?;
 
     let inserted = statement
@@ -352,9 +437,8 @@ pub fn insert_base_data(db: &rusqlite::Connection, doc: &Document) -> Result<()>
 
     let elapsed = start.elapsed().as_millis();
 
-    #[cfg(debug_assertions)]
     eprintln!(
-        "Se insertaron {inserted} columnas en {doc_name}! ({elapsed} ms). {}",
+        "ⓘ  Se insertaron {inserted} registros en {doc_name}! ({elapsed} ms). {}",
         if inserted == 0 {
             "No hubo nuevos registros."
         } else {
@@ -408,11 +492,10 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
     let inserted = Arc::new(AtomicUsize::new(0));
     let doc_name = doc.name.clone();
 
-    eprintln!("    Buscando archivos disponibles... en {:#?}", path);
     let datasources = parse_sources(&path)?;
 
     let multi = MultiProgress::new();
-    let style = ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] {wide_msg}")
+    let style = ProgressStyle::with_template("{spinner:.green}   {wide_msg} [{elapsed}]")
         .expect("Deberia ser un template valido")
         .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ ");
 
@@ -431,7 +514,7 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
                 let pb = multi.add(ProgressBar::new_spinner());
                 pb.set_style(style.clone());
                 pb.enable_steady_tick(Duration::from_millis(100));
-                pb.set_message(format!("    Leyendo {source:?}"));
+                pb.set_message(format!("Leyendo {source:?}"));
 
                 let data = match ext {
                     DataSources::Csv => {
@@ -484,7 +567,7 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
                 let total_registros = data.len();
 
                 pb.set_message(format!(
-                    "    Insertando {} registros de {:?}...",
+                    "Insertando {} registros de {:?}...",
                     total_registros,
                     source.file_name().unwrap_or_default()
                 ));
@@ -502,7 +585,6 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
                 let expected_fields: Vec<String> =
                     doc.fields.iter().map(|obj| obj.name.clone()).collect();
 
-                // info!("Abriendo transacción para insertar nuevos registros en `{doc_name}_raw`.");
                 let mut statement = db.prepare(&format!(
                     "insert into {doc_name}_raw ({fields_str}) values ({placeholders_str})"
                 ))?;
@@ -559,7 +641,8 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
 
                 db.execute("COMMIT", [])?;
                 pb.finish_with_message(format!(
-                    "✔  Insertado {} registros de {:?}",
+                    "{} Insertado {} registros de {:?}",
+                    "✔".bright_green().bold(),
                     total_registros,
                     source.file_name().unwrap_or_default()
                 ));
@@ -567,8 +650,9 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
             });
             jh.push(handler);
         }
+
         for h in jh {
-            if let Err(e) = h.join().expect("Thread panicked") {
+            if let Err(e) = h.join().expect("El hilo entro en panico.") {
                 eprintln!("Ocurrio un error: {:#?}", e);
             }
         }
