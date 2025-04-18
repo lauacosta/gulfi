@@ -20,3 +20,4 @@ gulfi-openai = { path = "../gulfi-openai/" }
 # gulfi-ui = { path = "../gulfi-ui/" }
 gulfi-cli = { path = "../gulfi-cli/" }
 gulfi-common = { path = "../gulfi-common/" }
+indicatif = "0.17.11"

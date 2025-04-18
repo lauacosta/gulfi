@@ -7,6 +7,8 @@ use std::{
         Arc,
         atomic::{AtomicUsize, Ordering},
     },
+    thread::{JoinHandle, ScopedJoinHandle},
+    time::Duration,
 };
 
 use csv::ReaderBuilder;
@@ -14,6 +16,7 @@ use eyre::{Result, eyre};
 use futures::StreamExt;
 use gulfi_common::{DataSources, Document, clean_html, normalize, parse_sources};
 use gulfi_openai::embed_vec;
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rusqlite::{Connection, ffi::sqlite3_auto_extension};
 use serde_json::{Map, Value};
 use sqlite_vec::sqlite3_vec_init;
@@ -25,8 +28,7 @@ pub const DIMENSION: usize = 1536;
 pub async fn sync_vec_tnea(db: &Connection, doc: &Document, base_delay: u64) -> Result<()> {
     let doc_name = doc.name.clone();
 
-    let span = span!(Level::INFO, "Sincronizando tablas VEC", doc = doc_name);
-    let _guard = span.enter();
+    eprintln!("Sincronizando tablas VEC en {}", doc_name);
 
     let mut statement = db.prepare(&format!("select id, vec_input from {doc_name}"))?;
 
@@ -95,15 +97,14 @@ pub async fn sync_vec_tnea(db: &Connection, doc: &Document, base_delay: u64) -> 
 
     let total = total_inserted.load(Ordering::Relaxed);
     let elapsed = start.elapsed().as_millis();
-    info!("Se han insertado {total} nuevos registros en vec_{doc_name} ({elapsed} ms)",);
+    eprintln!("Se han insertado {total} nuevos registros en vec_{doc_name} ({elapsed} ms)");
 
     Ok(())
 }
 
 pub fn sync_fts_tnea(db: &Connection, doc: &Document) {
     let doc_name = doc.name.clone();
-    let span = span!(Level::INFO, "Sincronizando tablas FTS", doc = doc_name);
-    let _guard = span.enter();
+    eprintln!("Sincronizando tablas FTS en {}", doc_name);
 
     let field_names = {
         let fields: Vec<String> = doc
@@ -130,7 +131,7 @@ pub fn sync_fts_tnea(db: &Connection, doc: &Document) {
     .expect("Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite");
 
     let elapsed = start.elapsed().as_millis();
-    info!("Se han insertando nuevos registros en fts_{doc_name}. ({elapsed} ms)",);
+    eprintln!("Se han insertado nuevos registros en fts_{doc_name}. ({elapsed} ms)",);
 }
 
 pub fn init_sqlite() -> Result<String> {
@@ -291,25 +292,28 @@ pub fn setup_sqlite(db: &rusqlite::Connection, doc: &Document) -> Result<()> {
 
 pub fn insert_base_data(db: &rusqlite::Connection, doc: &Document) -> Result<()> {
     let doc_name = doc.name.clone();
-    let span = span!(Level::INFO, "Procesando", doc = doc_name);
-    let _guard = span.enter();
 
-    info!("📂Procesando el documento: {doc_name}");
+    eprintln!("📂 Procesando el documento: {doc_name}");
 
     let num: usize = db.query_row(&format!("select count(*) from {doc_name}"), [], |row| {
         row.get(0)
     })?;
     if num != 0 {
-        info!("Contiene {num} registros. Buscando nuevos registros.");
+        eprintln!(
+            "    La base de datos del documento contiene {num} registros. Buscando nuevos registros."
+        );
     } else {
-        info!("Se encuentra vacio. Buscando nuevos registros.");
+        eprintln!("    Se encuentra vacio. Buscando nuevos registros.");
     }
 
     let start = std::time::Instant::now();
-    let inserted = parse_and_insert(format!("./datasources/{doc_name}"), db, doc)?;
+    let db_path = db.path().expect("Deberia poder ver el path a la db");
+    let inserted = parse_and_insert(format!("./datasources/{doc_name}"), db_path, doc)?;
     let elapsed = start.elapsed().as_millis();
-    info!(
-        "Se insertaron {inserted} columnas en {doc_name}_raw! ({elapsed} ms). {}",
+
+    #[cfg(debug_assertions)]
+    eprintln!(
+        "    Se insertaron {inserted} columnas en {doc_name}_raw! ({elapsed} ms). {}",
         if inserted == 0 {
             "No hubo nuevos registros."
         } else {
@@ -347,7 +351,9 @@ pub fn insert_base_data(db: &rusqlite::Connection, doc: &Document) -> Result<()>
         .map_err(|err| eyre!(err))?;
 
     let elapsed = start.elapsed().as_millis();
-    info!(
+
+    #[cfg(debug_assertions)]
+    eprintln!(
         "Se insertaron {inserted} columnas en {doc_name}! ({elapsed} ms). {}",
         if inserted == 0 {
             "No hubo nuevos registros."
@@ -396,136 +402,178 @@ fn compare_records(mut records: Vec<String>, mut headers: Vec<String>) -> eyre::
 
 fn parse_and_insert<T: AsRef<Path> + Debug>(
     path: T,
-    db: &Connection,
+    db_path: &str,
     doc: &Document,
 ) -> Result<usize> {
-    let mut inserted = 0;
+    let inserted = Arc::new(AtomicUsize::new(0));
     let doc_name = doc.name.clone();
 
-    info!(?path, "Buscando archivos disponibles...");
+    eprintln!("    Buscando archivos disponibles... en {:#?}", path);
     let datasources = parse_sources(&path)?;
-    for (source, ext) in datasources {
-        info!("Leyendo {source:?}");
 
-        let data = match ext {
-            DataSources::Csv => {
-                let mut reader = ReaderBuilder::new()
-                    .flexible(true)
-                    .trim(csv::Trim::All)
-                    .has_headers(true)
-                    .quote(b'"')
-                    .from_path(&source)?;
+    let multi = MultiProgress::new();
+    let style = ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] {wide_msg}")
+        .expect("Deberia ser un template valido")
+        .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ ");
 
-                let headers: Vec<String> =
-                    reader.headers()?.into_iter().map(String::from).collect();
+    std::thread::scope(|s| {
+        let mut jh = vec![];
+        for (source, ext) in datasources {
+            let inserted = inserted.clone();
+            let doc_name = doc_name.clone();
+            let multi = multi.clone();
+            let style = style.clone();
 
-                let expected_parameters: Vec<String> =
-                    doc.fields.iter().map(|obj| obj.name.clone()).collect();
+            let handler: ScopedJoinHandle<eyre::Result<()>> = s.spawn(move || {
+                let db = Connection::open(db_path)
+                    .expect("Debería ser un path valido a una base de datos sqlite.");
 
-                compare_records(expected_parameters, headers)?;
+                let pb = multi.add(ProgressBar::new_spinner());
+                pb.set_style(style.clone());
+                pb.enable_steady_tick(Duration::from_millis(100));
+                pb.set_message(format!("    Leyendo {source:?}"));
 
-                let records: Vec<Value> = reader
-                    .deserialize::<Map<String, Value>>()
-                    .filter_map(|row| row.ok())
-                    .map(Value::Object)
-                    .collect();
+                let data = match ext {
+                    DataSources::Csv => {
+                        let mut reader = ReaderBuilder::new()
+                            .flexible(true)
+                            .trim(csv::Trim::All)
+                            .has_headers(true)
+                            .quote(b'"')
+                            .from_path(&source)?;
 
-                records
-            }
-            DataSources::Json => {
-                let file = File::open(&source)?;
-                let reader = BufReader::new(file);
-                let data: Vec<Value> = serde_json::from_reader(reader)?;
+                        let headers: Vec<String> =
+                            reader.headers()?.into_iter().map(String::from).collect();
 
-                let headers: Vec<String> = if let Some(first_record) = data.first() {
-                    first_record
-                        .as_object()
-                        .map(|obj| obj.keys().cloned().collect())
-                        .unwrap_or_default()
-                } else {
-                    vec![]
+                        let expected_parameters: Vec<String> =
+                            doc.fields.iter().map(|obj| obj.name.clone()).collect();
+
+                        compare_records(expected_parameters, headers)?;
+
+                        let records: Vec<Value> = reader
+                            .deserialize::<Map<String, Value>>()
+                            .filter_map(|row| row.ok())
+                            .map(Value::Object)
+                            .collect();
+
+                        records
+                    }
+                    DataSources::Json => {
+                        let file = File::open(&source)?;
+                        let reader = BufReader::new(file);
+                        let data: Vec<Value> = serde_json::from_reader(reader)?;
+
+                        let headers: Vec<String> = if let Some(first_record) = data.first() {
+                            first_record
+                                .as_object()
+                                .map(|obj| obj.keys().cloned().collect())
+                                .unwrap_or_default()
+                        } else {
+                            vec![]
+                        };
+
+                        let expected_parameters: Vec<String> =
+                            doc.fields.iter().map(|obj| obj.name.clone()).collect();
+
+                        compare_records(expected_parameters, headers)?;
+
+                        data
+                    }
                 };
 
-                let expected_parameters: Vec<String> =
+                let total_registros = data.len();
+
+                pb.set_message(format!(
+                    "    Insertando {} registros de {:?}...",
+                    total_registros,
+                    source.file_name().unwrap_or_default()
+                ));
+
+                let (fields_str, placeholders_str) = {
+                    let fields: Vec<String> = doc.fields.iter().map(|x| x.name.clone()).collect();
+                    let fields_str = fields.join(", ");
+
+                    let placeholders: Vec<String> =
+                        doc.fields.iter().map(|_| String::from("?")).collect();
+                    let placeholders_str = placeholders.join(", ");
+
+                    (fields_str, placeholders_str)
+                };
+                let expected_fields: Vec<String> =
                     doc.fields.iter().map(|obj| obj.name.clone()).collect();
 
-                compare_records(expected_parameters, headers)?;
+                // info!("Abriendo transacción para insertar nuevos registros en `{doc_name}_raw`.");
+                let mut statement = db.prepare(&format!(
+                    "insert into {doc_name}_raw ({fields_str}) values ({placeholders_str})"
+                ))?;
 
-                data
-            }
-        };
-        let total_registros = data.len();
+                db.execute("BEGIN TRANSACTION", [])?;
 
-        let (fields_str, placeholders_str) = {
-            let fields: Vec<String> = doc.fields.iter().map(|x| x.name.clone()).collect();
-            let fields_str = fields.join(", ");
-
-            let placeholders: Vec<String> = doc.fields.iter().map(|_| String::from("?")).collect();
-            let placeholders_str = placeholders.join(", ");
-
-            (fields_str, placeholders_str)
-        };
-        let expected_fields: Vec<String> = doc.fields.iter().map(|obj| obj.name.clone()).collect();
-
-        info!("Abriendo transacción para insertar nuevos registros en `{doc_name}_raw`.");
-        let mut statement = db.prepare(&format!(
-            "insert into {doc_name}_raw ({fields_str}) values ({placeholders_str})"
-        ))?;
-
-        db.execute("BEGIN TRANSACTION", [])?;
-
-        let input_fields = doc
-            .fields
-            .iter()
-            .map(|x| x.name.clone())
-            .collect::<Vec<String>>();
-
-        for record in data {
-            if let Value::Object(map) = record {
-                let values: Vec<Value> = expected_fields
+                let input_fields = doc
+                    .fields
                     .iter()
-                    .map(|field| match map.get(field) {
-                        Some(Value::String(s)) => {
-                            if input_fields.contains(field) {
-                                Value::String(clean_html(s.clone()))
-                            } else {
-                                Value::String(normalize(s))
+                    .map(|x| x.name.clone())
+                    .collect::<Vec<String>>();
+
+                for record in data {
+                    if let Value::Object(map) = record {
+                        let values: Vec<Value> = expected_fields
+                            .iter()
+                            .map(|field| match map.get(field) {
+                                Some(Value::String(s)) => {
+                                    if input_fields.contains(field) {
+                                        Value::String(clean_html(s.clone()))
+                                    } else {
+                                        Value::String(normalize(s))
+                                    }
+                                }
+                                Some(other) => other.clone(),
+                                None => Value::Null,
+                            })
+                            .collect();
+
+                        let mut bindings: Vec<&dyn rusqlite::ToSql> = Vec::new();
+
+                        for v in &values {
+                            // TODO: Encontrar una manera de mantener las cosas en el stack.
+                            match v {
+                                Value::String(s) => bindings.push(s as &dyn rusqlite::ToSql),
+                                Value::Number(n) if n.is_i64() => {
+                                    let val = n.as_i64().expect("Deberia poder castearlo a i64");
+                                    let leaked: &'static i64 = Box::leak(Box::new(val));
+                                    bindings.push(leaked as &dyn rusqlite::ToSql);
+                                }
+                                Value::Number(n) if n.is_f64() => {
+                                    let val = n.as_f64().expect("Deberia poder castearlo a f64");
+                                    let leaked: &'static f64 = Box::leak(Box::new(val));
+                                    bindings.push(leaked as &dyn rusqlite::ToSql);
+                                }
+                                Value::Bool(b) => bindings.push(b as &dyn rusqlite::ToSql),
+                                _ => bindings.push(&"" as &dyn rusqlite::ToSql),
                             }
                         }
-                        Some(other) => other.clone(),
-                        None => Value::Null,
-                    })
-                    .collect();
 
-                let mut bindings: Vec<&dyn rusqlite::ToSql> = Vec::new();
-
-                for v in &values {
-                    // TODO: Encontrar una manera de mantener las cosas en el stack.
-                    match v {
-                        Value::String(s) => bindings.push(s as &dyn rusqlite::ToSql),
-                        Value::Number(n) if n.is_i64() => {
-                            let val = n.as_i64().expect("Deberia poder castearlo a i64");
-                            let leaked: &'static i64 = Box::leak(Box::new(val));
-                            bindings.push(leaked as &dyn rusqlite::ToSql);
-                        }
-                        Value::Number(n) if n.is_f64() => {
-                            let val = n.as_f64().expect("Deberia poder castearlo a f64");
-                            let leaked: &'static f64 = Box::leak(Box::new(val));
-                            bindings.push(leaked as &dyn rusqlite::ToSql);
-                        }
-                        Value::Bool(b) => bindings.push(b as &dyn rusqlite::ToSql),
-                        _ => bindings.push(&"" as &dyn rusqlite::ToSql),
+                        inserted.fetch_add(statement.execute(&bindings[..])?, Ordering::Relaxed);
                     }
                 }
 
-                inserted += statement.execute(&bindings[..])?;
+                db.execute("COMMIT", [])?;
+                pb.finish_with_message(format!(
+                    "✔  Insertado {} registros de {:?}",
+                    total_registros,
+                    source.file_name().unwrap_or_default()
+                ));
+                Ok(())
+            });
+            jh.push(handler);
+        }
+        for h in jh {
+            if let Err(e) = h.join().expect("Thread panicked") {
+                eprintln!("Ocurrio un error: {:#?}", e);
             }
         }
+    });
 
-        db.execute("COMMIT", [])?;
-
-        info!("Lectura completa - {} registros", total_registros,);
-    }
-
+    let inserted = inserted.load(Ordering::Relaxed);
     Ok(inserted)
 }

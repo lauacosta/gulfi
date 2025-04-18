@@ -166,7 +166,7 @@ fn main() -> eyre::Result<()> {
                 }
             }
 
-            info!(
+            eprintln!(
                 "Sincronización finalizada, tomó {} ms",
                 start.elapsed().as_millis()
             );
