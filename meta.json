@@ -48,5 +48,15 @@
         "unique": false
       }
     ]
+  },
+  {
+    "name": "alemania",
+    "fields": [
+      {
+        "name": "poblacion",
+        "vec_input": true,
+        "unique": false
+      }
+    ]
   }
 ]

@@ -59,7 +59,10 @@ pub fn run_new() -> Result<()> {
         }
     }
 
-    let new_doc = Document { name, fields };
+    let new_doc = Document {
+        name: name.clone(),
+        fields,
+    };
 
     let mut all_docs: Vec<Document> = if path.exists() {
         let json_str = std::fs::read_to_string(path)?;
@@ -75,9 +78,17 @@ pub fn run_new() -> Result<()> {
         .create(true)
         .truncate(true)
         .open(path)?;
+
     file.seek(io::SeekFrom::Start(0))?;
 
     serde_json::to_writer_pretty(file, &all_docs)?;
+
+    let dir_name = format!("datasources/{name}");
+    let path = Path::new(&dir_name);
+
+    if !path.exists() || !path.is_dir() {
+        std::fs::DirBuilder::new().recursive(true).create(&path)?;
+    }
 
     Ok(())
 }
