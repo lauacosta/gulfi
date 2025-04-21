@@ -90,16 +90,12 @@ pub async fn add_favoritos(
     let data = payload.data.join(", ");
     let busquedas = payload.busquedas;
 
-    let queries: Vec<String> = busquedas
+    let queries = busquedas
         .iter()
-        .filter_map(|x| match gulfi_query::Query::parse(&x.query) {
-            Ok(parsed) => Some(parsed.query),
-            Err(err) => {
-                eprintln!("Parse failed for '{}': {:?}", x.query, err);
-                None
-            }
+        .map(|x| {
+            gulfi_query::Query::parse(&format!("query: {}", &x.query)).map(|parsed| parsed.query)
         })
-        .collect();
+        .collect::<Result<Vec<String>, _>>()?;
 
     let queries = serde_json::to_string(&queries)?;
 
