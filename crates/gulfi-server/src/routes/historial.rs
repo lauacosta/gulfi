@@ -15,7 +15,6 @@ use tracing::debug;
 use crate::{HistorialView, search::SearchStrategy, startup::AppState, views::HistorialFullView};
 
 #[axum::debug_handler]
-#[tracing::instrument(name = "Consultando el historial")]
 pub async fn historial(
     Path(doc): Path<String>,
     State(app): State<AppState>,
@@ -44,7 +43,7 @@ pub async fn historial(
 }
 
 #[axum::debug_handler]
-#[tracing::instrument(name = "Consultando el historial")]
+#[tracing::instrument(name = "Consultando el historial", skip(app))]
 pub async fn historial_full(
     Path(doc): Path<String>,
     State(app): State<AppState>,
@@ -72,19 +71,16 @@ pub async fn historial_full(
 
             let search_str = query.query;
 
-            let filters = match query.constraints {
-                Some(map) => Some(
-                    map.into_iter()
-                        .flat_map(|(field, constraints)| {
-                            constraints
-                                .into_iter()
-                                .map(move |constraint| format!("{field} {constraint}"))
-                        })
-                        .collect::<Vec<_>>()
-                        .join(","),
-                ),
-                None => None,
-            };
+            let filters = query.constraints.map(|map| {
+                map.into_iter()
+                    .flat_map(|(field, constraints)| {
+                        constraints
+                            .into_iter()
+                            .map(move |constraint| format!("{field} {constraint}"))
+                    })
+                    .collect::<Vec<_>>()
+                    .join(",")
+            });
 
             let data = HistorialFullView::new(
                 id,

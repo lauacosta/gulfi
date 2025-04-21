@@ -8,7 +8,7 @@ use gulfi_common::Document;
 use gulfi_server::{ApplicationSettings, startup::run_server};
 use gulfi_sqlite::{init_sqlite, insert_base_data, setup_sqlite, sync_fts_data, sync_vec_data};
 use rusqlite::Connection;
-use tracing::{Level, debug, info, level_filters::LevelFilter};
+use tracing::{Level, debug, level_filters::LevelFilter};
 use tracing_error::ErrorLayer;
 use tracing_subscriber::{Registry, layer::SubscriberExt};
 use tracing_tree::{HierarchicalLayer, time::FormatTime};
@@ -166,7 +166,7 @@ fn main() -> eyre::Result<()> {
                 }
             }
 
-            info!(
+            eprintln!(
                 "Sincronización finalizada, tomó {} ms",
                 start.elapsed().as_millis()
             );

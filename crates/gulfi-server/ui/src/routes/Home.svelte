@@ -334,11 +334,10 @@
         const name = input?.replace(/[^a-zA-Z0-9_\-\s]/g, "");
 
         if (name !== null && name !== "") {
-            let json_str = JSON.stringify(heldSearches);
             const data = {
                 nombre: name,
-                data: JSON.stringify(heldData),
-                busquedas: json_str,
+                data: heldData,
+                busquedas: heldSearches,
             };
 
             try {
@@ -352,7 +351,6 @@
                         body: JSON.stringify(data),
                     },
                 );
-
                 if (response.ok) {
                     heldSearches = [];
                 } else {

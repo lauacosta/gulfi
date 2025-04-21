@@ -1,6 +1,6 @@
 use std::{
     fmt::{Debug, Display, Formatter},
-    fs::metadata,
+    fs::{DirBuilder, metadata},
     path::{Path, PathBuf},
 };
 
@@ -99,10 +99,8 @@ pub fn parse_sources<T: AsRef<Path> + Debug>(path: T) -> eyre::Result<Vec<(PathB
     match metadata(&path) {
         Err(err) => {
             error!("El directorio `{path:?}` no existe!: {err}");
-            info!(
-                "Para solucionarlo, cree un directorio en `datasources` con el nombre de su documento."
-            );
-            return Err(eyre!(err));
+            info!("Para solucionarlo, se creara un directorio con ese path");
+            DirBuilder::new().recursive(true).create(&path)?;
         }
         Ok(metadata) => {
             if metadata.is_dir() {

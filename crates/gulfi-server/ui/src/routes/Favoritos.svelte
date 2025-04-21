@@ -12,6 +12,7 @@
         fecha: string;
         busquedas: [string, string][];
     };
+
     type Favoritos = {
         favoritos: Resultados[];
     };

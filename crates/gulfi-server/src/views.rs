@@ -94,13 +94,3 @@ pub struct TableView {
     pub columns: Vec<String>,
     pub rows: Vec<Vec<String>>,
 }
-
-impl Default for TableView {
-    fn default() -> Self {
-        Self {
-            msg: "No se encontraron ningun registro.".to_owned(),
-            columns: vec![],
-            rows: vec![],
-        }
-    }
-}

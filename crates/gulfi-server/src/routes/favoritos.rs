@@ -67,17 +67,17 @@ pub async fn favoritos(
 #[derive(Deserialize, Debug)]
 pub struct FavParams {
     nombre: String,
-    data: String,
-    busquedas: String,
+    data: Vec<String>,
+    busquedas: Vec<Busquedas>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct FavoritesReponse {
+struct Busquedas {
     query: String,
     strategy: String,
 }
 
-#[tracing::instrument(skip(app, payload), name = "añadiendo busqueda a favoritos")]
+#[tracing::instrument(skip(app), name = "añadiendo busqueda a favoritos")]
 pub async fn add_favoritos(
     Path(doc): Path<String>,
     State(app): State<AppState>,
@@ -87,13 +87,19 @@ pub async fn add_favoritos(
         .expect("Deberia ser un path valido a una base de datos SQLite");
 
     let nombre = payload.nombre.replace(|c: char| c.is_whitespace(), "_");
-    let data = payload.data;
-    let busquedas: Vec<FavoritesReponse> = serde_json::from_str(&payload.busquedas)?;
+    let data = payload.data.join(", ");
+    let busquedas = payload.busquedas;
 
-    let queries = busquedas
+    let queries: Vec<String> = busquedas
         .iter()
-        .map(|x| gulfi_query::Query::parse(&x.query).map(|parsed| parsed.query))
-        .collect::<Result<Vec<String>, _>>()?;
+        .filter_map(|x| match gulfi_query::Query::parse(&x.query) {
+            Ok(parsed) => Some(parsed.query),
+            Err(err) => {
+                eprintln!("Parse failed for '{}': {:?}", x.query, err);
+                None
+            }
+        })
+        .collect();
 
     let queries = serde_json::to_string(&queries)?;
 

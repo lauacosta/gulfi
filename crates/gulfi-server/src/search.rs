@@ -13,11 +13,12 @@ use rusqlite::{
     types::{FromSql, FromSqlError, ToSqlOutput, ValueRef},
 };
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use thiserror::Error;
 use tracing::{debug, info};
 use zerocopy::IntoBytes;
 
-use crate::{startup::AppState, views::TableView};
+use crate::startup::AppState;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Default)]
 pub enum SearchStrategy {
@@ -147,8 +148,6 @@ impl SearchStrategy {
                 };
 
                 let sql = format!("{search} {where_clause}");
-
-                // dbg!("{:#?}", &sql);
 
                 let mut stmt = db.prepare(&sql)?;
                 let column_names: Vec<String> =
@@ -371,16 +370,14 @@ impl SearchStrategy {
 
                 let sql = build_final_query(&where_clause);
 
-                // dbg!("{:#?}", &sql);
-                // dbg!("{:#?}", &binding_values.len());
-
                 let mut stmt = db.prepare(&sql)?;
                 let column_names: Vec<String> =
                     stmt.column_names().into_iter().map(String::from).collect();
 
+                let column_count = stmt.column_count();
                 let table = stmt
                     .query_map(&*binding_values, |row| {
-                        let mut data = Vec::new();
+                        let mut data = Vec::with_capacity(column_count);
 
                         for i in 0..row.as_ref().column_count() {
                             let val = match row.get_ref(i)? {
@@ -407,15 +404,16 @@ impl SearchStrategy {
             query.query, total_query_count,
         );
 
-        let table = TableView {
-            msg: format!("Hay un total de {} resultados.", total_query_count),
-            columns: column_names,
-            rows: table,
-        };
-
         update_historial(&db, &params, document.name.clone())?;
 
-        Json(table).into_http()
+        Json(json!({
+            "msg": format!("Hay un total de {} resultados", total_query_count),
+            "columns": column_names,
+            "rows": table,
+        }))
+        .into_http()
+
+        // Json(table).into_http()
     }
 }
 
