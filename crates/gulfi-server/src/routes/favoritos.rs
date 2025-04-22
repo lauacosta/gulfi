@@ -19,12 +19,12 @@ use serde::Deserialize;
 use crate::startup::AppState;
 
 #[derive(Debug, Clone, Default, Serialize)]
-pub struct Resultados {
-    pub id: u64,
-    pub nombre: String,
-    pub data: String,
-    pub busquedas: Vec<(String, String)>,
-    pub fecha: String,
+struct Resultados {
+    id: u64,
+    nombre: String,
+    data: String,
+    busquedas: Vec<(String, String)>,
+    fecha: String,
 }
 
 pub async fn favoritos(
@@ -49,8 +49,18 @@ pub async fn favoritos(
                 let busquedas: String = row.get(4).unwrap_or_default();
                 let tipos: String = row.get(5).unwrap_or_default();
 
-                let busquedas: Vec<String> = serde_json::from_str(&busquedas).unwrap();
-                let tipos: Vec<String> = serde_json::from_str(&tipos).unwrap();
+                let busquedas: Vec<String> = serde_json::from_str(&busquedas).map_err(|e| {
+                    tracing::error!(
+                        "Error al deserializar el string de busquedas a Vec<String>: {e}"
+                    );
+
+                    rusqlite::Error::ExecuteReturnedResults
+                })?;
+                let tipos: Vec<String> = serde_json::from_str(&tipos).map_err(|e| {
+                    tracing::error!("Error al deserializar el string de tipos a Vec<String>: {e}");
+
+                    rusqlite::Error::ExecuteReturnedResults
+                })?;
 
                 let timestamp = NaiveDateTime::parse_from_str(&timestamp_str, "%Y-%m-%d %H:%M:%S")
                     .unwrap_or_else(|_| Default::default());
@@ -110,8 +120,8 @@ pub async fn add_favoritos(
 
     let tipos = serde_json::to_string(
         &busquedas
-            .iter()
-            .map(|x| x.strategy.clone())
+            .into_iter()
+            .map(|x| x.strategy)
             .collect::<Vec<String>>(),
     )?;
 

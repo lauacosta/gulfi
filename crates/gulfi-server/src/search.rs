@@ -94,7 +94,6 @@ impl SearchStrategy {
 
         debug!(?query);
 
-        // FIX: Lowercase and Uppercase words matter. They shouldn't.
         let (column_names, table, total_query_count) = match self {
             SearchStrategy::Fts => {
                 let search = {

@@ -24,8 +24,8 @@ pub struct Cli {
 }
 
 impl Cli {
-    pub fn command(&self) -> Command {
-        self.command.clone().unwrap_or(Command::List)
+    pub fn command(self) -> Command {
+        self.command.unwrap_or(Command::List)
     }
 }
 

@@ -74,8 +74,7 @@ pub async fn sync_vec_data(db: &Connection, doc: &Document, base_delay: u64) -> 
         .chunks(chunk_size)
         .enumerate()
         .map(|(proc_id, chunk)| {
-            let indices: Vec<u64> = chunk.iter().map(|(id, _)| *id).collect();
-            let v_inputs: Vec<String> = chunk.iter().map(|(_, input)| input.clone()).collect();
+            let (indices, v_inputs) = chunk.iter().cloned().unzip();
 
             let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(10);
 
@@ -116,7 +115,7 @@ pub async fn sync_vec_data(db: &Connection, doc: &Document, base_delay: u64) -> 
     futures_stream.for_each_concurrent(Some(6), |future| {
         let total_inserted = total_inserted.clone();
         let acc_time_per_chunk = acc_time_per_chunk.clone();
-        let sent_doc_name =doc_name.clone();
+        let sent_doc_name = doc_name.clone();
         let embed_pb = Mutex::new(embed_pb.clone());
 
         async move {

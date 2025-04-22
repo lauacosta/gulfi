@@ -114,8 +114,8 @@ fn main() -> eyre::Result<()> {
                 Some(doc) => doc,
                 None => {
                     let available_documents = documents
-                        .iter()
-                        .map(|x| x.name.clone())
+                        .into_iter()
+                        .map(|x| x.name)
                         .collect::<Vec<_>>()
                         .join(", ");
 
