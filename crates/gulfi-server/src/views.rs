@@ -52,42 +52,6 @@ impl HistorialView {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
-pub struct FavoritosView {
-    pub favoritos: Vec<ResultadosView>,
-}
-
-#[derive(Debug, Clone, Default, Serialize)]
-pub struct ResultadosView {
-    pub id: u64,
-    pub nombre: String,
-    pub data: String,
-    pub tipos: Vec<String>,
-    pub fecha: String,
-    pub busquedas: Vec<String>,
-}
-
-impl ResultadosView {
-    #[must_use]
-    pub fn new(
-        id: u64,
-        nombre: String,
-        data: String,
-        tipos: Vec<String>,
-        fecha: NaiveDateTime,
-        busquedas: Vec<String>,
-    ) -> Self {
-        Self {
-            id,
-            nombre,
-            data,
-            tipos,
-            fecha: fecha.format("%b %d, %Y %H:%M").to_string(),
-            busquedas,
-        }
-    }
-}
-
 #[derive(Serialize)]
 pub struct TableView {
     pub msg: String,

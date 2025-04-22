@@ -6,7 +6,6 @@ pub use health_check::*;
 mod health_check;
 mod historial;
 pub use historial::*;
-mod index;
 pub(crate) mod search;
 pub use search::*;
 

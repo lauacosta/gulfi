@@ -4,7 +4,9 @@ use axum::extract::Query;
 use chrono::NaiveDateTime;
 use eyre::{Result, eyre};
 use serde::Serialize;
+use serde_json::json;
 use std::collections::HashMap;
+use std::iter::zip;
 use tracing::debug;
 
 use crate::into_http::HttpError;
@@ -15,8 +17,6 @@ use rusqlite::params;
 use serde::Deserialize;
 
 use crate::startup::AppState;
-use crate::views::FavoritosView;
-use crate::views::ResultadosView;
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Resultados {
@@ -27,41 +27,50 @@ pub struct Resultados {
     pub fecha: String,
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
-pub struct FavoritosClient {
-    pub favoritos: Vec<Resultados>,
-}
-
 pub async fn favoritos(
     Path(doc): Path<String>,
     State(app): State<AppState>,
-) -> Result<Json<FavoritosClient>, HttpError> {
+) -> Result<Json<serde_json::Value>, HttpError> {
     let db = Connection::open(app.db_path)
         .expect("Deberia ser un path valido a una base de datos SQLite");
-    let favoritos = get_favoritos(&db, doc)?;
-    let mut results = Vec::with_capacity(favoritos.favoritos.len());
-    for f in &favoritos.favoritos {
-        let id = f.id;
-        let nombre = f.nombre.clone();
-        let data = f.data.clone();
-        let busquedas = f
-            .busquedas
-            .clone()
-            .into_iter()
-            .zip(f.tipos.clone().into_iter())
-            .collect();
-        let fecha = f.fecha.clone();
 
-        results.push(Resultados {
-            id,
-            nombre,
-            data,
-            busquedas,
-            fecha,
-        });
-    }
+    let favoritos = {
+        let mut statement = db.prepare(
+        "select id, nombre, data, timestamp, busquedas, tipos from favoritos where doc = :doc order by timestamp desc",
+    )?;
 
-    Ok(Json(FavoritosClient { favoritos: results }))
+        statement
+            .query_map([doc], |row| {
+                let id: u64 = row.get(0).unwrap_or_default();
+                let nombre: String = row.get(1).unwrap_or_default();
+                let data: String = row.get(2).unwrap_or_default();
+                let timestamp_str: String = row.get(3).unwrap_or_default();
+
+                let busquedas: String = row.get(4).unwrap_or_default();
+                let tipos: String = row.get(5).unwrap_or_default();
+
+                let busquedas: Vec<String> = serde_json::from_str(&busquedas).unwrap();
+                let tipos: Vec<String> = serde_json::from_str(&tipos).unwrap();
+
+                let timestamp = NaiveDateTime::parse_from_str(&timestamp_str, "%Y-%m-%d %H:%M:%S")
+                    .unwrap_or_else(|_| Default::default());
+
+                let busqueda_con_tipo: Vec<(String, String)> = zip(busquedas, tipos).collect();
+
+                let data = Resultados {
+                    id,
+                    nombre,
+                    data,
+                    busquedas: busqueda_con_tipo,
+                    fecha: timestamp.format("%b %d, %Y %H:%M").to_string(),
+                };
+
+                Ok(data)
+            })?
+            .collect::<Result<Vec<Resultados>, _>>()
+    }?;
+
+    Ok(Json(json! ({ "favoritos": favoritos})))
 }
 
 #[derive(Deserialize, Debug)]
@@ -142,36 +151,4 @@ pub async fn delete_favoritos(
     statement.execute(params![nombre, doc])?;
 
     Ok(StatusCode::OK)
-}
-
-fn get_favoritos(db: &Connection, doc: String) -> Result<FavoritosView, HttpError> {
-    let mut statement = db.prepare(
-        "select id, nombre, data, timestamp, busquedas, tipos from favoritos where doc = :doc order by timestamp desc",
-    )?;
-
-    let rows = statement
-        .query_map([doc], |row| {
-            let id: u64 = row.get(0).unwrap_or_default();
-            let nombre: String = row.get(1).unwrap_or_default();
-            let data: String = row.get(2).unwrap_or_default();
-            let timestamp_str: String = row.get(3).unwrap_or_default();
-            let bus: String = row.get(4).unwrap_or_default();
-            let tipo: String = row.get(5).unwrap_or_default();
-
-            let timestamp = NaiveDateTime::parse_from_str(&timestamp_str, "%Y-%m-%d %H:%M:%S")
-                .unwrap_or_else(|_| Default::default());
-
-            let busquedas: Vec<String> =
-                serde_json::from_str(&bus).expect("busquedas tendria que poder ser serializado");
-
-            let tipos: Vec<String> =
-                serde_json::from_str(&tipo).expect("tipos tendria que poder ser serializado");
-
-            let data = ResultadosView::new(id, nombre, data, tipos, timestamp, busquedas);
-
-            Ok(data)
-        })?
-        .collect::<Result<Vec<ResultadosView>, _>>()?;
-
-    Ok(FavoritosView { favoritos: rows })
 }

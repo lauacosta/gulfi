@@ -36,9 +36,6 @@ pub async fn historial(
         doc,
     )?;
 
-    #[cfg(debug_assertions)]
-    dbg!("{:?}", &result);
-
     Ok(Json(result))
 }
 
@@ -97,9 +94,6 @@ pub async fn historial_full(
         },
         doc,
     )?;
-
-    #[cfg(debug_assertions)]
-    dbg!("{:?}", &result);
 
     Ok(Json(result))
 }
