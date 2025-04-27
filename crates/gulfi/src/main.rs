@@ -1,4 +1,4 @@
-use std::{fs::File, time::Duration};
+use std::{fs::File, time::Instant};
 
 use clap::{Parser, crate_name, crate_version};
 use color_eyre::owo_colors::OwoColorize;
@@ -10,8 +10,7 @@ use gulfi_sqlite::{init_sqlite, insert_base_data, setup_sqlite, sync_fts_data, s
 use rusqlite::Connection;
 use tracing::{Level, debug, level_filters::LevelFilter};
 use tracing_error::ErrorLayer;
-use tracing_subscriber::{Registry, layer::SubscriberExt};
-use tracing_tree::{HierarchicalLayer, time::FormatTime};
+use tracing_subscriber::{Registry, fmt::Layer, layer::SubscriberExt};
 
 #[cfg(debug_assertions)]
 use eyre::Report;
@@ -103,7 +102,7 @@ fn main() -> eyre::Result<()> {
         }
         Command::Sync {
             sync_strat,
-            clean_slate,
+            force,
             base_delay,
             document,
         } => {
@@ -126,7 +125,7 @@ fn main() -> eyre::Result<()> {
                 }
             };
 
-            if clean_slate {
+            if force {
                 let exists: String = match db.query_row(
                     "select name from sqlite_master where type='table' and name=?",
                     [&document],
@@ -149,25 +148,59 @@ fn main() -> eyre::Result<()> {
             }
 
             let start = std::time::Instant::now();
-
             setup_sqlite(&db, doc)?;
             insert_base_data(&db, doc)?;
-
             match sync_strat {
-                SyncStrategy::Fts => sync_fts_data(&db, doc),
+                SyncStrategy::Fts => {
+                    let start = Instant::now();
+                    let inserted = sync_fts_data(&db, doc);
+
+                    eprintln!("{}", "-".repeat(100));
+                    eprintln!(
+                        "{inserted} registros fueron sincronizados en {} ({} ms).",
+                        format!("fts_{}", doc.name).bright_cyan().bold(),
+                        start.elapsed().as_millis(),
+                    );
+                }
                 SyncStrategy::Vector => {
                     let rt = tokio::runtime::Runtime::new()?;
-                    rt.block_on(sync_vec_data(&db, doc, base_delay))?;
+
+                    let start = Instant::now();
+                    let (inserted, media) = rt.block_on(sync_vec_data(&db, doc, base_delay))?;
+
+                    eprintln!("{}", "-".repeat(100));
+                    eprintln!(
+                        "{inserted} registros fueron sincronizados en {} ({} ms, media de {media} ms por chunk).",
+                        format!("vec_{}", doc.name).bright_purple().bold(),
+                        start.elapsed().as_millis(),
+                    );
                 }
                 SyncStrategy::All => {
-                    sync_fts_data(&db, doc);
+                    let start = Instant::now();
+                    let inserted_fts = sync_fts_data(&db, doc);
+                    let fts_elapsed = start.elapsed().as_millis();
+
                     let rt = tokio::runtime::Runtime::new()?;
-                    rt.block_on(sync_vec_data(&db, doc, base_delay))?;
+                    let start = Instant::now();
+                    let (inserted, media) = rt.block_on(sync_vec_data(&db, doc, base_delay))?;
+                    let vec_elapsed = start.elapsed().as_millis();
+
+                    eprintln!("{}", "-".repeat(100));
+
+                    eprintln!(
+                        "{inserted_fts} registros fueron sincronizados en {} ({fts_elapsed} ms).",
+                        format!("fts_{}", doc.name).bright_cyan().bold(),
+                    );
+
+                    eprintln!(
+                        "{inserted} registros fueron sincronizados en {} ({vec_elapsed} ms, media de {media} ms por chunk).",
+                        format!("vec_{}", doc.name).bright_purple().bold(),
+                    );
                 }
             }
 
             eprintln!(
-                "Sincronización finalizada, tomó {} ms",
+                "\n🎉 Sincronización finalizada, tomó {} ms.\n",
                 start.elapsed().as_millis()
             );
         }
@@ -193,9 +226,8 @@ fn setup(loglevel: &str) -> eyre::Result<()> {
     let subscriber = Registry::default()
         .with(LevelFilter::from_level(level))
         .with(
-            HierarchicalLayer::new(2)
-                .with_targets(true)
-                .with_bracketed_fields(true)
+            Layer::new()
+                .compact()
                 .with_ansi(true)
                 .with_timer(GulfiTimer::new()),
         )
@@ -216,18 +248,13 @@ impl GulfiTimer {
     }
 }
 
-impl FormatTime for GulfiTimer {
-    fn format_time(&self, _: &mut impl fmt::Write) -> fmt::Result {
-        Ok(())
-    }
-
-    fn style_timestamp(&self, _: bool, elapsed: Duration, w: &mut impl fmt::Write) -> fmt::Result {
+impl tracing_subscriber::fmt::time::FormatTime for GulfiTimer {
+    fn format_time(&self, w: &mut tracing_subscriber::fmt::format::Writer<'_>) -> fmt::Result {
         let datetime = chrono::Local::now().format("%H:%M:%S");
-        let time = format!("~{}ms", elapsed.as_millis());
-        let str = format!("{} {}", datetime.bright_blue(), time.dimmed());
+        // let time = format!("~{}ms", elapsed.as_millis());
+        let str = format!("{}", datetime.bright_blue());
 
         write!(w, "{}", str)?;
-
         Ok(())
     }
 }

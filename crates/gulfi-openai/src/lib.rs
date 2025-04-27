@@ -50,12 +50,18 @@ pub struct RequestBody {
 
 #[derive(Debug, thiserror::Error)]
 pub enum EmbeddingError {
-    #[error("Request falló: {0}")]
-    RequestError(#[from] reqwest::Error),
+    #[error("Request falló: {0} {1}")]
+    RequestError(reqwest::Error, String),
     #[error("Rate limit excecido")]
     RateLimit,
     #[error("Maximo número de intentos excedido")]
     MaxRetriesExceeded,
+}
+
+impl From<reqwest::Error> for EmbeddingError {
+    fn from(err: reqwest::Error) -> Self {
+        EmbeddingError::RequestError(err, String::default())
+    }
 }
 
 async fn request_embeddings(
@@ -111,15 +117,20 @@ async fn request_embeddings(
             }
         }
         _ => {
-            let error_status = response.error_for_status_ref().err();
+            let error = response
+                .error_for_status_ref()
+                .expect_err("Deberia poder obtener el error");
+
             let err_body = response
                 .text()
                 .await
                 .unwrap_or_else(|_| "No response body".to_string());
+
+            let error_msg = format!("{status} -> {err_body}",);
+
             error!("El request ha fallado con status: {status}. Respuesta: {err_body} [{proc_id}]");
-            Err(EmbeddingError::RequestError(
-                error_status.expect("No tendria que haber un error!."),
-            ))
+
+            Err(EmbeddingError::RequestError(error, error_msg))
         }
     }
 }
@@ -212,11 +223,11 @@ pub async fn embed_vec_with_progress(
     let start = Instant::now();
 
     let bytes = response.bytes().await?;
-    let response = tokio::task::spawn_blocking(move || {
-        let mut buf = bytes.to_vec();
-        simd_json::serde::from_slice::<ResponseBody>(&mut buf)
-    })
-    .await??;
+    // let response = tokio::task::spawn_blocking(move || {
+    let mut buf = bytes.to_vec();
+    let response = simd_json::serde::from_slice::<ResponseBody>(&mut buf)?;
+    // })
+    // .await??;
 
     let elapsed = start.elapsed().as_millis();
     let _ = tx

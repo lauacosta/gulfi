@@ -27,13 +27,18 @@ use zerocopy::IntoBytes;
 
 pub const DIMENSION: usize = 1536;
 
-pub async fn sync_vec_data(db: &Connection, doc: &Document, base_delay: u64) -> Result<()> {
+pub async fn sync_vec_data(
+    db: &Connection,
+    doc: &Document,
+    base_delay: u64,
+) -> Result<(usize, f32)> {
     let doc_name = doc.name.clone();
     let mp = MultiProgress::new();
 
     eprintln!("Sincronizando tablas VEC en {doc_name}");
 
     let mut statement = db.prepare(&format!("select id, vec_input from {doc_name}"))?;
+
     let v_inputs: Vec<(u64, String)> = match statement.query_map([], |row| {
         let id: u64 = row.get(0)?;
         let input: String = row.get::<_, String>(1)?;
@@ -110,8 +115,6 @@ pub async fn sync_vec_data(db: &Connection, doc: &Document, base_delay: u64) -> 
     let total_inserted = Arc::new(AtomicUsize::new(0));
     let acc_time_per_chunk = Arc::new(AtomicUsize::new(0));
 
-    let start = std::time::Instant::now();
-
     futures_stream.for_each_concurrent(Some(6), |future| {
         let total_inserted = total_inserted.clone();
         let acc_time_per_chunk = acc_time_per_chunk.clone();
@@ -164,21 +167,10 @@ pub async fn sync_vec_data(db: &Connection, doc: &Document, base_delay: u64) -> 
 
     let media = total_acc_chunks as f32 / chunks as f32;
 
-    eprintln!("\nⓘ  Media por chunk {media} ms");
-
-    let elapsed = start.elapsed().as_millis();
-    eprintln!(
-        "{} Sincronización finalizada: {} registros almacenados en vec_{} ({} ms) ",
-        "✔".bright_green().bold(),
-        total,
-        doc_name,
-        elapsed
-    );
-
-    Ok(())
+    Ok((total, media))
 }
 
-pub fn sync_fts_data(db: &Connection, doc: &Document) {
+pub fn sync_fts_data(db: &Connection, doc: &Document) -> usize {
     let doc_name = doc.name.clone();
 
     let pb = ProgressBar::new_spinner();
@@ -201,25 +193,31 @@ pub fn sync_fts_data(db: &Connection, doc: &Document) {
         fields.join(", ")
     };
 
-    let start = std::time::Instant::now();
-    db.execute_batch(&format!(
-        "
+    let inserted = db
+        .execute(
+            &format!(
+                "
             insert into fts_{doc_name}(rowid, {field_names}, vec_input)
             select rowid, {field_names}, vec_input 
-            from {doc_name};
+            from {doc_name};"
+            ),
+            [],
+        )
+        .map_err(|err| eyre!(err))
+        .expect(
+            "Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite",
+        );
 
-            insert into fts_{doc_name}(fts_{doc_name}) values('optimize');
-            "
-    ))
+    db.execute(
+        &format!("insert into fts_{doc_name}(fts_{doc_name}) values('optimize')"),
+        [],
+    )
     .map_err(|err| eyre!(err))
     .expect("Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite");
 
-    let elapsed = start.elapsed().as_millis();
+    pb.finish_and_clear();
 
-    pb.finish_with_message(format!(
-        "{} Se han sincronizado los registros para fts_{doc_name}. ({elapsed} ms) ",
-        "✔".bright_green().bold(),
-    ));
+    inserted
 }
 
 pub fn init_sqlite() -> Result<String> {
@@ -402,7 +400,7 @@ pub fn insert_base_data(db: &rusqlite::Connection, doc: &Document) -> Result<()>
     let elapsed = start.elapsed().as_millis();
 
     eprintln!(
-        "ⓘ  Se insertaron {inserted} registros en {doc_name}_raw! ({elapsed} ms). {}",
+        "ℹ️ Se insertaron {inserted} registros en {doc_name}_raw! ({elapsed} ms). {}",
         if inserted == 0 {
             "No hubo nuevos registros."
         } else {
@@ -439,7 +437,7 @@ pub fn insert_base_data(db: &rusqlite::Connection, doc: &Document) -> Result<()>
     let elapsed = start.elapsed().as_millis();
 
     eprintln!(
-        "ⓘ  Se insertaron {inserted} registros en {doc_name}! ({elapsed} ms). {}",
+        "ℹ️ Se insertaron {inserted} registros en {doc_name}! ({elapsed} ms). {}",
         if inserted == 0 {
             "No hubo nuevos registros."
         } else {
@@ -455,6 +453,7 @@ pub fn insert_base_data(db: &rusqlite::Connection, doc: &Document) -> Result<()>
 }
 
 fn compare_records(mut records: Vec<String>, mut headers: Vec<String>) -> eyre::Result<()> {
+    // FIX: Huh.
     headers.sort();
     records.sort();
 

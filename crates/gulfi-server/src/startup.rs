@@ -4,16 +4,17 @@ use eyre::Result;
 use gulfi_common::Document;
 use gulfi_sqlite::init_sqlite;
 use http::Method;
-use std::io;
 use std::net::IpAddr;
 use std::time::{Duration, Instant};
+use std::{fmt, io};
+use tower_http::LatencyUnit;
 use tower_http::cors::Any;
 use tower_http::{compression::CompressionLayer, cors::CorsLayer};
 
 use axum::{Router, body::Body, http::Request, routing::get, serve::Serve};
 use tokio::{net::TcpListener, signal};
 use tower::ServiceBuilder;
-use tower_http::trace::{DefaultOnResponse, TraceLayer};
+use tower_http::trace::{OnResponse, TraceLayer};
 use tower_request_id::{RequestId, RequestIdLayer};
 use tracing::{Level, error, error_span, info};
 
@@ -177,13 +178,16 @@ pub fn build_server(listener: TcpListener, state: AppState) -> Result<Serve<Rout
                                 "request",
                                 id = %request_id,
                                 method = %request.method().blue().bold(),
-                                uri = %request.uri()
+                                uri = %request.uri(),
                             )
                         })
                         .on_response(
-                            DefaultOnResponse::new()
+                            ColoredOnResponse::new()
                                 .include_headers(true)
                                 .level(Level::INFO),
+                            // DefaultOnResponse::new()
+                            //     .include_headers(true)
+                            //     .level(Level::INFO),
                         ),
                 )
                 .layer(RequestIdLayer),
@@ -234,4 +238,132 @@ pub async fn run_server(
         }
     }
     Ok(())
+}
+
+#[derive(Clone)]
+struct ColoredOnResponse {
+    level: Level,
+    latency_unit: LatencyUnit,
+    include_headers: bool,
+}
+
+impl ColoredOnResponse {
+    fn new() -> Self {
+        Self {
+            level: Level::INFO,
+            latency_unit: LatencyUnit::Millis,
+            include_headers: false,
+        }
+    }
+
+    fn level(mut self, level: Level) -> Self {
+        self.level = level;
+        self
+    }
+
+    pub fn latency_unit(mut self, latency_unit: LatencyUnit) -> Self {
+        self.latency_unit = latency_unit;
+        self
+    }
+
+    fn include_headers(mut self, include: bool) -> Self {
+        self.include_headers = include;
+        self
+    }
+}
+
+struct Latency {
+    unit: LatencyUnit,
+    duration: Duration,
+}
+
+impl fmt::Display for Latency {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.unit {
+            LatencyUnit::Seconds => write!(f, "{} s", self.duration.as_secs_f64()),
+            LatencyUnit::Millis => write!(f, "{} ms", self.duration.as_millis()),
+            LatencyUnit::Micros => write!(f, "{} μs", self.duration.as_micros()),
+            LatencyUnit::Nanos => write!(f, "{} ns", self.duration.as_nanos()),
+            _ => write!(f, "unidad desconocida."),
+        }
+    }
+}
+
+macro_rules! event_dynamic_lvl {
+    ( $(target: $target:expr,)? $(parent: $parent:expr,)? $lvl:expr, $($tt:tt)* ) => {
+        match $lvl {
+            tracing::Level::ERROR => {
+                tracing::event!(
+                    $(target: $target,)?
+                    $(parent: $parent,)?
+                    tracing::Level::ERROR,
+                    $($tt)*
+                );
+            }
+            tracing::Level::WARN => {
+                tracing::event!(
+                    $(target: $target,)?
+                    $(parent: $parent,)?
+                    tracing::Level::WARN,
+                    $($tt)*
+                );
+            }
+            tracing::Level::INFO => {
+                tracing::event!(
+                    $(target: $target,)?
+                    $(parent: $parent,)?
+                    tracing::Level::INFO,
+                    $($tt)*
+                );
+            }
+            tracing::Level::DEBUG => {
+                tracing::event!(
+                    $(target: $target,)?
+                    $(parent: $parent,)?
+                    tracing::Level::DEBUG,
+                    $($tt)*
+                );
+            }
+            tracing::Level::TRACE => {
+                tracing::event!(
+                    $(target: $target,)?
+                    $(parent: $parent,)?
+                    tracing::Level::TRACE,
+                    $($tt)*
+                );
+            }
+        }
+    };
+}
+
+impl<B> OnResponse<B> for ColoredOnResponse {
+    fn on_response(self, response: &http::Response<B>, latency: Duration, _: &tracing::Span) {
+        let latency = Latency {
+            unit: self.latency_unit,
+            duration: latency,
+        };
+
+        let response_headers = self
+            .include_headers
+            .then(|| tracing::field::debug(response.headers()));
+
+        let status = response.status();
+        let colored_status = if status.is_success() {
+            format!("{}", status.bright_green().bold())
+        } else if status.is_client_error() {
+            format!("{}", status.bright_yellow().bold())
+        } else if status.is_server_error() {
+            format!("{}", status.bright_red().bold())
+        } else {
+            format!("{}", status.bright_cyan().bold())
+        };
+
+        event_dynamic_lvl!(
+            self.level,
+            latency = %format!("{}", latency.bright_blue().bold()),
+            status = %colored_status,
+            response_headers,
+            "request procesado"
+        );
+    }
 }
