@@ -215,7 +215,7 @@ pub fn sync_fts_data(db: &Connection, doc: &Document) -> usize {
     .map_err(|err| eyre!(err))
     .expect("Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite");
 
-    pb.finish_and_clear();
+    pb.finish();
 
     inserted
 }

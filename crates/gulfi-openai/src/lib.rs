@@ -3,6 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use bytes::{BufMut, BytesMut};
 use color_eyre::owo_colors::OwoColorize;
 use eyre::Result;
 use rand::Rng;
@@ -209,7 +210,7 @@ pub async fn embed_vec_with_progress(
         }
     }
 
-    let response = match response {
+    let mut response = match response {
         Some(r) => r,
         None => {
             let _ = tx
@@ -222,12 +223,15 @@ pub async fn embed_vec_with_progress(
     let _ = tx.send("Deserializando respuesta...".to_string()).await;
     let start = Instant::now();
 
-    let bytes = response.bytes().await?;
-    // let response = tokio::task::spawn_blocking(move || {
-    let mut buf = bytes.to_vec();
-    let response = simd_json::serde::from_slice::<ResponseBody>(&mut buf)?;
-    // })
-    // .await??;
+    let capacity = response.content_length().unwrap_or(0) as usize;
+    let mut payload = Vec::with_capacity(capacity);
+    while let Some(chunk) = response.chunk().await? {
+        payload.put(chunk);
+    }
+
+    // let bytes = response.bytes().await?;
+    // let mut buf = BytesMut::from(bytes);
+    let response: ResponseBody = simd_json::serde::from_slice(&mut payload)?;
 
     let elapsed = start.elapsed().as_millis();
     let _ = tx

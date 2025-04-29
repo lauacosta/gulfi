@@ -23,7 +23,6 @@ fn main() -> eyre::Result<()> {
     let cli = Cli::parse();
 
     setup(&cli.loglevel)?;
-
     let file = match File::open("meta.json") {
         Ok(file) => Ok(file),
         Err(_) => {

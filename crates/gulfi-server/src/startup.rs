@@ -184,10 +184,8 @@ pub fn build_server(listener: TcpListener, state: AppState) -> Result<Serve<Rout
                         .on_response(
                             ColoredOnResponse::new()
                                 .include_headers(true)
+                                .latency_unit(LatencyUnit::Millis)
                                 .level(Level::INFO),
-                            // DefaultOnResponse::new()
-                            //     .include_headers(true)
-                            //     .level(Level::INFO),
                         ),
                 )
                 .layer(RequestIdLayer),
@@ -197,7 +195,6 @@ pub fn build_server(listener: TcpListener, state: AppState) -> Result<Serve<Rout
     Ok(axum::serve(listener, server))
 }
 
-// #[instrument(skip(configuration))]
 pub async fn run_server(
     configuration: ApplicationSettings,
     start: Instant,
