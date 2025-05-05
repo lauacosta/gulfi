@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use bytes::{BufMut, BytesMut};
+use bytes::BufMut;
 use color_eyre::owo_colors::OwoColorize;
 use eyre::Result;
 use rand::Rng;

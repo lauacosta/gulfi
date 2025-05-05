@@ -1,12 +1,13 @@
 use axum::Extension;
 use color_eyre::owo_colors::OwoColorize;
-use eyre::Result;
+use eyre::{Result, eyre};
 use gulfi_common::Document;
-use gulfi_sqlite::init_sqlite;
 use http::Method;
+use rusqlite::{Connection, params};
 use std::net::IpAddr;
 use std::time::{Duration, Instant};
 use std::{fmt, io};
+use tokio::sync::mpsc::{self, UnboundedSender};
 use tower_http::LatencyUnit;
 use tower_http::cors::Any;
 use tower_http::{compression::CompressionLayer, cors::CorsLayer};
@@ -23,11 +24,13 @@ use crate::routes::{
     add_favoritos, delete_favoritos, delete_historial, documents, favoritos, health_check,
     historial, historial_full, search, serve_ui,
 };
+use crate::search::SearchStrategy;
 
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub db_path: String,
-    pub documents: Vec<Document>, // pub cache: Cache,
+    pub documents: Vec<Document>,
+    pub writer: UnboundedSender<WriteJob>,
 }
 
 #[derive(Debug)]
@@ -71,10 +74,21 @@ impl Application {
 
         let host = configuration.host;
 
-        let db_path = init_sqlite()?;
+        let db_path = std::env::var("DATABASE_URL").map_err(|err| {
+            eyre!(
+                "La variable de ambiente `DATABASE_URL` no fue encontrada. {}",
+                err
+            )
+        })?;
         // let cache = configuration.cache.clone();
 
-        let state = AppState { db_path, documents };
+        let writer = spawn_writer_task(&db_path)?;
+
+        let state = AppState {
+            db_path,
+            documents,
+            writer,
+        };
 
         let server = build_server(listener, state)?;
 
@@ -204,14 +218,14 @@ pub async fn run_server(
         Ok(app) => {
             let url = format!("http://{}:{}", app.host(), app.port());
 
-            println!(
+            eprintln!(
                 "\n\n  {} {} listo en {} ms\n",
                 configuration.name.to_uppercase().bold().bright_green(),
                 format!("v{}", configuration.version).green(),
                 start.elapsed().as_millis().bold().bright_white(),
             );
 
-            println!(
+            eprintln!(
                 "  {}  {}:  {}\n\n",
                 "➜".bold().bright_green(),
                 "Local".bold().bright_white(),
@@ -363,4 +377,59 @@ impl<B> OnResponse<B> for ColoredOnResponse {
             "request procesado"
         );
     }
+}
+
+#[derive(Debug)]
+pub enum WriteJob {
+    Historial {
+        query: String,
+        doc: String,
+        strategy: SearchStrategy,
+        peso_fts: f32,
+        peso_semantic: f32,
+        k_neighbors: u64,
+    },
+    Cache {
+        query: String,
+        result_json: String,
+        expires_at: i64,
+    },
+}
+
+fn spawn_writer_task(db_path: &str) -> eyre::Result<mpsc::UnboundedSender<WriteJob>> {
+    let conn = Connection::open(db_path)?;
+    let (tx, mut rx) = mpsc::unbounded_channel();
+
+    tokio::spawn(async move {
+        while let Some(job) = rx.recv().await {
+            let res = match job {
+                WriteJob::Historial {
+                    query,
+                    doc,
+                    strategy,
+                    peso_fts,
+                    peso_semantic,
+                    k_neighbors,
+                } => {
+                    let res = conn.execute(
+                        "insert or replace into historial(query, strategy, doc, peso_fts, peso_semantic, neighbors) values (?,?,?,?,?,?)",
+                        params![query, strategy, doc, peso_fts, peso_semantic, k_neighbors],
+                    );
+                    println!("registros fueron añadidos al historial!");
+                    res
+                }
+                WriteJob::Cache {
+                    query,
+                    result_json,
+                    expires_at,
+                } => todo!(),
+            };
+
+            if let Err(e) = res {
+                eprintln!("[writer task] Write failed: {:?}", e);
+            }
+        }
+    });
+
+    Ok(tx)
 }

@@ -129,3 +129,15 @@
         </ul>
     </nav>
 </aside>
+
+<style>
+
+.toggle-btn {
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+    font-size: 1.2rem;
+    margin-bottom: 1rem;
+}
+</style>
