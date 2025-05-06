@@ -1,0 +1,79 @@
+# Modificado de https://github.com/jonhoo/rust-ci-conf/blob/main/.github/workflows/test.yml
+permissions:
+  contents: read
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+name: test
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0 
+
+jobs:
+  required:
+    runs-on: ubuntu-latest
+    name: ubuntu / ${{ matrix.toolchain }}
+    env:
+      BUILD_FRONTEND: "false"
+    strategy:
+      matrix:
+        toolchain: [stable, beta]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install mold linker
+        run: |
+          sudo apt update
+          sudo apt install -y mold
+
+      - name: Install ${{ matrix.toolchain }}
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.toolchain }}
+
+      - name: cargo generate-lockfile
+        if: hashFiles('Cargo.lock') == ''
+        run: cargo generate-lockfile
+
+        # https://twitter.com/jonhoo/status/1571290371124260865
+      - name: cargo test --locked
+        run: cargo test --locked --all-features --all-targets
+
+        # https://github.com/rust-lang/cargo/issues/6669
+        # Hasta que tenga buena documentacion no se justifica.
+      # - name: cargo test --doc
+      #   run: cargo test --locked --all-features --doc
+
+  os-check:
+    needs: required
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.os }} / stable
+    env:
+      BUILD_FRONTEND: "false"
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest]
+        # os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: cargo generate-lockfile
+        if: hashFiles('Cargo.lock') == ''
+        run: cargo generate-lockfile
+
+      - name: cargo test
+        run: cargo test --locked --all-features --all-targets

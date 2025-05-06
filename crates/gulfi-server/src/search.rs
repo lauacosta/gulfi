@@ -1,4 +1,7 @@
-use crate::into_http::{HttpError, IntoHttp, SearchResult};
+use crate::{
+    into_http::{HttpError, IntoHttp, SearchResult},
+    startup::WriteJob,
+};
 use axum::Json;
 use eyre::Report;
 use gulfi_openai::embed_single;
@@ -403,7 +406,17 @@ impl SearchStrategy {
             query.query, total_query_count,
         );
 
-        update_historial(&db, &params, document.name.clone())?;
+        // update_historial(&db, &params, document.name.clone())?;
+        if let Err(e) = app_state.writer.send(WriteJob::Historial {
+            query: params.search_str,
+            doc: params.document,
+            strategy: params.strategy,
+            peso_fts: params.peso_fts,
+            peso_semantic: params.peso_semantic,
+            k_neighbors: params.k_neighbors,
+        }) {
+            tracing::error!("No se pudo enviar a la tarea de escritura: {:?}", e);
+        }
 
         Json(json!({
             "msg": format!("Hay un total de {} resultados", total_query_count),
@@ -411,8 +424,6 @@ impl SearchStrategy {
             "rows": table,
         }))
         .into_http()
-
-        // Json(table).into_http()
     }
 }
 

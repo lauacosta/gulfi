@@ -7,7 +7,6 @@ use gulfi_cli::{Cli, Command, SyncStrategy};
 use gulfi_common::Document;
 use gulfi_server::{ApplicationSettings, startup::run_server};
 use gulfi_sqlite::{init_sqlite, insert_base_data, setup_sqlite, sync_fts_data, sync_vec_data};
-use rusqlite::Connection;
 use tracing::{Level, debug, level_filters::LevelFilter};
 use tracing_error::ErrorLayer;
 use tracing_subscriber::{Registry, fmt::Layer, layer::SubscriberExt};
@@ -106,7 +105,7 @@ fn main() -> eyre::Result<()> {
             document,
         } => {
             let base_delay = base_delay * 1000;
-            let db = Connection::open(init_sqlite()?)?;
+            let db = init_sqlite()?;
 
             let doc = match documents.iter().find(|doc| doc.name == document) {
                 Some(doc) => doc,

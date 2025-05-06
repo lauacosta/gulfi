@@ -3,9 +3,8 @@
 
 # Gulfi 🔍
 
-<a href=https://github.com/lauacosta/gulfi/actions/workflows/general.yaml>
-    <img src=https://github.com/lauacosta/gulfi/actions/workflows/general.yaml/badge.svg>
-</a>
+[![test](https://github.com/lauacosta/gulfi/actions/workflows/test.yml/badge.svg)](https://github.com/lauacosta/gulfi/actions/workflows/test.yml)
+[![check](https://github.com/lauacosta/gulfi/actions/workflows/check.yml/badge.svg)](https://github.com/lauacosta/gulfi/actions/workflows/check.yml)
 
 Gulfi es una herramienta para búsquedas exactas, semánticas e híbridas sobre datos en una base de datos SQLite.
 
