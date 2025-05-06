@@ -234,7 +234,7 @@ pub fn init_sqlite() -> Result<Connection> {
 
     let db = Connection::open(path)?;
 
-    db.pragma_update(None, "journal_mode", &"WAL")?;
+    db.pragma_update(None, "journal_mode", "WAL")?;
 
     let mode: String = db.pragma_query_value(None, "journal_mode", |row| row.get(0))?;
     debug!("Current journal mode: {}", mode);

@@ -1,4 +1,7 @@
-use std::{collections::HashMap, fmt::Display};
+use std::{
+    collections::HashMap,
+    fmt::{self, Display},
+};
 use thiserror::Error;
 
 #[derive(PartialEq, Debug)]
@@ -36,9 +39,43 @@ pub struct Query {
     pub constraints: Option<HashMap<String, Vec<Constraint>>>,
 }
 
+impl fmt::Display for Query {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "query: {}", self.query)?;
+
+        if let Some(constraints) = &self.constraints {
+            let mut keys: Vec<_> = constraints.keys().collect();
+            keys.sort();
+
+            for key in keys {
+                for constraint in &constraints[key] {
+                    match constraint {
+                        Constraint::Exact(value) => {
+                            write!(f, ", {}: {}", key, value)?;
+                        }
+                        Constraint::GreaterThan(value) => {
+                            write!(f, ", {} > {}", key, value)?;
+                        }
+                        Constraint::LesserThan(value) => {
+                            write!(f, ", {} < {}", key, value)?;
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
 impl Query {
     pub fn parse(input: &str) -> Result<Self, ParsingError> {
         let input_clean = clean_html(input.to_owned());
+
+        if input_clean.chars().any(|c| c.is_control()) {
+            return Err(ParsingError::InvalidToken(input_clean));
+        }
+
         let input = input_clean.as_str();
 
         let mut constraints: HashMap<String, Vec<Constraint>> = HashMap::new();
@@ -126,6 +163,16 @@ impl Query {
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
+    use proptest::prelude::*;
+
+    #[test]
+    fn fails_gracefully_on_control_characters() {
+        let input = "query: Test, ;\0";
+        let result = Query::parse(input);
+        dbg!(&result);
+
+        assert!(matches!(result, Err(ParsingError::InvalidToken(_))));
+    }
 
     #[test]
     fn only_query() {
@@ -266,6 +313,42 @@ mod tests {
             Err(ParsingError::InvalidToken(token)) => assert_eq!(token, "city; Corrientes"),
             _ => panic!("Expected InvalidToken error"),
         }
+    }
+
+    proptest! {
+      #[test]
+      fn parses_valid_query_does_not_panic(query_str in generate_valid_query()) {
+          let _ = Query::parse(&query_str);
+      }
+
+      #[test]
+      fn fails_gracefully_on_bad_token(bad_token in "[^,:><]+;[^,:><]+") {
+          let input = format!("query: Test, {}", bad_token);
+          prop_assert!(matches!(Query::parse(&input), Err(ParsingError::InvalidToken(_))));
+      }
+
+      #[test]
+      fn round_trip(query_str in generate_valid_query()) {
+          if let Ok(query) = Query::parse(&query_str) {
+              let repr = format!("{}", query);
+              let reparsed = Query::parse(&repr).unwrap();
+              prop_assert_eq!(query, reparsed);
+          }
+      }
+    }
+
+    fn generate_valid_query() -> impl Strategy<Value = String> {
+        let word = "[a-zA-Z]+";
+        let val = "[a-zA-Z0-9]+";
+
+        let constraint = prop_oneof![
+            (Just("query:".to_string()), any::<String>()).prop_map(|(k, v)| format!("{} {}", k, v)),
+            (word, val).prop_map(|(k, v)| format!("{}: {}", k, v)),
+            (word, val).prop_map(|(k, v)| format!("{} > {}", k, v)),
+            (word, val).prop_map(|(k, v)| format!("{} < {}", k, v)),
+        ];
+
+        prop::collection::vec(constraint, 1..5).prop_map(|parts| parts.join(", "))
     }
 }
 
