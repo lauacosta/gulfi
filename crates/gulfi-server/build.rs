@@ -4,8 +4,14 @@ use std::process::Command;
 fn main() {
     println!("cargo:rerun-if-changed=ui/");
 
-    if std::env::var("CI").is_ok() && std::env::var("BUILD_FRONTEND").is_err() {
-        println!("cargo:warning=Salteando buildear el frontend en IC");
+    let in_ci = std::env::var("CI").is_ok() || std::env::var("GITHUB_ACTIONS").is_ok();
+    let build_frontend = match std::env::var("BUILD_FRONTEND") {
+        Ok(val) => val == "true",
+        Err(_) => !in_ci,
+    };
+
+    if in_ci && !build_frontend {
+        println!("cargo:warning=Salteando buildear el frontend en CI");
         return;
     }
 

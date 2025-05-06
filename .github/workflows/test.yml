@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     name: ubuntu / ${{ matrix.toolchain }}
     env:
-      BUILD_FRONTEND: false
+      BUILD_FRONTEND: "false"
     strategy:
       matrix:
         toolchain: [stable, beta]
@@ -48,7 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     name: ubuntu / stable / minimal-versions
     env:
-      BUILD_FRONTEND: false
+      BUILD_FRONTEND: "false"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -78,7 +78,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     name: ${{ matrix.os }} / stable
     env:
-      BUILD_FRONTEND: false
+      BUILD_FRONTEND: "false"
     strategy:
       fail-fast: false
       matrix:
