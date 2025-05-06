@@ -4,6 +4,11 @@ use std::process::Command;
 fn main() {
     println!("cargo:rerun-if-changed=ui/");
 
+    if std::env::var("CI").is_ok() && std::env::var("BUILD_FRONTEND").is_err() {
+        println!("cargo:warning=Salteando buildear el frontend en IC");
+        return;
+    }
+
     let ui_dir = Path::new("ui");
     let output_dir = ui_dir.join("dist");
 
