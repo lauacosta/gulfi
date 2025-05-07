@@ -5,9 +5,8 @@ version.workspace = true
 
 [dependencies]
 thiserror = "2.0.12"
-gulfi-common = {path="../gulfi-common/"}
 ammonia = "4.0.0"
-pretty_assertions = "1.4.1"
 
 [dev-dependencies]
 proptest = "1.6.0"
+pretty_assertions = "1.4.1"

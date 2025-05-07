@@ -419,9 +419,9 @@ fn spawn_writer_task(db_path: &str) -> eyre::Result<mpsc::UnboundedSender<WriteJ
                     res
                 }
                 WriteJob::Cache {
-                    query,
-                    result_json,
-                    expires_at,
+                    query: _,
+                    result_json: _,
+                    expires_at: _,
                 } => todo!(),
             };
 

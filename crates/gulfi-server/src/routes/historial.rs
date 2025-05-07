@@ -12,7 +12,12 @@ use http::StatusCode;
 use rusqlite::Connection;
 use tracing::debug;
 
-use crate::{HistorialView, search::SearchStrategy, startup::AppState, views::HistorialFullView};
+use crate::{
+    HistorialView,
+    search::SearchStrategy,
+    startup::AppState,
+    views::{HistorialFullView, HistorialParams},
+};
 
 #[axum::debug_handler]
 pub async fn historial(
@@ -79,9 +84,7 @@ pub async fn historial_full(
                     .join(",")
             });
 
-            let data = HistorialFullView::new(
-                id,
-                search_str,
+            let historial_params = HistorialParams::new(
                 filters,
                 strategy,
                 peso_fts,
@@ -89,6 +92,8 @@ pub async fn historial_full(
                 neighbors,
                 timestamp,
             );
+
+            let data = HistorialFullView::new(id, search_str, historial_params);
 
             Ok(data)
         },

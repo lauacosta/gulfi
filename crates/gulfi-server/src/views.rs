@@ -3,9 +3,7 @@ use chrono::NaiveDateTime;
 use serde::Serialize;
 
 #[derive(Serialize, Debug, Clone)]
-pub struct HistorialFullView {
-    id: u64,
-    query: String,
+pub struct HistorialParams {
     filters: Option<String>,
     strategy: SearchStrategy,
     peso_fts: f32,
@@ -14,12 +12,10 @@ pub struct HistorialFullView {
     fecha: String,
 }
 
-impl HistorialFullView {
-    #[must_use]
+impl HistorialParams {
     pub fn new(
-        id: u64,
-        query: String,
         filters: Option<String>,
+
         strategy: SearchStrategy,
         peso_fts: f32,
         peso_semantic: f32,
@@ -27,8 +23,6 @@ impl HistorialFullView {
         fecha: NaiveDateTime,
     ) -> Self {
         Self {
-            id,
-            query,
             filters,
             strategy,
             peso_fts,
@@ -36,6 +30,21 @@ impl HistorialFullView {
             neighbors,
             fecha: fecha.format("%b %d, %Y %H:%M").to_string(),
         }
+    }
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub struct HistorialFullView {
+    id: u64,
+    query: String,
+    #[serde(flatten)]
+    params: HistorialParams,
+}
+
+impl HistorialFullView {
+    #[must_use]
+    pub fn new(id: u64, query: String, params: HistorialParams) -> Self {
+        Self { id, query, params }
     }
 }
 
