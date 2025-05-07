@@ -6,6 +6,9 @@ workflows:
     jobs:
       - check:
           context: [aws]
+      - test:
+          context: [aws]
+
 jobs:
   check:
     docker:
@@ -14,4 +17,14 @@ jobs:
     steps:
       - checkout
       - run: |
-          cargo clippy
+          just check
+
+  test:
+    docker:
+      - image: 058264390843.dkr.ecr.us-east-1.amazonaws.com/gulfi:latest
+
+    steps:
+      - checkout
+      - run: |
+          just test
+
