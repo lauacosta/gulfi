@@ -18,7 +18,10 @@ use futures::StreamExt;
 use gulfi_common::{DataSources, Document, clean_html, normalize, parse_sources};
 use gulfi_openai::embed_vec_with_progress;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use rusqlite::{Connection, ffi::sqlite3_auto_extension};
+use rusqlite::{
+    Connection,
+    ffi::{sqlite3, sqlite3_api_routines, sqlite3_auto_extension},
+};
 use serde_json::{Map, Value};
 use sqlite_vec::sqlite3_vec_init;
 use tokio::sync::Mutex;
@@ -222,7 +225,10 @@ pub fn sync_fts_data(db: &Connection, doc: &Document) -> usize {
 
 pub fn init_sqlite() -> Result<Connection> {
     unsafe {
-        sqlite3_auto_extension(Some(std::mem::transmute(sqlite3_vec_init as *const ())));
+        sqlite3_auto_extension(Some(std::mem::transmute::<
+            *const (),
+            unsafe extern "C" fn(*mut sqlite3, *mut *mut i8, *const sqlite3_api_routines) -> i32,
+        >(sqlite3_vec_init as *const ())));
     }
 
     let path = std::env::var("DATABASE_URL").map_err(|err| {

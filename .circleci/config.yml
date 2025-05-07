@@ -1,0 +1,17 @@
+version: 2.1
+
+workflows:
+  version: 2
+  rust:
+    jobs:
+      - check:
+          context: [aws]
+jobs:
+  check:
+    docker:
+      - image: 058264390843.dkr.ecr.us-east-1.amazonaws.com/gulfi:latest
+
+    steps:
+      - checkout
+      - run: |
+          cargo clippy
