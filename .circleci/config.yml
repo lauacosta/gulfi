@@ -17,6 +17,6 @@ jobs:
       - checkout
       - shadesmar/with_rust:
           steps:
-            run: |
-              just check
-              just test
+            - run: |
+                just check
+                just test
