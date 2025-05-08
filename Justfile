@@ -26,3 +26,6 @@ test:
     cargo test --locked --all-features --all-targets
 
 ci: fmt check hack test udeps
+
+validate-ci:
+    circleci config validate

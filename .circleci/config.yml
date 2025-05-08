@@ -1,7 +1,7 @@
 version: 2.1
 
 orbs:
-  shadesmar: shadesmar/rust@0.1.1
+  shadesmar: shadesmar/rust@0.1.2
 
 workflows:
   version: 2
