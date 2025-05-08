@@ -7,11 +7,15 @@ workflows:
   version: 2
   rust:
     jobs:
-      - build:
+      - check:
+          context: [aws]
+      - test:
+          context: [aws]
+      - udeps:
           context: [aws]
 
 jobs:
-  build:
+  check:
     executor: shadesmar/rust
     steps:
       - checkout
@@ -19,4 +23,20 @@ jobs:
           steps:
             - run: |
                 just check
+  test:
+    executor: shadesmar/rust
+    steps:
+      - checkout
+      - shadesmar/with_rust:
+          steps:
+            - run: |
                 just test
+
+  udeps:
+    executor: shadesmar/rust
+    steps:
+      - checkout
+      - shadesmar/with_rust:
+          steps:
+            - run: |
+                just udeps

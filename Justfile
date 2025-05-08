@@ -3,17 +3,17 @@
 _default:
     @just --list
 
+# Formateo el texto.
 fmt: 
     cargo fmt
 
 watch: 
     watchexec -r -e rs -- cargo run -- serve dev
 
+# Busco dependencias que no estan siendo usadas.
 udeps:
-    rustup run nightly cargo udeps --all-targets --backend depinfo
+    RUSTC_BOOTSTRAP=1 cargo udeps --all-targets --backend depinfo
 
-
-# Ejecuta clippy
 hack:
     cargo hack --feature-powerset --exclude-no-default-features clippy --locked -- -D warnings
 
@@ -21,7 +21,7 @@ hack:
 check:
     cargo clippy --locked -- -D warnings
 
-# Ejecuta tests unitarios
+# Ejecuta la suite de testeos.
 test:
     cargo test --locked --all-features --all-targets
 
