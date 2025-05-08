@@ -1,7 +1,7 @@
 version: 2.1
 
 orbs:
-  shadesmar: shadesmar/rust@0.1.1
+  shadesmar: shadesmar/rust@0.1.5
 
 workflows:
   version: 2
@@ -17,6 +17,6 @@ jobs:
       - checkout
       - shadesmar/with_rust:
           steps:
-            run: |
-              just check
-              just test
+            - run: |
+                just check
+                just test
