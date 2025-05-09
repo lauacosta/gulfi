@@ -80,7 +80,6 @@ impl Application {
                 err
             )
         })?;
-        // let cache = configuration.cache.clone();
 
         let writer = spawn_writer_task(&db_path)?;
 
