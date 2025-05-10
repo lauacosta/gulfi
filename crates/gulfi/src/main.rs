@@ -103,6 +103,7 @@ fn main() -> eyre::Result<()> {
             force,
             base_delay,
             document,
+            chunk_size,
         } => {
             let base_delay = base_delay * 1000;
             let db = init_sqlite()?;
@@ -164,7 +165,8 @@ fn main() -> eyre::Result<()> {
                     let rt = tokio::runtime::Runtime::new()?;
 
                     let start = Instant::now();
-                    let (inserted, media) = rt.block_on(sync_vec_data(&db, doc, base_delay))?;
+                    let (inserted, media) =
+                        rt.block_on(sync_vec_data(&db, doc, base_delay, chunk_size))?;
 
                     eprintln!("{}", "-".repeat(100));
                     eprintln!(
@@ -180,7 +182,8 @@ fn main() -> eyre::Result<()> {
 
                     let rt = tokio::runtime::Runtime::new()?;
                     let start = Instant::now();
-                    let (inserted, media) = rt.block_on(sync_vec_data(&db, doc, base_delay))?;
+                    let (inserted, media) =
+                        rt.block_on(sync_vec_data(&db, doc, base_delay, chunk_size))?;
                     let vec_elapsed = start.elapsed().as_millis();
 
                     eprintln!("{}", "-".repeat(100));

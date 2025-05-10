@@ -34,6 +34,7 @@ pub async fn sync_vec_data(
     db: &Connection,
     doc: &Document,
     base_delay: u64,
+    chunk_size: usize,
 ) -> Result<(usize, f32)> {
     let doc_name = doc.name.clone();
     let mp = MultiProgress::new();
@@ -59,7 +60,6 @@ pub async fn sync_vec_data(
         v_inputs.len()
     );
 
-    let chunk_size = 2048;
     let chunks = v_inputs.chunks(chunk_size).count();
 
     let client = reqwest::ClientBuilder::new()
@@ -225,10 +225,7 @@ pub fn sync_fts_data(db: &Connection, doc: &Document) -> usize {
 
 pub fn init_sqlite() -> Result<Connection> {
     unsafe {
-        sqlite3_auto_extension(Some(std::mem::transmute::<
-            *const (),
-            unsafe extern "C" fn(*mut sqlite3, *mut *mut i8, *const sqlite3_api_routines) -> i32,
-        >(sqlite3_vec_init as *const ())));
+        sqlite3_auto_extension(Some(std::mem::transmute(sqlite3_vec_init as *const ())));
     }
 
     let path = std::env::var("DATABASE_URL").map_err(|err| {
@@ -489,12 +486,12 @@ fn compare_records(mut records: Vec<String>, mut headers: Vec<String>) -> eyre::
 
     match (missing_members.as_slice(), extra_members.as_slice()) {
         ([], []) => Ok(()),
-        ([], extra) => Err(eyre!("El archivo tiene campos extras: {extra:?}")),
+        ([], extra) => Err(eyre!("\nEl archivo tiene campos extras: {extra:?}")),
 
-        (missing, []) => Err(eyre!("El archivo no tiene los campos: {missing:?}")),
+        (missing, []) => Err(eyre!("\nEl archivo no tiene los campos: {missing:?}")),
 
         (missing, extra) => Err(eyre!(
-            "El archivo no tiene los campos: {missing:?} y le sobran los campos: {extra:?}"
+            "\nEl archivo no tiene los campos: {missing:?} y le sobran los campos: {extra:?}"
         )),
     }
 }

@@ -25,6 +25,9 @@ check:
 test:
     cargo test --locked --all-features --all-targets
 
+deny:
+    cargo deny --all-features check
+
 ci: fmt check hack test udeps
 
 validate-ci:

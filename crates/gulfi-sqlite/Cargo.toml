@@ -2,6 +2,7 @@
 name = "gulfi-sqlite"
 edition = "2024"
 version.workspace = true
+license.workspace = true
 
 [dependencies]
 sqlite-vec = "0.1.3"
