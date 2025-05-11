@@ -61,11 +61,16 @@ jobs:
   build:
     docker:
       - image: cimg/base:stable
-    working_directory: ~/project/crates/gulfi-server/ui
+    working_directory: ${CIRCLE_WORKING_DIRECTORY}/crates/gulfi-server/ui/
     steps:
       - checkout
       - node/install:
           install-pnpm: true
+
+      - run:
+          ls -la
+      - run: cat package.json || echo "No package.json found"
+
       - run:
           name: generando .lockfile
           command: pnpm install
