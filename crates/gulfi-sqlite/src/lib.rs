@@ -225,7 +225,10 @@ pub fn sync_fts_data(db: &Connection, doc: &Document) -> usize {
 
 pub fn init_sqlite() -> Result<Connection> {
     unsafe {
-        sqlite3_auto_extension(Some(std::mem::transmute(sqlite3_vec_init as *const ())));
+        sqlite3_auto_extension(Some(std::mem::transmute::<
+            *const (),
+            unsafe extern "C" fn(*mut sqlite3, *mut *mut i8, *const sqlite3_api_routines) -> i32,
+        >(sqlite3_vec_init as *const ())));
     }
 
     let path = std::env::var("DATABASE_URL").map_err(|err| {

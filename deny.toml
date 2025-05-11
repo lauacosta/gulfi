@@ -25,9 +25,9 @@ feature-depth = 1
 
 [advisories]
 # The path where the advisory databases are cloned/fetched into
-#db-path = "$CARGO_HOME/advisory-dbs"
+db-path = "$CARGO_HOME/advisory-dbs"
 # The url(s) of the advisory databases to use
-#db-urls = ["https://github.com/rustsec/advisory-db"]
+db-urls = ["https://github.com/rustsec/advisory-db"]
 
 ignore = [
     #"RUSTSEC-0000-0000",
@@ -41,6 +41,7 @@ ignore = [
 [licenses]
 allow = [
     "MIT",
+    "GPL-3.0",
     "MPL-2.0",
     "CDLA-Permissive-2.0",
     "ISC",

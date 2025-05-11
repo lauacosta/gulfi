@@ -13,6 +13,8 @@ workflows:
           context: [aws]
       - udeps:
           context: [aws]
+      - deny:
+          context: [aws]
 
 jobs:
   check:
@@ -40,3 +42,12 @@ jobs:
           steps:
             - run: |
                 just udeps
+
+  deny:
+    executor: shadesmar/rust
+    steps:
+      - checkout
+      - shadesmar/with_rust:
+          steps:
+            - run: |
+                just deny

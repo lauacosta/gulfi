@@ -828,6 +828,7 @@ dependencies = [
  "gulfi-common",
  "gulfi-openai",
  "gulfi-query",
+ "gulfi-sqlite",
  "http",
  "include_dir",
  "mime_guess",
