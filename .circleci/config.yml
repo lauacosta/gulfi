@@ -19,11 +19,7 @@ workflows:
 
   build-frontend:
       jobs:
-        - node/run:
-            executor:
-                name: node/default
-            pnpm-run: build
-            app-dir: "~/project/crates/gulfi-server/ui"
+        - build
 
 jobs:
   check:
@@ -61,3 +57,19 @@ jobs:
             - run: |
                 just deny
 
+
+  build:
+    docker:
+      - image: cimg/base:stable
+    working_directory: ~/project/crates/gulfi-server/ui
+    steps:
+      - checkout
+      - node/install:
+          install-pnpm: true
+      - run:
+          name: generando .lockfile
+          command: pnpm install
+
+      - run:
+          name: build
+          command: pnpm build
