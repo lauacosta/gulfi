@@ -17,9 +17,12 @@ workflows:
       - deny:
           context: [aws]
 
-  svelte:
+  build-frontend:
       jobs:
-        - build-ui
+        - node/run:
+            name: build-svelte
+            app-dir: "/crates/gulfi-server/ui"
+            pnpm-run: build
 
 jobs:
   check:
@@ -56,30 +59,4 @@ jobs:
           steps:
             - run: |
                 just deny
-  build-ui:
-    docker: 
-      - image: cimg/base
-
-    parameters:
-      app-directory:
-        type: string
-        default: "/crates/gulfi-server/ui"
-    steps:
-      - checkout
-      - node/install-packages:
-          pkg-manager: pnpm
-          app-dir: << parameters.app-directory >>
-          cache-path: << parameters.app-directory>>/node_modules
-          cache-version: v1-{{ .Branch }}-{{ checksum "<< parameters.app-directory >>/package-lock.json" }}
-      - run:
-          name: build project
-          command: pnpm build
-          working_directory: << parameters.app-directory >>
-
-      - run:
-          name: Show build size
-          command: du -h -d 1 build
-          working_directory: << parameters.app-directory >>
-
-
 
