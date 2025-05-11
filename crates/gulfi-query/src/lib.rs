@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    fmt::{self, Display},
-};
+use std::{collections::HashMap, fmt::Display};
 use thiserror::Error;
 
 #[derive(PartialEq, Debug)]
@@ -39,37 +36,11 @@ pub struct Query {
     pub constraints: Option<HashMap<String, Vec<Constraint>>>,
 }
 
-impl fmt::Display for Query {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "query: {}", self.query)?;
-
-        if let Some(constraints) = &self.constraints {
-            let mut keys: Vec<_> = constraints.keys().collect();
-            keys.sort();
-
-            for key in keys {
-                for constraint in &constraints[key] {
-                    match constraint {
-                        Constraint::Exact(value) => {
-                            write!(f, ", {}: {}", key, value)?;
-                        }
-                        Constraint::GreaterThan(value) => {
-                            write!(f, ", {} > {}", key, value)?;
-                        }
-                        Constraint::LesserThan(value) => {
-                            write!(f, ", {} < {}", key, value)?;
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(())
-    }
-}
-
 impl Query {
+    // TODO: Write a good one
     pub fn parse(input: &str) -> Result<Self, ParsingError> {
+        let mut constraints: HashMap<String, Vec<Constraint>> = HashMap::new();
+
         let input_clean = clean_html(input.to_owned());
 
         if input_clean.chars().any(|c| c.is_control()) {
@@ -78,62 +49,49 @@ impl Query {
 
         let input = input_clean.as_str();
 
-        let mut constraints: HashMap<String, Vec<Constraint>> = HashMap::new();
-
-        let (lhs, rest) = match input.split_once(',') {
-            Some((lhs, rhs)) => (lhs, Some(rhs)),
+        let (query, rest) = match input.split_once(',') {
+            Some((lhs, rhs)) => {
+                let query = match lhs.split_once(':') {
+                    Some(("query", q)) if !q.trim().is_empty() => q.trim(),
+                    _ => return Err(ParsingError::MissingQuery),
+                };
+                (query, Some(rhs))
+            }
             None => (input, None),
-        };
-
-        let query = match lhs.split_once(':') {
-            Some(("query", q)) if !q.trim().is_empty() => q.trim(),
-            _ => return Err(ParsingError::MissingQuery),
         };
 
         if let Some(rhs) = rest {
             for token in rhs.split(',').map(str::trim).filter(|t| !t.is_empty()) {
                 if let Some((k, v)) = token.split_once(':') {
-                    if k.is_empty() {
-                        return Err(ParsingError::MissingKey(':'));
+                    match (k, v) {
+                        ("", _) => return Err(ParsingError::MissingKey(':')),
+                        (_, "") => return Err(ParsingError::MissingValue(':')),
+                        (k, v) => Self::update_constraints(
+                            &mut constraints,
+                            k.trim().to_owned(),
+                            Constraint::Exact(v.trim().to_owned()),
+                        ),
                     }
-
-                    if v.is_empty() {
-                        return Err(ParsingError::MissingValue(':'));
-                    }
-
-                    Self::update_constraints(
-                        &mut constraints,
-                        k.trim().to_owned(),
-                        Constraint::Exact(v.trim().to_owned()),
-                    )
                 } else if let Some((k, v)) = token.split_once('<') {
-                    if k.is_empty() {
-                        return Err(ParsingError::MissingKey('<'));
+                    match (k, v) {
+                        ("", _) => return Err(ParsingError::MissingKey('<')),
+                        (_, "") => return Err(ParsingError::MissingValue('<')),
+                        (k, v) => Self::update_constraints(
+                            &mut constraints,
+                            k.trim().to_owned(),
+                            Constraint::LesserThan(v.trim().to_owned()),
+                        ),
                     }
-
-                    if v.is_empty() {
-                        return Err(ParsingError::MissingValue('<'));
-                    }
-
-                    Self::update_constraints(
-                        &mut constraints,
-                        k.trim().to_owned(),
-                        Constraint::LesserThan(v.trim().to_owned()),
-                    )
                 } else if let Some((k, v)) = token.split_once('>') {
-                    if k.is_empty() {
-                        return Err(ParsingError::MissingKey('>'));
+                    match (k, v) {
+                        ("", _) => return Err(ParsingError::MissingKey('>')),
+                        (_, "") => return Err(ParsingError::MissingValue('>')),
+                        (k, v) => Self::update_constraints(
+                            &mut constraints,
+                            k.trim().to_owned(),
+                            Constraint::GreaterThan(v.trim().to_owned()),
+                        ),
                     }
-
-                    if v.is_empty() {
-                        return Err(ParsingError::MissingValue('>'));
-                    }
-
-                    Self::update_constraints(
-                        &mut constraints,
-                        k.trim().to_owned(),
-                        Constraint::GreaterThan(v.trim().to_owned()),
-                    )
                 } else {
                     return Err(ParsingError::InvalidToken(token.to_string()));
                 }
@@ -327,14 +285,6 @@ mod tests {
           prop_assert!(matches!(Query::parse(&input), Err(ParsingError::InvalidToken(_))));
       }
 
-      #[test]
-      fn round_trip(query_str in generate_valid_query()) {
-          if let Ok(query) = Query::parse(&query_str) {
-              let repr = format!("{}", query);
-              let reparsed = Query::parse(&repr).unwrap();
-              prop_assert_eq!(query, reparsed);
-          }
-      }
     }
 
     fn generate_valid_query() -> impl Strategy<Value = String> {
