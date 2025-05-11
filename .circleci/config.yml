@@ -20,9 +20,10 @@ workflows:
   build-frontend:
       jobs:
         - node/run:
-            name: build-svelte
-            app-dir: "/crates/gulfi-server/ui"
+            executor:
+                name: node/default
             pnpm-run: build
+            app-dir: "~/project/crates/gulfi-server/ui"
 
 jobs:
   check:
