@@ -19,13 +19,17 @@ pub struct Cli {
     #[arg(long = "level", default_value = "INFO")]
     pub loglevel: String,
 
+    /// Path a la base de datos sqlite
+    #[arg(long = "database-path", default_value = "./gulfi.db")]
+    pub db: String,
+
     #[command(subcommand)]
     command: Option<Command>,
 }
 
 impl Cli {
-    pub fn command(self) -> Command {
-        self.command.unwrap_or(Command::List)
+    pub fn command(&self) -> Command {
+        self.command.clone().unwrap_or(Command::List)
     }
 }
 

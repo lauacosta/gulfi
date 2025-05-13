@@ -21,7 +21,7 @@ use tokio::{process::Command as TokioCommand, try_join};
 fn main() -> eyre::Result<()> {
     let cli = Cli::parse();
 
-    setup(&cli.loglevel)?;
+    setup_tracing(&cli.loglevel)?;
     let file = match File::open("meta.json") {
         Ok(file) => Ok(file),
         Err(_) => {
@@ -105,7 +105,8 @@ fn main() -> eyre::Result<()> {
             document,
         } => {
             let base_delay = base_delay * 1000;
-            let db = init_sqlite()?;
+            let db_path = cli.db.clone();
+            let db = init_sqlite(&db_path)?;
 
             let doc = match documents.iter().find(|doc| doc.name == document) {
                 Some(doc) => doc,
@@ -207,7 +208,7 @@ fn main() -> eyre::Result<()> {
     Ok(())
 }
 
-fn setup(loglevel: &str) -> eyre::Result<()> {
+fn setup_tracing(loglevel: &str) -> eyre::Result<()> {
     color_eyre::install()?;
     dotenvy::dotenv().map_err(|err| eyre!("El archivo .env no fue encontrado. err: {}", err))?;
     let level = match loglevel.to_lowercase().trim() {

@@ -223,7 +223,7 @@ pub fn sync_fts_data(db: &Connection, doc: &Document) -> usize {
     inserted
 }
 
-pub fn init_sqlite() -> Result<Connection> {
+pub fn init_sqlite(db_path: &str) -> Result<Connection> {
     unsafe {
         sqlite3_auto_extension(Some(std::mem::transmute::<
             *const (),
@@ -231,14 +231,7 @@ pub fn init_sqlite() -> Result<Connection> {
         >(sqlite3_vec_init as *const ())));
     }
 
-    let path = std::env::var("DATABASE_URL").map_err(|err| {
-        eyre!(
-            "La variable de ambiente `DATABASE_URL` no fue encontrada. {}",
-            err
-        )
-    })?;
-
-    let db = Connection::open(path)?;
+    let db = Connection::open(db_path)?;
 
     db.pragma_update(None, "journal_mode", "WAL")?;
 
