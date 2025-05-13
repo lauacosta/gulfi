@@ -7,7 +7,6 @@ version.workspace = true
 [dependencies]
 dotenvy = "0.15.7"
 tower-request-id = "0.3.0"
-tracing-tree = { version = "0.4.0", features = ["time"] }
 tracing-error = "0.2.0"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json", "time"] }
 
@@ -25,3 +24,4 @@ gulfi-sqlite = { path = "../gulfi-sqlite/"}
 gulfi-common = { path = "../gulfi-common/"}
 gulfi-server = { path = "../gulfi-server/"}
 gulfi-cli = { path = "../gulfi-cli/"}
+

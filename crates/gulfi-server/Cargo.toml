@@ -25,11 +25,10 @@ zerocopy.workspace = true
 serde_urlencoded.workspace = true
 chrono.workspace = true
 
-gulfi-sqlite = { path = "../gulfi-sqlite/"}
 gulfi-query = { path = "../gulfi-query/"}
 gulfi-common = { path = "../gulfi-common/"}
 gulfi-openai = { path = "../gulfi-openai/"}
 
-axum-extra = { version = "0.9.6", features = ["typed-header"] }
 webbrowser = "1.0.3"
 include_dir = "0.7.4"
+termcolor = "1.4.1"

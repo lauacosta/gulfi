@@ -2,6 +2,7 @@
     import { onMount } from "svelte";
     import { getBgColor } from "../lib/utils";
     import Empty from "../lib/Empty.svelte";
+    import { selectedDocument } from "../stores";
     const apiUrl = import.meta.env.VITE_API_URL;
 
     type Resultados = {
@@ -11,6 +12,7 @@
         fecha: string;
         busquedas: [string, string][];
     };
+
     type Favoritos = {
         favoritos: Resultados[];
     };
@@ -35,7 +37,7 @@
     const borrarFavorito = async (nombre: string) => {
         try {
             const response = await fetch(
-                `${apiUrl}/api/favoritos?nombre=${encodeURIComponent(nombre)}`,
+                `${apiUrl}/api/${$selectedDocument}/favoritos?nombre=${encodeURIComponent(nombre)}`,
                 {
                     method: "DELETE",
                 },
@@ -55,7 +57,9 @@
 
     const fetchFavoritos = async () => {
         try {
-            const response = await fetch(`${apiUrl}/api/favoritos`);
+            const response = await fetch(
+                `${apiUrl}/api/${$selectedDocument}/favoritos`,
+            );
 
             if (response.ok) {
                 const data: Favoritos = await response.json();

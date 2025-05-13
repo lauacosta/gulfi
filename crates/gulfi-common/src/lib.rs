@@ -1,8 +1,5 @@
 mod datasources;
-mod into_http;
-
 pub use datasources::*;
-pub use into_http::*;
 
 #[inline]
 pub fn normalize(str: &str) -> String {

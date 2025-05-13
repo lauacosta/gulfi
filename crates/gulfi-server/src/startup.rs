@@ -1,32 +1,36 @@
 use axum::Extension;
 use color_eyre::owo_colors::OwoColorize;
-use eyre::Result;
+use eyre::{Result, eyre};
 use gulfi_common::Document;
-use gulfi_sqlite::init_sqlite;
 use http::Method;
-use std::io;
+use rusqlite::{Connection, params};
 use std::net::IpAddr;
 use std::time::{Duration, Instant};
+use std::{fmt, io};
+use tokio::sync::mpsc::{self, UnboundedSender};
+use tower_http::LatencyUnit;
 use tower_http::cors::Any;
 use tower_http::{compression::CompressionLayer, cors::CorsLayer};
 
 use axum::{Router, body::Body, http::Request, routing::get, serve::Serve};
 use tokio::{net::TcpListener, signal};
 use tower::ServiceBuilder;
-use tower_http::trace::{DefaultOnResponse, TraceLayer};
+use tower_http::trace::{OnResponse, TraceLayer};
 use tower_request_id::{RequestId, RequestIdLayer};
 use tracing::{Level, error, error_span, info};
 
 use crate::ApplicationSettings;
 use crate::routes::{
-    add_favoritos, delete_favoritos, delete_historial, favoritos, health_check, historial,
-    historial_full, search, serve_ui,
+    add_favoritos, delete_favoritos, delete_historial, documents, favoritos, health_check,
+    historial, historial_full, search, serve_ui,
 };
+use crate::search::SearchStrategy;
 
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub db_path: String,
-    pub documents: Vec<Document>, // pub cache: Cache,
+    pub documents: Vec<Document>,
+    pub writer: UnboundedSender<WriteJob>,
 }
 
 #[derive(Debug)]
@@ -70,10 +74,20 @@ impl Application {
 
         let host = configuration.host;
 
-        let db_path = init_sqlite()?;
-        // let cache = configuration.cache.clone();
+        let db_path = std::env::var("DATABASE_URL").map_err(|err| {
+            eyre!(
+                "La variable de ambiente `DATABASE_URL` no fue encontrada. {}",
+                err
+            )
+        })?;
 
-        let state = AppState { db_path, documents };
+        let writer = spawn_writer_task(&db_path)?;
+
+        let state = AppState {
+            db_path,
+            documents,
+            writer,
+        };
 
         let server = build_server(listener, state)?;
 
@@ -131,12 +145,16 @@ pub fn build_server(listener: TcpListener, state: AppState) -> Result<Serve<Rout
     let api_routes = Router::new()
         .route("/api/health", get(health_check))
         .route(
-            "/api/favoritos",
+            "/api/:doc/favoritos",
             get(favoritos).post(add_favoritos).delete(delete_favoritos),
         )
         .route("/api/search", get(search))
-        .route("/api/historial", get(historial).delete(delete_historial))
-        .route("/api/historial-full", get(historial_full));
+        .route("/api/documents", get(documents))
+        .route(
+            "/api/:doc/historial",
+            get(historial).delete(delete_historial),
+        )
+        .route("/api/:doc/historial-full", get(historial_full));
 
     let frontend_routes = Router::new()
         .route("/assets/*path", get(serve_ui))
@@ -173,12 +191,13 @@ pub fn build_server(listener: TcpListener, state: AppState) -> Result<Serve<Rout
                                 "request",
                                 id = %request_id,
                                 method = %request.method().blue().bold(),
-                                uri = %request.uri()
+                                uri = %request.uri(),
                             )
                         })
                         .on_response(
-                            DefaultOnResponse::new()
+                            ColoredOnResponse::new()
                                 .include_headers(true)
+                                .latency_unit(LatencyUnit::Millis)
                                 .level(Level::INFO),
                         ),
                 )
@@ -189,7 +208,6 @@ pub fn build_server(listener: TcpListener, state: AppState) -> Result<Serve<Rout
     Ok(axum::serve(listener, server))
 }
 
-// #[instrument(skip(configuration))]
 pub async fn run_server(
     configuration: ApplicationSettings,
     start: Instant,
@@ -199,14 +217,14 @@ pub async fn run_server(
         Ok(app) => {
             let url = format!("http://{}:{}", app.host(), app.port());
 
-            println!(
+            eprintln!(
                 "\n\n  {} {} listo en {} ms\n",
                 configuration.name.to_uppercase().bold().bright_green(),
                 format!("v{}", configuration.version).green(),
                 start.elapsed().as_millis().bold().bright_white(),
             );
 
-            println!(
+            eprintln!(
                 "  {}  {}:  {}\n\n",
                 "➜".bold().bright_green(),
                 "Local".bold().bright_white(),
@@ -230,4 +248,187 @@ pub async fn run_server(
         }
     }
     Ok(())
+}
+
+#[derive(Clone)]
+struct ColoredOnResponse {
+    level: Level,
+    latency_unit: LatencyUnit,
+    include_headers: bool,
+}
+
+impl ColoredOnResponse {
+    fn new() -> Self {
+        Self {
+            level: Level::INFO,
+            latency_unit: LatencyUnit::Millis,
+            include_headers: false,
+        }
+    }
+
+    fn level(mut self, level: Level) -> Self {
+        self.level = level;
+        self
+    }
+
+    pub fn latency_unit(mut self, latency_unit: LatencyUnit) -> Self {
+        self.latency_unit = latency_unit;
+        self
+    }
+
+    fn include_headers(mut self, include: bool) -> Self {
+        self.include_headers = include;
+        self
+    }
+}
+
+struct Latency {
+    unit: LatencyUnit,
+    duration: Duration,
+}
+
+impl fmt::Display for Latency {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.unit {
+            LatencyUnit::Seconds => write!(f, "{} s", self.duration.as_secs_f64()),
+            LatencyUnit::Millis => write!(f, "{} ms", self.duration.as_millis()),
+            LatencyUnit::Micros => write!(f, "{} μs", self.duration.as_micros()),
+            LatencyUnit::Nanos => write!(f, "{} ns", self.duration.as_nanos()),
+            _ => write!(f, "unidad desconocida."),
+        }
+    }
+}
+
+macro_rules! event_dynamic_lvl {
+    ( $(target: $target:expr,)? $(parent: $parent:expr,)? $lvl:expr, $($tt:tt)* ) => {
+        match $lvl {
+            tracing::Level::ERROR => {
+                tracing::event!(
+                    $(target: $target,)?
+                    $(parent: $parent,)?
+                    tracing::Level::ERROR,
+                    $($tt)*
+                );
+            }
+            tracing::Level::WARN => {
+                tracing::event!(
+                    $(target: $target,)?
+                    $(parent: $parent,)?
+                    tracing::Level::WARN,
+                    $($tt)*
+                );
+            }
+            tracing::Level::INFO => {
+                tracing::event!(
+                    $(target: $target,)?
+                    $(parent: $parent,)?
+                    tracing::Level::INFO,
+                    $($tt)*
+                );
+            }
+            tracing::Level::DEBUG => {
+                tracing::event!(
+                    $(target: $target,)?
+                    $(parent: $parent,)?
+                    tracing::Level::DEBUG,
+                    $($tt)*
+                );
+            }
+            tracing::Level::TRACE => {
+                tracing::event!(
+                    $(target: $target,)?
+                    $(parent: $parent,)?
+                    tracing::Level::TRACE,
+                    $($tt)*
+                );
+            }
+        }
+    };
+}
+
+impl<B> OnResponse<B> for ColoredOnResponse {
+    fn on_response(self, response: &http::Response<B>, latency: Duration, _: &tracing::Span) {
+        let latency = Latency {
+            unit: self.latency_unit,
+            duration: latency,
+        };
+
+        let response_headers = self
+            .include_headers
+            .then(|| tracing::field::debug(response.headers()));
+
+        let status = response.status();
+        let colored_status = if status.is_success() {
+            format!("{}", status.bright_green().bold())
+        } else if status.is_client_error() {
+            format!("{}", status.bright_yellow().bold())
+        } else if status.is_server_error() {
+            format!("{}", status.bright_red().bold())
+        } else {
+            format!("{}", status.bright_cyan().bold())
+        };
+
+        event_dynamic_lvl!(
+            self.level,
+            latency = %format!("{}", latency.bright_blue().bold()),
+            status = %colored_status,
+            response_headers,
+            "request procesado"
+        );
+    }
+}
+
+#[derive(Debug)]
+pub enum WriteJob {
+    Historial {
+        query: String,
+        doc: String,
+        strategy: SearchStrategy,
+        peso_fts: f32,
+        peso_semantic: f32,
+        k_neighbors: u64,
+    },
+    Cache {
+        query: String,
+        result_json: String,
+        expires_at: i64,
+    },
+}
+
+fn spawn_writer_task(db_path: &str) -> eyre::Result<mpsc::UnboundedSender<WriteJob>> {
+    let conn = Connection::open(db_path)?;
+    let (tx, mut rx) = mpsc::unbounded_channel();
+
+    tokio::spawn(async move {
+        while let Some(job) = rx.recv().await {
+            let res = match job {
+                WriteJob::Historial {
+                    query,
+                    doc,
+                    strategy,
+                    peso_fts,
+                    peso_semantic,
+                    k_neighbors,
+                } => {
+                    let res = conn.execute(
+                        "insert or replace into historial(query, strategy, doc, peso_fts, peso_semantic, neighbors) values (?,?,?,?,?,?)",
+                        params![query, strategy, doc, peso_fts, peso_semantic, k_neighbors],
+                    );
+                    println!("registros fueron añadidos al historial!");
+                    res
+                }
+                WriteJob::Cache {
+                    query: _,
+                    result_json: _,
+                    expires_at: _,
+                } => todo!(),
+            };
+
+            if let Err(e) = res {
+                eprintln!("[writer task] Write failed: {:?}", e);
+            }
+        }
+    });
+
+    Ok(tx)
 }

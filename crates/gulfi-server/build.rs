@@ -1,14 +1,31 @@
+use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
 fn main() {
     println!("cargo:rerun-if-changed=ui/");
 
+    let in_ci = std::env::var("CI").is_ok() || std::env::var("GITHUB_ACTIONS").is_ok();
+    let build_frontend = match std::env::var("BUILD_FRONTEND") {
+        Ok(val) => val == "true",
+        Err(_) => !in_ci,
+    };
+
     let ui_dir = Path::new("ui");
     let output_dir = ui_dir.join("dist");
+    std::fs::create_dir_all(&output_dir).expect("Fallo al crear el directorio 'dist'");
 
-    if !ui_dir.exists() {
-        panic!("Directorio '{}' no existe!", ui_dir.display());
+    if in_ci && !build_frontend {
+        println!("cargo:warning=Salteando buildear el frontend en CI");
+
+        let placeholder = output_dir.join("placeholder.html");
+        let mut file = std::fs::File::create(placeholder).expect("Fallo al crear placeholder");
+        file.write_all(b"<!DOCTYPE html><html><body><h1>Placeholder for CI</h1></body></html>")
+            .expect("Fallo al escribir en el placeholder");
+
+        println!("cargo:warning=Placeholder creador para CI");
+
+        return;
     }
 
     let pnpm_check = Command::new("pnpm")

@@ -13,10 +13,7 @@ pub fn delete_document(name: &str) -> Result<()> {
 
     let mut all_docs: Vec<Document> = if path.exists() {
         let json_str = std::fs::read_to_string(path)?;
-        match serde_json::from_str(&json_str) {
-            Ok(docs) => docs,
-            Err(_) => vec![],
-        }
+        serde_json::from_str(&json_str).unwrap_or_default()
     } else {
         return Err(eyre!("No se ha encontrado un archivo `meta.json`."));
     };
@@ -62,14 +59,14 @@ pub fn run_new() -> Result<()> {
         }
     }
 
-    let new_doc = Document { name, fields };
+    let new_doc = Document {
+        name: name.clone(),
+        fields,
+    };
 
     let mut all_docs: Vec<Document> = if path.exists() {
         let json_str = std::fs::read_to_string(path)?;
-        match serde_json::from_str(&json_str) {
-            Ok(docs) => docs,
-            Err(_) => vec![],
-        }
+        serde_json::from_str(&json_str).unwrap_or_default()
     } else {
         vec![]
     };
@@ -81,9 +78,17 @@ pub fn run_new() -> Result<()> {
         .create(true)
         .truncate(true)
         .open(path)?;
+
     file.seek(io::SeekFrom::Start(0))?;
 
     serde_json::to_writer_pretty(file, &all_docs)?;
+
+    let dir_name = format!("datasources/{name}");
+    let path = Path::new(&dir_name);
+
+    if !path.exists() || !path.is_dir() {
+        std::fs::DirBuilder::new().recursive(true).create(path)?;
+    }
 
     Ok(())
 }

@@ -1,0 +1,42 @@
+version: 2.1
+
+orbs:
+  shadesmar: shadesmar/rust@0.1.5
+
+workflows:
+  version: 2
+  rust:
+    jobs:
+      - check:
+          context: [aws]
+      - test:
+          context: [aws]
+      - udeps:
+          context: [aws]
+
+jobs:
+  check:
+    executor: shadesmar/rust
+    steps:
+      - checkout
+      - shadesmar/with_rust:
+          steps:
+            - run: |
+                just check
+  test:
+    executor: shadesmar/rust
+    steps:
+      - checkout
+      - shadesmar/with_rust:
+          steps:
+            - run: |
+                just test
+
+  udeps:
+    executor: shadesmar/rust
+    steps:
+      - checkout
+      - shadesmar/with_rust:
+          steps:
+            - run: |
+                just udeps

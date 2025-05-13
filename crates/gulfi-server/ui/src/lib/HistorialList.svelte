@@ -3,6 +3,7 @@
     import type Historial from "../lib/types";
     export let items: Historial[];
     import Empty from "../lib/Empty.svelte";
+    import { selectedDocument } from "../stores";
 
     const apiUrl = import.meta.env.VITE_API_URL;
 
@@ -12,16 +13,10 @@
         ReciprocalRankFusion: "ReciprocalRankFusion",
     };
 
-    const sexLabels = {
-        U: "Universal",
-        M: "Masculino",
-        F: "Femenino",
-    };
-
     async function deleteHistorialItem(id: number, queryText: string) {
         try {
             const deleteResponse = await fetch(
-                `${apiUrl}/api/historial?query=${encodeURIComponent(queryText)}`,
+                `${apiUrl}/api/${selectedDocument}/historial?query=${encodeURIComponent(queryText)}`,
                 {
                     method: "DELETE",
                 },
@@ -41,29 +36,14 @@
 
     function buildQueryString(item: Historial) {
         const params = new URLSearchParams();
-        params.append("query", item.query);
+        params.append("query", `${item.query}, ${item.filters}`);
         params.append("strategy", item.strategy);
-        params.append("sexo", item.sexo);
-        params.append("edad_min", item.edad_min.toString());
-        params.append("edad_max", item.edad_max.toString());
+        params.append("doc", item.doc);
         params.append("peso_fts", item.peso_fts.toString());
         params.append("peso_semantic", item.peso_semantic.toString());
         params.append("neighbors", item.neighbors.toString());
 
         return `/?${params.toString()}`;
-    }
-
-    function getStrategyColor(strategy: string) {
-        switch (strategy) {
-            case "Fts":
-                return "#FF6B6B";
-            case "Semantic":
-                return "#4ECDC4";
-            case "Rrf":
-                return "#FFD166";
-            default:
-                return "#ADB5BD";
-        }
     }
 </script>
 
@@ -95,21 +75,12 @@
                     </div>
 
                     <div class="details-grid">
-                        <div class="detail-item">
-                            <span class="detail-label">Sexo</span>
-                            <span class="detail-value"
-                                >{sexLabels[item.sexo]}</span
-                            >
-                        </div>
-
-                        <div class="detail-item">
-                            <span class="detail-label">Rango de edad</span>
-                            <span class="detail-value">
-                                {item.edad_min === 0 && item.edad_max === 100
-                                    ? "Todas las edades"
-                                    : `${item.edad_min} - ${item.edad_max} años`}
-                            </span>
-                        </div>
+                        {#if item.filters}
+                            <div class="detail-item">
+                                <span class="detail-label">Filtros</span>
+                                <span class="detail-value">{item.filters}</span>
+                            </div>
+                        {/if}
 
                         <div class="detail-item">
                             <span class="detail-label">Nº Vecinos</span>

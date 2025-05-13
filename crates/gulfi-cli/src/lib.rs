@@ -24,8 +24,8 @@ pub struct Cli {
 }
 
 impl Cli {
-    pub fn command(&self) -> Command {
-        self.command.clone().unwrap_or(Command::List)
+    pub fn command(self) -> Command {
+        self.command.unwrap_or(Command::List)
     }
 }
 
@@ -44,9 +44,7 @@ pub enum Command {
         #[clap(short = 'P', long, default_value_t = 3000)]
         port: u16,
 
-        // #[arg(value_enum, short = 'C', long, default_value_t = Cache::Disabled)]
-        // cache: Cache,
-        /// Automaticamente abre la aplicación en el navegador
+        /// Automaticamente abre la aplicación en el navegador.
         #[arg(long, default_value = "false")]
         open: bool,
     },
@@ -56,7 +54,7 @@ pub enum Command {
 
         /// Fuerza la actualización incluso cuando la base de datos no está vacía.
         #[arg(long, default_value = "false")]
-        clean_slate: bool,
+        force: bool,
 
         /// Determina la estrategia para actualizar la base de datos.
         #[arg(value_enum,  default_value_t = SyncStrategy::Fts)]
@@ -86,12 +84,6 @@ pub enum SyncStrategy {
     Fts,
     Vector,
     All,
-}
-
-#[derive(Clone, ValueEnum)]
-pub enum Model {
-    OpenAI,
-    Local,
 }
 
 #[allow(unused)]

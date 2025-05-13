@@ -1,3 +1,9 @@
+import type {
+    ServerError,
+    BadRequestError,
+    ParsingGenericError,
+    ParsingInvalidTokenError
+} from './types';
 
 export function getBgColor(strategy: string) {
     switch (strategy) {
@@ -145,4 +151,24 @@ export function inputPopUp(msg: string): Promise<string | null> {
             };
         }
     });
+}
+
+
+export function renderSearchError(error: ServerError): string {
+    if ('type' in error && error.type === 'invalid_token') {
+        const e = error as ParsingInvalidTokenError;
+        return `${e.err}`;
+    }
+
+    if ('type' in error && error.type === 'parsing_error') {
+        const e = error as ParsingGenericError;
+        return `${e.err}`;
+    }
+
+    if ('type' in error && error.type === 'invalid_fields') {
+        const e = error as BadRequestError;
+        return `${e.err} Campos invalidos: [${e.invalid_fields.join(', ')}]. Los campos validos son [${e.valid_fields.join(', ')}]`;
+    }
+
+    return 'Ocurrió un error interno. Por favor intentá de nuevo.';
 }
