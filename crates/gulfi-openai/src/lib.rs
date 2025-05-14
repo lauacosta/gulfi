@@ -162,7 +162,9 @@ pub async fn embed_vec_with_progress(
         dimensions: Some(1536),
     };
 
-    let token = var("OPENAI_KEY").expect("`OPENAI_KEY debería estar definido en el .env");
+    let open_ai_key =
+        var("OPENAI_KEY").expect("No se encuentra la variable de entorno 'OPENAI_KEY'");
+
     let mut intento = 0;
     let mut response = None;
 
@@ -177,7 +179,7 @@ pub async fn embed_vec_with_progress(
             .await;
         match request_embeddings(
             client,
-            &token,
+            &open_ai_key,
             &request,
             intento,
             MAX_INTENTOS,
@@ -272,12 +274,14 @@ pub async fn embed_single(input: String, client: &Client) -> Result<Vec<f32>> {
         dimensions: Some(1536),
     };
 
-    let token = var("OPENAI_KEY").expect("`OPENAI_KEY debería estar definido en el .env");
+    let open_ai_key =
+        var("OPENAI_KEY").expect("No se encuentra la variable de entorno 'OPENAI_KEY'");
+
     let req_start = Instant::now();
     info!("Enviando request a Open AI...");
     let response = client
         .post("https://api.openai.com/v1/embeddings")
-        .bearer_auth(token)
+        .bearer_auth(open_ai_key)
         .json(&request)
         .send()
         .await?;
