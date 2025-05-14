@@ -106,6 +106,16 @@ fn main() -> eyre::Result<()> {
         } => {
             let base_delay = base_delay * 1000;
             let db_path = cli.db.clone();
+
+            if db_path.trim() == ":memory:" {
+                println!(
+                    "Estas ejecutando el comando '{}' en una {}.",
+                    "Sync".cyan().bold(),
+                    "instancia transitiva".yellow().underline().bold()
+                );
+                std::process::exit(1);
+            }
+
             let db = init_sqlite(&db_path)?;
 
             let doc = match documents.iter().find(|doc| doc.name == document) {
