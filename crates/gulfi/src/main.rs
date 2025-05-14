@@ -22,6 +22,7 @@ fn main() -> eyre::Result<()> {
     let cli = Cli::parse();
 
     setup_tracing(&cli.loglevel)?;
+
     let file = match File::open("meta.json") {
         Ok(file) => Ok(file),
         Err(_) => {
@@ -220,7 +221,11 @@ fn main() -> eyre::Result<()> {
 
 fn setup_tracing(loglevel: &str) -> eyre::Result<()> {
     color_eyre::install()?;
-    dotenvy::dotenv().map_err(|err| eyre!("El archivo .env no fue encontrado. err: {}", err))?;
+
+    if let Err(_) = dotenvy::dotenv() {
+        eprintln!("El archivo {} no fue encontrado.", "\'env\'".green().bold());
+    }
+
     let level = match loglevel.to_lowercase().trim() {
         "trace" => Level::TRACE,
         "debug" => Level::DEBUG,
