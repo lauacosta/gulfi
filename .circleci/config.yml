@@ -1,7 +1,8 @@
 version: 2.1
 
 orbs:
-  shadesmar: shadesmar/rust@0.1.5
+  shadesmar: shadesmar/rust@1.0.1
+  node: circleci/node@7.1.0
 
 workflows:
   version: 2
@@ -13,6 +14,12 @@ workflows:
           context: [aws]
       - udeps:
           context: [aws]
+      - deny:
+          context: [aws]
+
+  build-frontend:
+      jobs:
+        - build
 
 jobs:
   check:
@@ -40,3 +47,29 @@ jobs:
           steps:
             - run: |
                 just udeps
+
+  deny:
+    executor: shadesmar/rust
+    steps:
+      - checkout
+      - shadesmar/with_rust:
+          steps:
+            - run: |
+                just deny
+
+
+  build:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - checkout
+      - node/install:
+          install-pnpm: true
+
+      - run:
+          name: generando .lockfile
+          command: cd crates/gulfi-server/ui/ && pnpm install
+
+      - run:
+          name: build
+          command: cd crates/gulfi-server/ui/ && pnpm build

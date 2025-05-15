@@ -2,6 +2,7 @@
 name = "gulfi"
 edition = "2024"
 authors = ["Lautaro <acostaquintanalautaro@gmail.com>"]
+license.workspace = true
 version.workspace = true
 
 [dependencies]

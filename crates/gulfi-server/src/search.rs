@@ -10,9 +10,10 @@ use gulfi_query::{
     Query,
 };
 
+use gulfi_sqlite::init_sqlite;
 use reqwest::Client;
 use rusqlite::{
-    Connection, ToSql,
+    ToSql,
     types::{FromSql, FromSqlError, ToSqlOutput, ValueRef},
 };
 use serde::{Deserialize, Serialize};
@@ -50,8 +51,9 @@ impl SearchStrategy {
         client: &Client,
         params: SearchParams,
     ) -> SearchResult {
-        let db = Connection::open(app_state.db_path.clone())
-            .expect("Deberia ser un path valido a una base de datos sqlite.");
+        // let db = Connection::open(app_state.db_path.clone())
+        //     .expect("Deberia ser un path valido a una base de datos sqlite.");
+        let db = init_sqlite().expect("Deberia andar");
 
         let document = app_state
             .documents
@@ -240,6 +242,8 @@ impl SearchStrategy {
                 };
 
                 let sql = format!("{search} {where_clause}");
+
+                dbg!("{:#?}", &sql);
 
                 let mut stmt = db.prepare(&sql)?;
                 let column_names: Vec<String> =

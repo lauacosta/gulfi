@@ -1,7 +1,9 @@
 [package]
 name = "gulfi-cli"
 edition = "2024"
+license.workspace = true
 version.workspace = true
+
 
 [dependencies]
 clap = { workspace = true, features = ["cargo"] }
