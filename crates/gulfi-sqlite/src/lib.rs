@@ -129,7 +129,7 @@ pub async fn sync_vec_data(
                 Ok((data, millis)) => {
 
                     let mut statement =
-                        db.prepare(&format!("insert into vec_{sent_doc_name}(row_id, vec_input_embedding) values (?,?)")).unwrap();
+                        db.prepare(&format!("insert into vec_{sent_doc_name}(row_id, vec_input_embedding) values (?,?)")).expect("Deberia poder preparar el query de inserción.");
 
                     db.execute("BEGIN TRANSACTION", []).expect(
                         "Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite",
@@ -543,7 +543,7 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
 
                         let records: Vec<Value> = reader
                             .deserialize::<Map<String, Value>>()
-                            .filter_map(|row| row.ok())
+                            .filter_map(std::result::Result::ok)
                             .map(Value::Object)
                             .collect();
 
@@ -661,7 +661,7 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
 
         for h in jh {
             if let Err(e) = h.join().expect("El hilo entro en panico.") {
-                eprintln!("Ocurrio un error: {:#?}", e);
+                eprintln!("Ocurrio un error: {e:#?}");
             }
         }
     });

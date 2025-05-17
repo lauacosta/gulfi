@@ -23,12 +23,11 @@ fn main() -> eyre::Result<()> {
 
     setup_tracing(&cli.loglevel)?;
 
-    let file = match File::open("meta.json") {
-        Ok(file) => Ok(file),
-        Err(_) => {
-            gulfi_cli::helper::initialize_meta_file()?;
-            File::open("meta.json")
-        }
+    let file = if let Ok(file) = File::open("meta.json") {
+        Ok(file)
+    } else {
+        gulfi_cli::helper::initialize_meta_file()?;
+        File::open("meta.json")
     }?;
 
     let documents: Vec<Document> = serde_json::from_reader(file)
@@ -59,7 +58,7 @@ fn main() -> eyre::Result<()> {
             #[cfg(debug_assertions)]
             mode,
         } => {
-            let start = std::time::Instant::now();
+            let start = Instant::now();
             let name = crate_name!().to_owned();
             let version = crate_version!().to_owned();
 
@@ -119,20 +118,17 @@ fn main() -> eyre::Result<()> {
 
             let db = init_sqlite(&db_path)?;
 
-            let doc = match documents.iter().find(|doc| doc.name == document) {
-                Some(doc) => doc,
-                None => {
-                    let available_documents = documents
-                        .into_iter()
-                        .map(|x| x.name)
-                        .collect::<Vec<_>>()
-                        .join(", ");
+            let Some(doc) = documents.iter().find(|doc| doc.name == document) else {
+                let available_documents = documents
+                    .into_iter()
+                    .map(|x| x.name)
+                    .collect::<Vec<_>>()
+                    .join(", ");
 
-                    return Err(eyre!(
-                        "{} no es uno de los documentos disponibles: [{available_documents}]",
-                        document.bright_red()
-                    ));
-                }
+                return Err(eyre!(
+                    "{} no es uno de los documentos disponibles: [{available_documents}]",
+                    document.bright_red()
+                ));
             };
 
             if force {
@@ -157,7 +153,7 @@ fn main() -> eyre::Result<()> {
                 }
             }
 
-            let start = std::time::Instant::now();
+            let start = Instant::now();
             setup_sqlite(&db, doc)?;
             insert_base_data(&db, doc)?;
             match sync_strat {
@@ -222,7 +218,7 @@ fn main() -> eyre::Result<()> {
 fn setup_tracing(loglevel: &str) -> eyre::Result<()> {
     color_eyre::install()?;
 
-    if let Err(_) = dotenvy::dotenv() {
+    if dotenvy::dotenv().is_err() {
         eprintln!("El archivo {} no fue encontrado.", "\'env\'".green().bold());
     }
 
@@ -247,7 +243,7 @@ fn setup_tracing(loglevel: &str) -> eyre::Result<()> {
         )
         .with(ErrorLayer::default());
 
-    tracing::subscriber::set_global_default(subscriber).unwrap();
+    tracing::subscriber::set_global_default(subscriber)?;
 
     Ok(())
 }
@@ -268,7 +264,7 @@ impl tracing_subscriber::fmt::time::FormatTime for GulfiTimer {
         // let time = format!("~{}ms", elapsed.as_millis());
         let str = format!("{}", datetime.bright_blue());
 
-        write!(w, "{}", str)?;
+        write!(w, "{str}")?;
         Ok(())
     }
 }

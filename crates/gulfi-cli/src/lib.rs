@@ -28,6 +28,7 @@ pub struct Cli {
 }
 
 impl Cli {
+    #[must_use]
     pub fn command(&self) -> Command {
         self.command.clone().unwrap_or(Command::List)
     }

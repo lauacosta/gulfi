@@ -19,7 +19,7 @@ hack:
 
 # Ejecuta clippy
 check:
-    cargo clippy --locked -- -D warnings
+    cargo clippy --locked -- -D warnings -D clippy::unwrap_used
 
 # Ejecuta la suite de testeos.
 test:

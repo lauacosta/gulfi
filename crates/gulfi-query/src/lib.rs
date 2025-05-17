@@ -14,9 +14,9 @@ pub enum Constraint {
 impl Display for Constraint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Constraint::Exact(str) => write!(f, ": {}", str),
-            Constraint::GreaterThan(str) => write!(f, "> {}", str),
-            Constraint::LesserThan(str) => write!(f, "< {}", str),
+            Constraint::Exact(str) => write!(f, ": {str}"),
+            Constraint::GreaterThan(str) => write!(f, "> {str}"),
+            Constraint::LesserThan(str) => write!(f, "< {str}"),
         }
     }
 }
@@ -51,13 +51,13 @@ impl fmt::Display for Query {
                 for constraint in &constraints[key] {
                     match constraint {
                         Constraint::Exact(value) => {
-                            write!(f, ", {}: {}", key, value)?;
+                            write!(f, ", {key}: {value}")?;
                         }
                         Constraint::GreaterThan(value) => {
-                            write!(f, ", {} > {}", key, value)?;
+                            write!(f, ", {key} > {value}")?;
                         }
                         Constraint::LesserThan(value) => {
-                            write!(f, ", {} < {}", key, value)?;
+                            write!(f, ", {key} < {value}")?;
                         }
                     }
                 }
@@ -72,7 +72,7 @@ impl Query {
     pub fn parse(input: &str) -> Result<Self, ParsingError> {
         let input_clean = clean_html(input.to_owned());
 
-        if input_clean.chars().any(|c| c.is_control()) {
+        if input_clean.chars().any(char::is_control) {
             return Err(ParsingError::InvalidToken(input_clean));
         }
 
@@ -105,7 +105,7 @@ impl Query {
                         &mut constraints,
                         k.trim().to_owned(),
                         Constraint::Exact(v.trim().to_owned()),
-                    )
+                    );
                 } else if let Some((k, v)) = token.split_once('<') {
                     if k.is_empty() {
                         return Err(ParsingError::MissingKey('<'));
@@ -119,7 +119,7 @@ impl Query {
                         &mut constraints,
                         k.trim().to_owned(),
                         Constraint::LesserThan(v.trim().to_owned()),
-                    )
+                    );
                 } else if let Some((k, v)) = token.split_once('>') {
                     if k.is_empty() {
                         return Err(ParsingError::MissingKey('>'));
@@ -133,7 +133,7 @@ impl Query {
                         &mut constraints,
                         k.trim().to_owned(),
                         Constraint::GreaterThan(v.trim().to_owned()),
-                    )
+                    );
                 } else {
                     return Err(ParsingError::InvalidToken(token.to_string()));
                 }

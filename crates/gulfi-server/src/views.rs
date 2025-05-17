@@ -13,9 +13,9 @@ pub struct HistorialParams {
 }
 
 impl HistorialParams {
+    #[must_use]
     pub fn new(
         filters: Option<String>,
-
         strategy: SearchStrategy,
         peso_fts: f32,
         peso_semantic: f32,

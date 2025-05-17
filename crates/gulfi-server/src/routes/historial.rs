@@ -66,7 +66,7 @@ pub async fn historial_full(
             let timestamp_str: String = row.get(6).unwrap_or_default();
 
             let timestamp = NaiveDateTime::parse_from_str(&timestamp_str, "%Y-%m-%d %H:%M:%S")
-                .unwrap_or_else(|_| Default::default());
+                .unwrap_or_else(|_| NaiveDateTime::default());
 
             let proper_str = format!("query:{query}");
             let query = gulfi_query::Query::parse(&proper_str).expect("the query is malformed");

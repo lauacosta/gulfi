@@ -33,9 +33,7 @@ fn main() {
         .output()
         .expect("Fallo al chequear la instalacion de pnpm");
 
-    if !pnpm_check.status.success() {
-        panic!("pnpm no está instalado.");
-    }
+    assert!(pnpm_check.status.success(), "pnpm no está instalado.");
 
     println!(
         "pnpm encontrado: {}",
@@ -55,16 +53,13 @@ fn main() {
         .status()
         .expect("El proceso de build falló.");
 
-    if !status.success() {
-        panic!("Svelte build falló!");
-    }
+    assert!(status.success(), "Svelte build falló!");
 
-    if !output_dir.exists() {
-        panic!(
-            "Build exitosa, pero '{}' no fue creado!",
-            output_dir.display()
-        );
-    }
+    assert!(
+        output_dir.exists(),
+        "Build exitosa, pero '{}' no fue creado!",
+        output_dir.display()
+    );
 
     println!("La UI se construyó exitosamente.");
 }

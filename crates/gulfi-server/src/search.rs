@@ -9,6 +9,7 @@ use gulfi_query::{
     Constraint::{Exact, GreaterThan, LesserThan},
     Query,
 };
+use std::fmt::Write;
 
 use reqwest::Client;
 use rusqlite::{
@@ -57,7 +58,7 @@ impl SearchStrategy {
             .documents
             .iter()
             .find(|x| x.name.to_lowercase() == params.document.to_lowercase())
-            .unwrap();
+            .unwrap_or_else(|| panic!("No se ha encontrado el documento {}", params.document));
 
         let weight_vec = params.peso_semantic / 100.0;
         let weight_fts: f32 = params.peso_fts / 100.0;
@@ -77,7 +78,7 @@ impl SearchStrategy {
                 .collect();
 
             if let Some(constraints) = &query.constraints {
-                for (k, _) in constraints.iter() {
+                for k in constraints.keys() {
                     if !fields.contains(k) {
                         invalid.push(k.clone());
                     }
@@ -105,7 +106,7 @@ impl SearchStrategy {
 
                     for field in &document.fields {
                         if !field.vec_input {
-                            rest.push_str(&format!("{},", field.name));
+                            let _ = write!(rest, "{},", field.name);
                         }
                     }
 
@@ -121,7 +122,7 @@ impl SearchStrategy {
                 if let Some(contraints) = &query.constraints {
                     for (k, values) in contraints {
                         for (i, cons) in values.iter().enumerate() {
-                            let param_name = format!(":{}_{i}", k);
+                            let param_name = format!(":{k}_{i}");
                             let condition = match cons {
                                 Exact(_) => format!("LOWER({k}) = LOWER({param_name})"),
                                 GreaterThan(_) => format!("{k} > {param_name}"),
@@ -129,9 +130,7 @@ impl SearchStrategy {
                             };
 
                             let value = match cons {
-                                Exact(val) => val,
-                                GreaterThan(val) => val,
-                                LesserThan(val) => val,
+                                Exact(val) | GreaterThan(val) | LesserThan(val) => val,
                             };
 
                             conditions.push(condition);
@@ -178,7 +177,7 @@ impl SearchStrategy {
                 (column_names, table, count)
             }
             SearchStrategy::Semantic => {
-                let query_emb = embed_single(query.query.to_owned(), client)
+                let query_emb = embed_single(query.query.clone(), client)
                     .await
                     .map_err(|err| tracing::error!("{err}"))
                     .expect("Fallo al crear un embedding del query");
@@ -191,7 +190,7 @@ impl SearchStrategy {
 
                     for field in &document.fields {
                         if !field.vec_input {
-                            rest.push_str(&format!("{}.{},", document.name, field.name));
+                            let _ = write!(rest, "{}.{}", document.name, field.name);
                         }
                     }
 
@@ -208,7 +207,7 @@ impl SearchStrategy {
                 if let Some(contraints) = &query.constraints {
                     for (k, values) in contraints {
                         for (i, cons) in values.iter().enumerate() {
-                            let param_name = format!(":{}_{i}", k);
+                            let param_name = format!(":{k}_{i}");
                             let condition = match cons {
                                 Exact(_) => format!("LOWER({k}) = LOWER({param_name})"),
                                 GreaterThan(_) => format!("{k} > {param_name}"),
@@ -216,9 +215,7 @@ impl SearchStrategy {
                             };
 
                             let value = match cons {
-                                Exact(val) => val,
-                                GreaterThan(val) => val,
-                                LesserThan(val) => val,
+                                Exact(val) | GreaterThan(val) | LesserThan(val) => val,
                             };
 
                             conditions.push(condition);
@@ -268,7 +265,7 @@ impl SearchStrategy {
                 (column_names, table, count)
             }
             SearchStrategy::ReciprocalRankFusion => {
-                let query_emb = embed_single(query.query.to_owned(), client)
+                let query_emb = embed_single(query.query.clone(), client)
                     .await
                     .map_err(|err| tracing::error!("{err}"))
                     .expect("Fallo al crear un embedding del query");
@@ -281,7 +278,7 @@ impl SearchStrategy {
 
                     for field in &document.fields {
                         if !field.vec_input {
-                            fields.push_str(&format!("{doc_name}.{},", field.name));
+                            let _ = write!(fields, "{doc_name}.{},", field.name);
                         }
                     }
 
@@ -345,7 +342,7 @@ impl SearchStrategy {
                 if let Some(contraints) = &query.constraints {
                     for (k, values) in contraints {
                         for (i, cons) in values.iter().enumerate() {
-                            let param_name = format!(":{}_{i}", k);
+                            let param_name = format!(":{k}_{i}");
                             let condition = match cons {
                                 Exact(_) => format!("LOWER({k}) = LOWER({param_name})"),
                                 GreaterThan(_) => format!("{k} > {param_name}"),
@@ -353,9 +350,7 @@ impl SearchStrategy {
                             };
 
                             let value = match cons {
-                                Exact(val) => val,
-                                GreaterThan(val) => val,
-                                LesserThan(val) => val,
+                                Exact(val) | GreaterThan(val) | LesserThan(val) => val,
                             };
 
                             conditions.push(condition);

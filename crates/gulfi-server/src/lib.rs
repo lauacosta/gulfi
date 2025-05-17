@@ -81,6 +81,6 @@ impl Display for Sexo {
             Sexo::F => "F",
             Sexo::M => "M",
         };
-        write!(f, "{}", content)
+        write!(f, "{content}")
     }
 }

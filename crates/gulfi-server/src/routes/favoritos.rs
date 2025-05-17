@@ -63,7 +63,7 @@ pub async fn favoritos(
                 })?;
 
                 let timestamp = NaiveDateTime::parse_from_str(&timestamp_str, "%Y-%m-%d %H:%M:%S")
-                    .unwrap_or_else(|_| Default::default());
+                    .unwrap_or_else(|_| NaiveDateTime::default());
 
                 let busqueda_con_tipo: Vec<(String, String)> = zip(busquedas, tipos).collect();
 

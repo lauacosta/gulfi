@@ -48,7 +48,7 @@ impl Display for Document {
                 format!("{:<6}- {field_name}", "")
             };
 
-            writeln!(f, "{}", formatted)?;
+            writeln!(f, "{formatted}")?;
         }
 
         Ok(())

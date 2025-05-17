@@ -190,7 +190,7 @@ pub async fn embed_vec_with_progress(
         {
             Ok(resp) => {
                 let elapsed = req_start.elapsed().as_millis();
-                let _ = tx.send(format!("Request exitoso en {} ms", elapsed)).await;
+                let _ = tx.send(format!("Request exitoso en {elapsed} ms")).await;
                 response = Some(resp);
                 break;
             }
@@ -212,14 +212,11 @@ pub async fn embed_vec_with_progress(
         }
     }
 
-    let mut response = match response {
-        Some(r) => r,
-        None => {
-            let _ = tx
-                .send(format!("{} Máximo de intentos excedido", "❌".bright_red()))
-                .await;
-            return Err(EmbeddingError::MaxRetriesExceeded.into());
-        }
+    let Some(mut response) = response else {
+        let _ = tx
+            .send(format!("{} Máximo de intentos excedido", "❌".bright_red()))
+            .await;
+        return Err(EmbeddingError::MaxRetriesExceeded.into());
     };
 
     let _ = tx.send("Deserializando respuesta...".to_string()).await;
@@ -237,7 +234,7 @@ pub async fn embed_vec_with_progress(
 
     let elapsed = start.elapsed().as_millis();
     let _ = tx
-        .send(format!("Deserialización completada en {} ms", elapsed))
+        .send(format!("Deserialización completada en {elapsed} ms"))
         .await;
 
     let _ = tx.send("Procesando embeddings...".to_string()).await;
@@ -249,7 +246,7 @@ pub async fn embed_vec_with_progress(
 
     let total_elapsed = global_start.elapsed().as_millis();
     let _ = tx
-        .send(format!("Embeddings completados en ({}) ms", total_elapsed))
+        .send(format!("Embeddings completados en ({total_elapsed}) ms"))
         .await;
 
     Ok((embedding, total_elapsed))

@@ -130,10 +130,10 @@ impl Application {
 
                 tokio::select! {
                     () = ctrl_c => {
-                        info!("ctrl+c detectado.")
+                        info!("ctrl+c detectado.");
                     },
                     () = terminate => {
-                        info!("ctrl+c detectado.")
+                        info!("ctrl+c detectado.");
                     },
                 }
             })
@@ -425,7 +425,7 @@ fn spawn_writer_task(db_path: &str) -> eyre::Result<mpsc::UnboundedSender<WriteJ
             };
 
             if let Err(e) = res {
-                eprintln!("[writer task] Write failed: {:?}", e);
+                eprintln!("[writer task] Write failed: {e:?}");
             }
         }
     });
