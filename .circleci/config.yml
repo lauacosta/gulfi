@@ -1,12 +1,13 @@
 version: 2.1
 
 orbs:
-  shadesmar: shadesmar/rust@1.0.1
+  shadesmar: shadesmar/rust@1.1.0
+  node: circleci/node@7.1.0
   slack: circleci/slack@5.1.1
 
 workflows:
   version: 2
-  rust:
+  build_and_test:
     jobs:
       - check:
           name: "Run cargo clippy"
@@ -17,6 +18,17 @@ workflows:
       - udeps:
           name: "Run cargo-udeps"
           context: [aws,slack]
+      - deny:
+          context: [aws, slack]
+      - build
+      - update_taiga:
+          context: [taiga, slack]
+          requires:
+            - check
+            - test
+            - udeps
+            - deny
+            - build 
 
 jobs:
   check:
@@ -53,7 +65,52 @@ jobs:
           steps:
             - run: |
                 just udeps
+                
+     - slack/notify:
+          event: fail
+          template: basic_fail_1
+          
+  deny:
+    executor: shadesmar/rust
+    steps:
+      - checkout
+      - shadesmar/with_rust:
+          steps:
+            - run: |
+                just deny
+                
+     - slack/notify:
+          event: fail
+          template: basic_fail_1
 
+  build:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - checkout
+      - node/install:
+          install-pnpm: true
+
+      - run:
+          name: generando .lockfile
+          command: cd crates/gulfi-server/ui/ && pnpm install
+
+      - run:
+          name: build
+          command: cd crates/gulfi-server/ui/ && pnpm build
+      
+     - slack/notify:
+          event: fail
+          template: basic_fail_1
+
+  update_taiga:
+    executor: shadesmar/rust
+    steps:
+      - checkout
+      - shadesmar/sync_with_taiga:
+          project_name: Gulfi
+          
       - slack/notify:
           event: fail
           template: basic_fail_1
+

@@ -2,9 +2,10 @@
 name = "gulfi-server"
 edition = "2024"
 version.workspace = true
+license.workspace = true
 
 [dependencies]
-tower = "0.5.0"
+tower = { version = "0.5.0", features = ["limit", "buffer"] }
 tower-http = { version = "0.5.2", features = ["compression-gzip", "cors", "fs", "trace"] }
 tower-request-id = "0.3.0"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json"] }
@@ -28,6 +29,7 @@ chrono.workspace = true
 gulfi-query = { path = "../gulfi-query/"}
 gulfi-common = { path = "../gulfi-common/"}
 gulfi-openai = { path = "../gulfi-openai/"}
+gulfi-sqlite = { path = "../gulfi-sqlite/"}
 
 webbrowser = "1.0.3"
 include_dir = "0.7.4"

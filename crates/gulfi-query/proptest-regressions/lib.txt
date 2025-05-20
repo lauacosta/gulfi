@@ -5,3 +5,4 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc 7dccc8df1f84846ea8671954e9d550e9fb722c8a42a8260b4183c7c9cd7b94bf # shrinks to bad_token = " ;\0"
+cc 41f582decee6a20bf70ec169d56e065fc5661ac22a2bc27aad1c9efbf4c92881
