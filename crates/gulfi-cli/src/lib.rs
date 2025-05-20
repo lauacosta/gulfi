@@ -73,6 +73,9 @@ pub enum Command {
     Add,
     /// Borra un documento.
     Delete { document: String },
+
+    /// Crear un nuevo usuario en la db.
+    CreateUser { username: String, password: String },
 }
 
 #[cfg(debug_assertions)]
