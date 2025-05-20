@@ -10,13 +10,10 @@ workflows:
   build_and_test:
     jobs:
       - check:
-          name: "Run cargo clippy"
           context: [aws,slack]
       - test:
-          name: "Run tests"
           context: [aws,slack]
       - udeps:
-          name: "Run cargo-udeps"
           context: [aws,slack]
       - deny:
           context: [aws, slack]
