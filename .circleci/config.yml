@@ -1,12 +1,12 @@
 version: 2.1
 
 orbs:
-  shadesmar: shadesmar/rust@1.0.1
+  shadesmar: shadesmar/rust@1.1.0
   node: circleci/node@7.1.0
 
 workflows:
   version: 2
-  rust:
+  build_and_test:
     jobs:
       - check:
           context: [aws]
@@ -16,10 +16,16 @@ workflows:
           context: [aws]
       - deny:
           context: [aws]
+      - build
 
-  build-frontend:
-      jobs:
-        - build
+      - update_taiga:
+          context: [taiga]
+          requires:
+            - check
+            - test
+            - udeps
+            - deny
+            - build 
 
 jobs:
   check:
@@ -57,7 +63,6 @@ jobs:
             - run: |
                 just deny
 
-
   build:
     docker:
       - image: cimg/base:stable
@@ -73,3 +78,10 @@ jobs:
       - run:
           name: build
           command: cd crates/gulfi-server/ui/ && pnpm build
+
+  update_taiga:
+    executor: shadesmar/rust
+    steps:
+      - checkout
+      - shadesmar/sync_with_taiga:
+          project_name: Gulfi
