@@ -10,16 +10,16 @@ workflows:
   build_and_test:
     jobs:
       - check:
-          context: [aws,slack]
+          context: [aws, slack]
       - test:
-          context: [aws,slack]
+          context: [aws, slack]
       - udeps:
-          context: [aws,slack]
+          context: [aws, slack]
       - deny:
           context: [aws, slack]
       - build
       - update_taiga:
-          context: [taiga, slack]
+          context: [aws, taiga, slack]
           requires:
             - check
             - test
