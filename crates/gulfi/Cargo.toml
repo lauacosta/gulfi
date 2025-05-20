@@ -24,5 +24,4 @@ gulfi-sqlite = { path = "../gulfi-sqlite/"}
 gulfi-common = { path = "../gulfi-common/"}
 gulfi-server = { path = "../gulfi-server/"}
 gulfi-cli = { path = "../gulfi-cli/"}
-seahash = "4.1.0"
 
