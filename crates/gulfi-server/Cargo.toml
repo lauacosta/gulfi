@@ -25,6 +25,8 @@ http.workspace = true
 zerocopy.workspace = true
 serde_urlencoded.workspace = true
 chrono.workspace = true
+argon2.workspace = true
+password-hash.workspace = true
 
 gulfi-query = { path = "../gulfi-query/"}
 gulfi-common = { path = "../gulfi-common/"}
@@ -34,3 +36,4 @@ gulfi-sqlite = { path = "../gulfi-sqlite/"}
 webbrowser = "1.0.3"
 include_dir = "0.7.4"
 termcolor = "1.4.1"
+rand = "0.9.1"

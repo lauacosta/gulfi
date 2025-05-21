@@ -899,6 +899,7 @@ dependencies = [
 name = "gulfi-server"
 version = "1.2.0"
 dependencies = [
+ "argon2",
  "axum",
  "chrono",
  "color-eyre",
@@ -910,6 +911,8 @@ dependencies = [
  "http",
  "include_dir",
  "mime_guess",
+ "password-hash",
+ "rand 0.9.1",
  "reqwest",
  "rusqlite",
  "serde",

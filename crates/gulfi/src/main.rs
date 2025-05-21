@@ -212,6 +212,7 @@ fn main() -> eyre::Result<()> {
                     id integer primary key autoincrement,
                     username text not null unique,
                     password_hash text not null,
+                    auth_token text,
                     created_at datetime default current_timestamp,
                     updated_at datetime default current_timestamp
                 )",
@@ -229,7 +230,12 @@ fn main() -> eyre::Result<()> {
                 params![username, password_hash],
             )?;
 
-            assert_eq!(updated, 1)
+            assert_eq!(updated, 1);
+
+            println!(
+                "Se ha creado exitosamente el usuario {}",
+                username.bold().green()
+            );
         }
     }
 
