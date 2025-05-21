@@ -20,11 +20,11 @@ tokio.workspace = true
 chrono.workspace = true
 rusqlite.workspace = true
 serde_json.workspace = true
+argon2.workspace = true
+password-hash.workspace = true
 
 gulfi-sqlite = { path = "../gulfi-sqlite/"}
 gulfi-common = { path = "../gulfi-common/"}
 gulfi-server = { path = "../gulfi-server/"}
 gulfi-cli = { path = "../gulfi-cli/"}
-argon2 = "0.5.3"
-password-hash = { version = "0.5.0", features = ["getrandom"] }
 

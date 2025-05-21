@@ -24,7 +24,7 @@ use tracing::{Level, error, error_span, info};
 
 use crate::ApplicationSettings;
 use crate::routes::{
-    add_favoritos, delete_favoritos, delete_historial, documents, favoritos, health_check,
+    add_favoritos, auth, delete_favoritos, delete_historial, documents, favoritos, health_check,
     historial, historial_full, search, serve_ui,
 };
 use crate::search::SearchStrategy;
@@ -168,6 +168,7 @@ pub fn build_server(listener: TcpListener, state: AppState) -> Result<Serve<Rout
     let api_routes = Router::new()
         .nest("/api", search_routes)
         .nest("/api", historial_routes)
+        .route("/api/auth", get(auth))
         .route("/api/health", get(health_check))
         .route(
             "/api/:doc/favoritos",
