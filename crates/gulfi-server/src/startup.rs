@@ -414,12 +414,10 @@ fn spawn_writer_task(db_path: &str) -> eyre::Result<mpsc::UnboundedSender<WriteJ
                     peso_semantic,
                     k_neighbors,
                 } => {
-                    let res = conn.execute(
+                     conn.execute(
                         "insert or replace into historial(query, strategy, doc, peso_fts, peso_semantic, neighbors) values (?,?,?,?,?,?)",
                         params![query, strategy, doc, peso_fts, peso_semantic, k_neighbors],
-                    );
-                    // println!("registros fueron añadidos al historial!");
-                    res
+                    )
                 }
                 WriteJob::Cache {
                     query: _,
