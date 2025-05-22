@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_lines)]
+
 use std::{fs::File, time::Instant};
 
 use argon2::{Argon2, PasswordHasher};
@@ -24,13 +26,13 @@ use tokio::{process::Command as TokioCommand, try_join};
 fn main() -> eyre::Result<()> {
     let cli = Cli::parse();
 
-    setup(&cli.loglevel)?;
-    let file = match File::open("meta.json") {
-        Ok(file) => Ok(file),
-        Err(_) => {
-            gulfi_cli::helper::initialize_meta_file()?;
-            File::open("meta.json")
-        }
+    setup_tracing(&cli.loglevel)?;
+
+    let file = if let Ok(file) = File::open("meta.json") {
+        Ok(file)
+    } else {
+        gulfi_cli::helper::initialize_meta_file()?;
+        File::open("meta.json")
     }?;
 
     let documents: Vec<Document> = serde_json::from_reader(file)
@@ -58,7 +60,7 @@ fn main() -> eyre::Result<()> {
             #[cfg(debug_assertions)]
             mode,
         } => {
-            let start = std::time::Instant::now();
+            let start = Instant::now();
             let name = crate_name!().to_owned();
             let version = crate_version!().to_owned();
 
@@ -106,22 +108,30 @@ fn main() -> eyre::Result<()> {
             chunk_size,
         } => {
             let base_delay = base_delay * 1000;
-            let db = init_sqlite()?;
+            let db_path = cli.db.clone();
 
-            let doc = match documents.iter().find(|doc| doc.name == document) {
-                Some(doc) => doc,
-                None => {
-                    let available_documents = documents
-                        .into_iter()
-                        .map(|x| x.name)
-                        .collect::<Vec<_>>()
-                        .join(", ");
+            if db_path.trim() == ":memory:" {
+                println!(
+                    "Estas ejecutando el comando '{}' en una {}.",
+                    "Sync".cyan().bold(),
+                    "instancia transitiva".yellow().underline().bold()
+                );
+                std::process::exit(1);
+            }
 
-                    return Err(eyre!(
-                        "{} no es uno de los documentos disponibles: [{available_documents}]",
-                        document.bright_red()
-                    ));
-                }
+            let db = init_sqlite(&db_path)?;
+
+            let Some(doc) = documents.iter().find(|doc| doc.name == document) else {
+                let available_documents = documents
+                    .into_iter()
+                    .map(|x| x.name)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                return Err(eyre!(
+                    "{} no es uno de los documentos disponibles: [{available_documents}]",
+                    document.bright_red()
+                ));
             };
 
             if force {
@@ -146,7 +156,7 @@ fn main() -> eyre::Result<()> {
                 }
             }
 
-            let start = std::time::Instant::now();
+            let start = Instant::now();
             setup_sqlite(&db, doc)?;
             insert_base_data(&db, doc)?;
             match sync_strat {
@@ -206,7 +216,9 @@ fn main() -> eyre::Result<()> {
             );
         }
         Command::CreateUser { username, password } => {
-            let db = init_sqlite()?;
+            let db_path = cli.db.clone();
+            let db = init_sqlite(&db_path)?;
+
             db.execute_batch(
                 "create table if not exists users (
                     id integer primary key autoincrement,
@@ -222,7 +234,7 @@ fn main() -> eyre::Result<()> {
             let argon2 = Argon2::default();
             let password_hash = argon2
                 .hash_password(password.as_bytes(), &salt)
-                .unwrap()
+                .expect("TODO")
                 .to_string();
 
             let updated = db.execute(
@@ -242,9 +254,13 @@ fn main() -> eyre::Result<()> {
     Ok(())
 }
 
-fn setup(loglevel: &str) -> eyre::Result<()> {
+fn setup_tracing(loglevel: &str) -> eyre::Result<()> {
     color_eyre::install()?;
-    dotenvy::dotenv().map_err(|err| eyre!("El archivo .env no fue encontrado. err: {}", err))?;
+
+    if dotenvy::dotenv().is_err() {
+        eprintln!("El archivo {} no fue encontrado.", "\'env\'".green().bold());
+    }
+
     let level = match loglevel.to_lowercase().trim() {
         "trace" => Level::TRACE,
         "debug" => Level::DEBUG,
@@ -266,7 +282,7 @@ fn setup(loglevel: &str) -> eyre::Result<()> {
         )
         .with(ErrorLayer::default());
 
-    tracing::subscriber::set_global_default(subscriber).unwrap();
+    tracing::subscriber::set_global_default(subscriber)?;
 
     Ok(())
 }
@@ -287,7 +303,7 @@ impl tracing_subscriber::fmt::time::FormatTime for GulfiTimer {
         // let time = format!("~{}ms", elapsed.as_millis());
         let str = format!("{}", datetime.bright_blue());
 
-        write!(w, "{}", str)?;
+        write!(w, "{str}")?;
         Ok(())
     }
 }

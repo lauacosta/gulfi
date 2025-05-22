@@ -24,11 +24,10 @@ pub async fn historial(
     Path(doc): Path<String>,
     State(app): State<AppState>,
 ) -> eyre::Result<Json<Vec<HistorialView>>, HttpError> {
-    let db = Connection::open(app.db_path)
-        .expect("Deberia ser un path valido a una base de datos SQLite");
+    let conn_handle = app.connection_pool.acquire().await?;
 
     let result = get_historial(
-        &db,
+        &conn_handle,
         "select id, query from historial where doc = :doc order by timestamp desc",
         |row| {
             let id: u64 = row.get(0).unwrap_or_default();
@@ -50,11 +49,10 @@ pub async fn historial_full(
     Path(doc): Path<String>,
     State(app): State<AppState>,
 ) -> eyre::Result<Json<Vec<HistorialFullView>>, HttpError> {
-    let db = Connection::open(app.db_path)
-        .expect("Deberia ser un path valido a una base de datos SQLite");
+    let conn_handle = app.connection_pool.acquire().await?;
 
     let result = get_historial(
-        &db,
+        &conn_handle,
         "select id, query, strategy, peso_fts, peso_semantic, neighbors, timestamp from historial where doc = :doc order by timestamp desc",
         |row| {
             let id: u64 = row.get(0).unwrap_or_default();
@@ -66,7 +64,7 @@ pub async fn historial_full(
             let timestamp_str: String = row.get(6).unwrap_or_default();
 
             let timestamp = NaiveDateTime::parse_from_str(&timestamp_str, "%Y-%m-%d %H:%M:%S")
-                .unwrap_or_else(|_| Default::default());
+                .unwrap_or_else(|_| NaiveDateTime::default());
 
             let proper_str = format!("query:{query}");
             let query = gulfi_query::Query::parse(&proper_str).expect("the query is malformed");
@@ -109,9 +107,9 @@ pub async fn delete_historial(
     State(app): State<AppState>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Result<StatusCode, HttpError> {
-    let db = Connection::open(app.db_path)
-        .expect("Deberia ser un path valido a una base de datos SQLite");
-    let mut statement = db.prepare("delete from historial where query = ? and doc = ?")?;
+    let conn_handle = app.connection_pool.acquire().await?;
+
+    let mut statement = conn_handle.prepare("delete from historial where query = ? and doc = ?")?;
 
     let query = {
         if let Some(query) = params.get("query") {

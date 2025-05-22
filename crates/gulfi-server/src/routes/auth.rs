@@ -19,9 +19,10 @@ pub async fn auth(
     State(app): State<AppState>,
     Json(payload): Json<AuthParams>,
 ) -> Result<Json<serde_json::Value>, HttpError> {
-    let conn = rusqlite::Connection::open(app.db_path.clone())?;
+    let conn_handle = app.connection_pool.acquire().await?;
+
     let mut stmt =
-        conn.prepare("SELECT id, username, password_hash FROM users WHERE username = ?")?;
+        conn_handle.prepare("SELECT id, username, password_hash FROM users WHERE username = ?")?;
 
     let username = payload.username;
     let password = payload.password;
@@ -36,13 +37,13 @@ pub async fn auth(
 
     let parsed_hash = PasswordHash::new(&password_hash)
         .map_err(|err| eyre::eyre!("Invalid password hash: {err}"))
-        .unwrap();
+        .expect("TODO");
 
     let argon2 = Argon2::default();
 
     argon2
         .verify_password(password.as_bytes(), &parsed_hash)
-        .unwrap();
+        .expect("TODO");
 
     let token: String = rand::rng()
         .sample_iter(&Alphanumeric)
@@ -50,7 +51,7 @@ pub async fn auth(
         .map(char::from)
         .collect();
 
-    conn.execute(
+    conn_handle.execute(
         "UPDATE users SET auth_token = ? WHERE username = ?",
         params![token, username],
     )?;

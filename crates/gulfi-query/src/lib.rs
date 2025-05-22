@@ -11,9 +11,9 @@ pub enum Constraint {
 impl Display for Constraint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Constraint::Exact(str) => write!(f, ": {}", str),
-            Constraint::GreaterThan(str) => write!(f, "> {}", str),
-            Constraint::LesserThan(str) => write!(f, "< {}", str),
+            Constraint::Exact(str) => write!(f, ": {str}"),
+            Constraint::GreaterThan(str) => write!(f, "> {str}"),
+            Constraint::LesserThan(str) => write!(f, "< {str}"),
         }
     }
 }
@@ -43,7 +43,7 @@ impl Query {
 
         let input_clean = clean_html(input.to_owned());
 
-        if input_clean.chars().any(|c| c.is_control()) {
+        if input_clean.chars().any(char::is_control) {
             return Err(ParsingError::InvalidToken(input_clean));
         }
 

@@ -1,3 +1,5 @@
+pub mod pooling;
+
 use std::{
     fmt::Debug,
     fs::File,
@@ -129,7 +131,7 @@ pub async fn sync_vec_data(
                 Ok((data, millis)) => {
 
                     let mut statement =
-                        db.prepare(&format!("insert into vec_{sent_doc_name}(row_id, vec_input_embedding) values (?,?)")).unwrap();
+                        db.prepare(&format!("insert into vec_{sent_doc_name}(row_id, vec_input_embedding) values (?,?)")).expect("Deberia poder preparar el query de inserción.");
 
                     db.execute("BEGIN TRANSACTION", []).expect(
                         "Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite",
@@ -223,7 +225,7 @@ pub fn sync_fts_data(db: &Connection, doc: &Document) -> usize {
     inserted
 }
 
-pub fn init_sqlite() -> Result<Connection> {
+pub fn init_sqlite(db_path: &str) -> Result<Connection, rusqlite::Error> {
     unsafe {
         sqlite3_auto_extension(Some(std::mem::transmute::<
             *const (),
@@ -231,14 +233,7 @@ pub fn init_sqlite() -> Result<Connection> {
         >(sqlite3_vec_init as *const ())));
     }
 
-    let path = std::env::var("DATABASE_URL").map_err(|err| {
-        eyre!(
-            "La variable de ambiente `DATABASE_URL` no fue encontrada. {}",
-            err
-        )
-    })?;
-
-    let db = Connection::open(path)?;
+    let db = Connection::open(db_path)?;
 
     db.pragma_update(None, "journal_mode", "WAL")?;
 
@@ -550,7 +545,7 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
 
                         let records: Vec<Value> = reader
                             .deserialize::<Map<String, Value>>()
-                            .filter_map(|row| row.ok())
+                            .filter_map(std::result::Result::ok)
                             .map(Value::Object)
                             .collect();
 
@@ -668,7 +663,7 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
 
         for h in jh {
             if let Err(e) = h.join().expect("El hilo entro en panico.") {
-                eprintln!("Ocurrio un error: {:#?}", e);
+                eprintln!("Ocurrio un error: {e:#?}");
             }
         }
     });

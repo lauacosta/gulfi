@@ -12,14 +12,6 @@ license = "GPL-3.0"
 incremental = true
 lto = "thin"
 
-# candle-nn = { version = "0.7.2", optional = true }
-# candle-core ={version = "0.7.2", optional = true }
-# hf-hub ={version = "0.3.2", optional = true }
-# tokenizers ={version = "0.20.1", optional = true }
-# candle-transformers ={version = "0.7.2", optional = true }
-# [features] 
-# local = ["dep:candle-nn", "dep:candle-core",  "dep:hf-hub" ,"dep:tokenizers", "dep:candle-transformers"]
-
 [workspace.dependencies]
 thiserror = "2.0.3"
 chrono = "0.4.39"

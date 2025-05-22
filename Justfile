@@ -19,16 +19,19 @@ hack:
 
 # Ejecuta clippy
 check:
-    cargo clippy --locked -- -D warnings
+    cargo clippy --locked -- -D warnings -D clippy::unwrap_used
 
 # Ejecuta la suite de testeos.
 test:
     cargo test --locked --all-features --all-targets
 
+build-ui:
+    cd ./crates/gulfi-server/ui/ && pnpm build
+
 deny:
     cargo-deny --all-features check
 
-ci: fmt check hack test udeps deny
+ci: fmt check hack test udeps deny build-ui
 
 validate-ci:
     circleci config validate

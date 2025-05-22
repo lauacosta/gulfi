@@ -1,3 +1,4 @@
+#![allow(clippy::too_many_lines)]
 use crate::{
     into_http::{HttpError, IntoHttp, SearchResult},
     startup::WriteJob,
@@ -6,14 +7,14 @@ use axum::Json;
 use eyre::Report;
 use gulfi_openai::embed_single;
 use gulfi_query::{
-    Constraint::{Exact, GreaterThan, LesserThan},
+    Constraint::{self, Exact, GreaterThan, LesserThan},
     Query,
 };
+use std::{collections::HashMap, fmt::Write};
 
-use gulfi_sqlite::init_sqlite;
 use reqwest::Client;
 use rusqlite::{
-    ToSql,
+    Row, ToSql,
     types::{FromSql, FromSqlError, ToSqlOutput, ValueRef},
 };
 use serde::{Deserialize, Serialize};
@@ -51,15 +52,11 @@ impl SearchStrategy {
         client: &Client,
         params: SearchParams,
     ) -> SearchResult {
-        // let db = Connection::open(app_state.db_path.clone())
-        //     .expect("Deberia ser un path valido a una base de datos sqlite.");
-        let db = init_sqlite().expect("Deberia andar");
-
         let document = app_state
             .documents
             .iter()
             .find(|x| x.name.to_lowercase() == params.document.to_lowercase())
-            .unwrap();
+            .unwrap_or_else(|| panic!("No se ha encontrado el documento {}", params.document));
 
         let weight_vec = params.peso_semantic / 100.0;
         let weight_fts: f32 = params.peso_fts / 100.0;
@@ -79,7 +76,7 @@ impl SearchStrategy {
                 .collect();
 
             if let Some(constraints) = &query.constraints {
-                for (k, _) in constraints.iter() {
+                for k in constraints.keys() {
                     if !fields.contains(k) {
                         invalid.push(k.clone());
                     }
@@ -99,197 +96,149 @@ impl SearchStrategy {
 
         debug!(?query);
 
-        let (column_names, table, total_query_count) = match self {
-            SearchStrategy::Fts => {
-                let search = {
-                    let start = "select rank as score,";
-                    let mut rest = String::new();
+        let (column_names, table, total_query_count) = {
+            let pool = app_state.connection_pool.clone();
 
-                    for field in &document.fields {
-                        if !field.vec_input {
-                            rest.push_str(&format!("{},", field.name));
+            let conn_handle = pool.acquire().await?;
+
+            debug!("{:?}", pool.stats());
+            debug!("{:?}", pool.corruption_info());
+
+            let res = match self {
+                SearchStrategy::Fts => {
+                    let search = {
+                        let start = "select rank as score,";
+                        let mut rest = String::new();
+
+                        for field in &document.fields {
+                            if !field.vec_input {
+                                let _ = write!(rest, "{},", field.name);
+                            }
                         }
-                    }
 
-                    let doc_name = document.name.clone();
-                    format!(
-                        "{start}{rest}  highlight(fts_{doc_name}, 0, '<b style=\"color: green;\">', '</b>') as input, 'fts' as match_type from fts_{doc_name}",
-                    )
-                };
+                        let doc_name = document.name.clone();
+                        format!(
+                            "{start}{rest}  highlight(fts_{doc_name}, 0, '<b style=\"color: green;\">', '</b>') as input, 'fts' as match_type from fts_{doc_name}",
+                        )
+                    };
 
-                let mut conditions = Vec::new();
-                let mut binding_values: Vec<&dyn ToSql> = Vec::new();
+                    let (mut conditions, mut binding_values) =
+                        build_conditions(query.constraints.as_ref());
 
-                if let Some(contraints) = &query.constraints {
-                    for (k, values) in contraints {
-                        for (i, cons) in values.iter().enumerate() {
-                            let param_name = format!(":{}_{i}", k);
-                            let condition = match cons {
-                                Exact(_) => format!("LOWER({k}) = LOWER({param_name})"),
-                                GreaterThan(_) => format!("{k} > {param_name}"),
-                                LesserThan(_) => format!("{k} < {param_name}"),
-                            };
+                    conditions.push("vec_input match '\"' || :query || '\"' ".to_owned());
+                    binding_values.push(&query.query as &dyn ToSql);
 
-                            let value = match cons {
-                                Exact(val) => val,
-                                GreaterThan(val) => val,
-                                LesserThan(val) => val,
-                            };
+                    let where_clause = if conditions.is_empty() {
+                        String::new()
+                    } else {
+                        format!("where {}", conditions.join(" and "))
+                    };
 
-                            conditions.push(condition);
-                            binding_values.push(value);
-                        }
-                    }
+                    let sql = format!("{search} {where_clause}");
+
+                    let mut stmt = conn_handle.prepare(&sql)?;
+
+                    let column_names: Vec<String> =
+                        stmt.column_names().into_iter().map(String::from).collect();
+
+                    let table = stmt
+                        .query_map(&*binding_values, |row| {
+                            let mut data = Vec::new();
+
+                            for i in 0..row.as_ref().column_count() {
+                                let val = sqlite_value_to_string(row, i)?;
+                                data.push(val);
+                            }
+
+                            Ok(data)
+                        })?
+                        .collect::<Result<Vec<Vec<String>>, _>>()?;
+
+                    let count = table.len();
+
+                    (column_names, table, count)
                 }
+                SearchStrategy::Semantic => {
+                    let query_emb = embed_single(query.query.clone(), client)
+                        .await
+                        .map_err(|err| tracing::error!("{err}"))
+                        .expect("Fallo al crear un embedding del query");
 
-                conditions.push("vec_input match '\"' || :query || '\"' ".to_owned());
-                binding_values.push(&query.query as &dyn ToSql);
+                    let embedding = query_emb.as_bytes();
 
-                let where_clause = if conditions.is_empty() {
-                    String::new()
-                } else {
-                    format!("where {}", conditions.join(" and "))
-                };
+                    let search = {
+                        let start = format!("select vec_{}.distance,", document.name);
+                        let mut rest = String::new();
 
-                let sql = format!("{search} {where_clause}");
-
-                let mut stmt = db.prepare(&sql)?;
-                let column_names: Vec<String> =
-                    stmt.column_names().into_iter().map(String::from).collect();
-
-                let table = stmt
-                    .query_map(&*binding_values, |row| {
-                        let mut data = Vec::new();
-
-                        for i in 0..row.as_ref().column_count() {
-                            let val = match row.get_ref(i)? {
-                                ValueRef::Text(text) => String::from_utf8_lossy(text).into_owned(),
-                                ValueRef::Real(real) => format!("{:.3}", -1. * real),
-                                ValueRef::Integer(int) => int.to_string(),
-                                _ => "Tipo de dato desconocido".to_owned(),
-                            };
-                            data.push(val);
+                        for field in &document.fields {
+                            if !field.vec_input {
+                                let _ = write!(rest, "{}.{}", document.name, field.name);
+                            }
                         }
 
-                        Ok(data)
-                    })?
-                    .collect::<Result<Vec<Vec<String>>, _>>()?;
+                        let doc_name = document.name.clone();
+                        format!(
+                            "{start} {rest} {doc_name}.vec_input as input, 'vec' as match_type from vec_{doc_name} left join {doc_name} on {doc_name}.id = vec_{doc_name}.row_id"
+                        )
+                    };
 
-                let count = table.len();
+                    let (mut conditions, mut binding_values) =
+                        build_conditions(query.constraints.as_ref());
 
-                (column_names, table, count)
-            }
-            SearchStrategy::Semantic => {
-                let query_emb = embed_single(query.query.to_owned(), client)
-                    .await
-                    .map_err(|err| tracing::error!("{err}"))
-                    .expect("Fallo al crear un embedding del query");
+                    conditions.push("k = :k".to_owned());
+                    binding_values.push(&k as &dyn ToSql);
 
-                let embedding = query_emb.as_bytes();
+                    conditions.push("vec_input_embedding match :embedding ".to_owned());
+                    binding_values.push(&embedding as &dyn ToSql);
 
-                let search = {
-                    let start = format!("select vec_{}.distance,", document.name);
-                    let mut rest = String::new();
+                    let where_clause = if conditions.is_empty() {
+                        String::new()
+                    } else {
+                        format!("where {}", conditions.join(" and "))
+                    };
 
-                    for field in &document.fields {
-                        if !field.vec_input {
-                            rest.push_str(&format!("{}.{},", document.name, field.name));
-                        }
-                    }
+                    let sql = format!("{search} {where_clause}");
 
-                    let doc_name = document.name.clone();
-                    format!(
-                        "{start} {rest} {doc_name}.vec_input as input, 'vec' as match_type from vec_{doc_name} left join {doc_name} on {doc_name}.id = vec_{doc_name}.row_id"
-                    )
-                };
+                    let mut stmt = conn_handle.prepare(&sql)?;
+                    let column_names: Vec<String> =
+                        stmt.column_names().into_iter().map(String::from).collect();
 
-                let mut conditions = Vec::new();
+                    let table = stmt
+                        .query_map(&*binding_values, |row| {
+                            let mut data = Vec::new();
 
-                let mut binding_values: Vec<&dyn ToSql> = Vec::new();
+                            for i in 0..row.as_ref().column_count() {
+                                let val = sqlite_value_to_string(row, i)?;
+                                data.push(val);
+                            }
 
-                if let Some(contraints) = &query.constraints {
-                    for (k, values) in contraints {
-                        for (i, cons) in values.iter().enumerate() {
-                            let param_name = format!(":{}_{i}", k);
-                            let condition = match cons {
-                                Exact(_) => format!("LOWER({k}) = LOWER({param_name})"),
-                                GreaterThan(_) => format!("{k} > {param_name}"),
-                                LesserThan(_) => format!("{k} < {param_name}"),
-                            };
+                            Ok(data)
+                        })?
+                        .collect::<Result<Vec<Vec<String>>, _>>()?;
 
-                            let value = match cons {
-                                Exact(val) => val,
-                                GreaterThan(val) => val,
-                                LesserThan(val) => val,
-                            };
+                    let count = table.len();
 
-                            conditions.push(condition);
-                            binding_values.push(value);
-                        }
-                    }
+                    (column_names, table, count)
                 }
+                SearchStrategy::ReciprocalRankFusion => {
+                    let query_emb = embed_single(query.query.clone(), client)
+                        .await
+                        .map_err(|err| tracing::error!("{err}"))
+                        .expect("Fallo al crear un embedding del query");
 
-                conditions.push("k = :k".to_owned());
-                binding_values.push(&k as &dyn ToSql);
+                    let embedding = query_emb.as_bytes();
 
-                conditions.push("vec_input_embedding match :embedding ".to_owned());
-                binding_values.push(&embedding as &dyn ToSql);
+                    let build_final_query = |conditions: &str| -> String {
+                        let doc_name = document.name.clone();
+                        let mut fields = String::new();
 
-                let where_clause = if conditions.is_empty() {
-                    String::new()
-                } else {
-                    format!("where {}", conditions.join(" and "))
-                };
-
-                let sql = format!("{search} {where_clause}");
-
-                dbg!("{:#?}", &sql);
-
-                let mut stmt = db.prepare(&sql)?;
-                let column_names: Vec<String> =
-                    stmt.column_names().into_iter().map(String::from).collect();
-
-                let table = stmt
-                    .query_map(&*binding_values, |row| {
-                        let mut data = Vec::new();
-
-                        for i in 0..row.as_ref().column_count() {
-                            let val = match row.get_ref(i)? {
-                                ValueRef::Text(text) => String::from_utf8_lossy(text).into_owned(),
-                                ValueRef::Real(real) => format!("{:.3}", -1. * real),
-                                ValueRef::Integer(int) => int.to_string(),
-                                _ => "Tipo de dato desconocido".to_owned(),
-                            };
-                            data.push(val);
+                        for field in &document.fields {
+                            if !field.vec_input {
+                                let _ = write!(fields, "{doc_name}.{},", field.name);
+                            }
                         }
 
-                        Ok(data)
-                    })?
-                    .collect::<Result<Vec<Vec<String>>, _>>()?;
-
-                let count = table.len();
-
-                (column_names, table, count)
-            }
-            SearchStrategy::ReciprocalRankFusion => {
-                let query_emb = embed_single(query.query.to_owned(), client)
-                    .await
-                    .map_err(|err| tracing::error!("{err}"))
-                    .expect("Fallo al crear un embedding del query");
-
-                let embedding = query_emb.as_bytes();
-
-                let build_final_query = |conditions: &str| -> String {
-                    let doc_name = document.name.clone();
-                    let mut fields = String::new();
-
-                    for field in &document.fields {
-                        if !field.vec_input {
-                            fields.push_str(&format!("{doc_name}.{},", field.name));
-                        }
-                    }
-
-                    let search_query = format!(
+                        let search_query = format!(
                         "select 
                             {fields}
                             {doc_name}.vec_input as input,
@@ -305,7 +254,7 @@ impl SearchStrategy {
                         full outer join vec_matches on vec_matches.row_id = fts_matches.row_id
                         join {doc_name} on {doc_name}.id = coalesce(fts_matches.row_id, vec_matches.row_id)");
 
-                    let base = format!(
+                        let base = format!(
                         "with vec_matches as (
                             select
                                 row_id,
@@ -329,80 +278,77 @@ impl SearchStrategy {
                         final as ( {search_query} {conditions} order by combined_rank desc) select * from final;"
                     );
 
-                    base
-                };
+                        base
+                    };
 
-                let mut conditions = Vec::new();
+                    let mut conditions = Vec::new();
 
-                let mut binding_values: Vec<&dyn ToSql> = vec![
-                    &embedding as &dyn ToSql,
-                    &k as &dyn ToSql,
-                    &query.query as &dyn ToSql,
-                    &rrf_k as &dyn ToSql,
-                    &weight_fts as &dyn ToSql,
-                    &weight_vec as &dyn ToSql,
-                ];
+                    let mut binding_values: Vec<&dyn ToSql> = vec![
+                        &embedding as &dyn ToSql,
+                        &k as &dyn ToSql,
+                        &query.query as &dyn ToSql,
+                        &rrf_k as &dyn ToSql,
+                        &weight_fts as &dyn ToSql,
+                        &weight_vec as &dyn ToSql,
+                    ];
 
-                //INFO: EL orden en que los campos son cargados en binding_values es importante.
-                //No me fascina pero por ahora no es el mayor de mis problemas.
+                    //INFO: EL orden en que los campos son cargados en binding_values es importante.
+                    //No me fascina pero por ahora no es el mayor de mis problemas.
 
-                if let Some(contraints) = &query.constraints {
-                    for (k, values) in contraints {
-                        for (i, cons) in values.iter().enumerate() {
-                            let param_name = format!(":{}_{i}", k);
-                            let condition = match cons {
-                                Exact(_) => format!("LOWER({k}) = LOWER({param_name})"),
-                                GreaterThan(_) => format!("{k} > {param_name}"),
-                                LesserThan(_) => format!("{k} < {param_name}"),
-                            };
+                    if let Some(contraints) = &query.constraints {
+                        for (k, values) in contraints {
+                            for (i, cons) in values.iter().enumerate() {
+                                let param_name = format!(":{k}_{i}");
+                                let condition = match cons {
+                                    Exact(_) => format!("LOWER({k}) = LOWER({param_name})"),
+                                    GreaterThan(_) => format!("{k} > {param_name}"),
+                                    LesserThan(_) => format!("{k} < {param_name}"),
+                                };
 
-                            let value = match cons {
-                                Exact(val) => val,
-                                GreaterThan(val) => val,
-                                LesserThan(val) => val,
-                            };
+                                let value = match cons {
+                                    Exact(val) | GreaterThan(val) | LesserThan(val) => val,
+                                };
 
-                            conditions.push(condition);
-                            binding_values.push(value);
+                                conditions.push(condition);
+                                binding_values.push(value);
+                            }
                         }
                     }
+
+                    let where_clause = if conditions.is_empty() {
+                        String::new()
+                    } else {
+                        format!("where {}", conditions.join(" and "))
+                    };
+
+                    let sql = build_final_query(&where_clause);
+
+                    let mut stmt = conn_handle.prepare(&sql)?;
+                    let column_names: Vec<String> =
+                        stmt.column_names().into_iter().map(String::from).collect();
+
+                    let column_count = stmt.column_count();
+                    let table = stmt
+                        .query_map(&*binding_values, |row| {
+                            let mut data = Vec::with_capacity(column_count);
+
+                            for i in 0..row.as_ref().column_count() {
+                                let val = sqlite_value_to_string(row, i)?;
+                                data.push(val);
+                            }
+
+                            Ok(data)
+                        })?
+                        .collect::<Result<Vec<Vec<String>>, _>>()?;
+
+                    let count = table.len();
+
+                    (column_names, table, count)
                 }
+            };
 
-                let where_clause = if conditions.is_empty() {
-                    String::new()
-                } else {
-                    format!("where {}", conditions.join(" and "))
-                };
-
-                let sql = build_final_query(&where_clause);
-
-                let mut stmt = db.prepare(&sql)?;
-                let column_names: Vec<String> =
-                    stmt.column_names().into_iter().map(String::from).collect();
-
-                let column_count = stmt.column_count();
-                let table = stmt
-                    .query_map(&*binding_values, |row| {
-                        let mut data = Vec::with_capacity(column_count);
-
-                        for i in 0..row.as_ref().column_count() {
-                            let val = match row.get_ref(i)? {
-                                ValueRef::Text(text) => String::from_utf8_lossy(text).into_owned(),
-                                ValueRef::Real(real) => format!("{:.3}", -1. * real),
-                                ValueRef::Integer(int) => int.to_string(),
-                                _ => "Tipo de dato desconocido".to_owned(),
-                            };
-                            data.push(val);
-                        }
-
-                        Ok(data)
-                    })?
-                    .collect::<Result<Vec<Vec<String>>, _>>()?;
-
-                let count = table.len();
-
-                (column_names, table, count)
-            }
+            res
+            // the conn_handle gets dropped
         };
 
         info!(
@@ -410,7 +356,6 @@ impl SearchStrategy {
             query.query, total_query_count,
         );
 
-        // update_historial(&db, &params, document.name.clone())?;
         if let Err(e) = app_state.writer.send(WriteJob::Historial {
             query: params.search_str,
             doc: params.document,
@@ -479,12 +424,41 @@ enum SearchStrategyError {
     UnsupportedSearchStrategy(String),
 }
 
-// fn update_historial(db: &Connection, values: &SearchParams, doc: String) -> Result<(), HttpError> {
-//     let updated = db.execute(
-//         "insert or replace into historial(query, strategy, doc, peso_fts, peso_semantic, neighbors) values (?,?,?,?,?,?)",
-//         params![values.search_str, values.strategy,doc, values.peso_fts, values.peso_semantic, values.k_neighbors],
-//     )?;
-//     info!("{} registros fueron añadidos al historial!", updated);
+fn build_conditions(
+    constraints: Option<&HashMap<String, Vec<Constraint>>>,
+) -> (Vec<String>, Vec<&dyn ToSql>) {
+    let mut conditions = Vec::new();
+    let mut binding_values: Vec<&dyn ToSql> = Vec::new();
 
-//     Ok(())
-// }
+    if let Some(constraints) = constraints {
+        for (k, values) in constraints {
+            for (i, cons) in values.iter().enumerate() {
+                let param_name = format!(":{k}_{i}");
+                let condition = match cons {
+                    Constraint::Exact(_) => format!("LOWER({k}) = LOWER({param_name})"),
+                    Constraint::GreaterThan(_) => format!("{k} > {param_name}"),
+                    Constraint::LesserThan(_) => format!("{k} < {param_name}"),
+                };
+                let value = match cons {
+                    Constraint::Exact(v)
+                    | Constraint::GreaterThan(v)
+                    | Constraint::LesserThan(v) => v,
+                };
+                conditions.push(condition);
+                binding_values.push(value);
+            }
+        }
+    }
+
+    (conditions, binding_values)
+}
+
+fn sqlite_value_to_string(row: &Row<'_>, idx: usize) -> Result<String, rusqlite::Error> {
+    let val = match row.get_ref(idx)? {
+        ValueRef::Text(text) => String::from_utf8_lossy(text).into_owned(),
+        ValueRef::Real(real) => format!("{:.3}", -1. * real),
+        ValueRef::Integer(int) => int.to_string(),
+        _ => "Tipo de dato desconocido".to_owned(),
+    };
+    Ok(val)
+}

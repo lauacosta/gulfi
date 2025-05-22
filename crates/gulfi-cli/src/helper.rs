@@ -123,18 +123,18 @@ where
 }
 
 fn prompt_confirm(msg: &str) -> bool {
-    prompt_options(msg, vec!['Y', 'N']) == 'Y'
+    prompt_options(msg, &['Y', 'N']) == 'Y'
 }
 
-fn prompt_options(msg: &str, opts: Vec<char>) -> char {
+fn prompt_options(msg: &str, opts: &[char]) -> char {
     let options = {
-        let options_string: Vec<String> = opts.iter().map(|c| format!("{}", c)).collect();
+        let options_string: Vec<String> = opts.iter().map(|c| format!("{c}")).collect();
         options_string.join("/")
     };
 
     let validate_fn = |entry: &str| {
         if entry.len() != 1 {
-            return Err(format!("Input invalida. Las opciones son ({})", options));
+            return Err(format!("Input invalida. Las opciones son ({options})"));
         }
         let c = entry
             .chars()
@@ -142,12 +142,12 @@ fn prompt_options(msg: &str, opts: Vec<char>) -> char {
             .expect("Deberia poder iterarlo.")
             .to_ascii_uppercase();
         if !opts.contains(&c) {
-            return Err(format!("Input invalida. Las opciones son ({})", options));
+            return Err(format!("Input invalida. Las opciones son ({options})"));
         }
         Ok(())
     };
 
-    let entry = prompt_input(&format!("{} ({})", msg, options), validate_fn);
+    let entry = prompt_input(&format!("{msg} ({options})"), validate_fn);
 
     entry
         .chars()

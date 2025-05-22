@@ -4,6 +4,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use chrono::Local;
+use color_eyre::Report;
 use gulfi_query::ParsingError;
 use serde_json::json;
 use std::io::Write;
@@ -36,7 +37,7 @@ pub enum HttpError {
 }
 
 impl HttpError {
-    pub fn from_report(err: color_eyre::Report) -> Self {
+    pub fn from_report(err: Report) -> Self {
         error!("HTTP handler error: {}", err.root_cause());
 
         if let Some(bt) = err
@@ -46,13 +47,13 @@ impl HttpError {
         {
             error!("Backtrace:");
             let mut stream = StandardStream::stderr(ColorChoice::Always);
-            let _ = writeln!(&mut stream, "{:?}", bt);
+            let _ = writeln!(&mut stream, "{bt:?}");
         } else {
             error!("No Backtrace");
         }
 
         let mut stream = StandardStream::stderr(ColorChoice::Always);
-        let _ = writeln!(&mut stream, "{}", err);
+        let _ = writeln!(&mut stream, "{err}");
 
         HttpError::Internal {
             err: err.to_string(),
@@ -87,6 +88,7 @@ impl_from!(std::io::Error);
 impl_from!(serde_urlencoded::de::Error);
 impl_from!(serde_json::Error);
 impl_from!(rusqlite::Error);
+impl_from!(gulfi_sqlite::pooling::PoolError);
 
 impl IntoResponse for HttpError {
     fn into_response(self) -> Response {
