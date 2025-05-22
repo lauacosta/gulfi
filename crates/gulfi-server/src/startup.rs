@@ -1,15 +1,18 @@
-use axum::Extension;
+use axum::error_handling::HandleErrorLayer;
+use axum::{BoxError, Extension};
 use color_eyre::owo_colors::OwoColorize;
 use eyre::{Result, eyre};
 use gulfi_common::Document;
 use gulfi_sqlite::init_sqlite;
 use gulfi_sqlite::pooling::AsyncConnectionPool;
-use http::Method;
+use http::{Method, StatusCode};
 use rusqlite::{Connection, params};
 use std::net::IpAddr;
 use std::time::{Duration, Instant};
 use std::{fmt, io};
 use tokio::sync::mpsc::{self, UnboundedSender};
+use tower::buffer::BufferLayer;
+use tower::limit::RateLimitLayer;
 use tower_http::LatencyUnit;
 use tower_http::cors::Any;
 use tower_http::{compression::CompressionLayer, cors::CorsLayer};
@@ -23,7 +26,7 @@ use tracing::{Level, error, error_span, info};
 
 use crate::ApplicationSettings;
 use crate::routes::{
-    add_favoritos, delete_favoritos, delete_historial, documents, favoritos, health_check,
+    add_favoritos, auth, delete_favoritos, delete_historial, documents, favoritos, health_check,
     historial, historial_full, search, serve_ui,
 };
 use crate::search::SearchStrategy;
@@ -146,23 +149,36 @@ impl Application {
 }
 
 pub fn build_server(listener: TcpListener, state: AppState) -> Result<Serve<Router, Router>> {
+    let historial_routes = Router::new()
+        .route("/:doc/historial", get(historial).delete(delete_historial))
+        .route("/:doc/historial-full", get(historial_full));
+
+    let search_routes = Router::new().route("/search", get(search)).layer(
+        ServiceBuilder::new()
+            .layer(HandleErrorLayer::new(|err: BoxError| async move {
+                (
+                    StatusCode::TOO_MANY_REQUESTS,
+                    format!("Unhandled error {}", err),
+                )
+            }))
+            .layer(BufferLayer::new(1024))
+            .layer(RateLimitLayer::new(1000, Duration::from_secs(1))),
+    );
+
+    let frontend_routes = Router::new()
+        .route("/assets/*path", get(serve_ui))
+        .fallback(serve_ui);
+
     let api_routes = Router::new()
+        .nest("/api", search_routes)
+        .nest("/api", historial_routes)
+        .route("/api/auth", get(auth))
         .route("/api/health", get(health_check))
         .route(
             "/api/:doc/favoritos",
             get(favoritos).post(add_favoritos).delete(delete_favoritos),
         )
-        .route("/api/search", get(search))
-        .route("/api/documents", get(documents))
-        .route(
-            "/api/:doc/historial",
-            get(historial).delete(delete_historial),
-        )
-        .route("/api/:doc/historial-full", get(historial_full));
-
-    let frontend_routes = Router::new()
-        .route("/assets/*path", get(serve_ui))
-        .fallback(serve_ui);
+        .route("/api/documents", get(documents));
 
     let mut server = api_routes.merge(frontend_routes).with_state(state);
 
@@ -414,7 +430,7 @@ fn spawn_writer_task(db_path: &str) -> eyre::Result<mpsc::UnboundedSender<WriteJ
                     peso_semantic,
                     k_neighbors,
                 } => {
-                     conn.execute(
+                    conn.execute(
                         "insert or replace into historial(query, strategy, doc, peso_fts, peso_semantic, neighbors) values (?,?,?,?,?,?)",
                         params![query, strategy, doc, peso_fts, peso_semantic, k_neighbors],
                     )

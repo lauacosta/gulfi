@@ -68,6 +68,9 @@ pub enum Command {
         /// Determina la cantidad de tiempo base al hacer backoff en los requests. En millisegundos.
         #[arg(short = 'T', long, default_value_t = 2)]
         base_delay: u64,
+
+        #[arg(short = 'T', long, default_value_t = 1024)]
+        chunk_size: usize,
     },
     /// Lista todos los documentos disponibles documento.
     List,
@@ -75,6 +78,9 @@ pub enum Command {
     Add,
     /// Borra un documento.
     Delete { document: String },
+
+    /// Crear un nuevo usuario en la db.
+    CreateUser { username: String, password: String },
 }
 
 #[cfg(debug_assertions)]

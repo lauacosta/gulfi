@@ -2,6 +2,7 @@
 
 use std::{fs::File, time::Instant};
 
+use argon2::{Argon2, PasswordHasher};
 use clap::{Parser, crate_name, crate_version};
 use color_eyre::owo_colors::OwoColorize;
 use eyre::eyre;
@@ -9,6 +10,8 @@ use gulfi_cli::{Cli, Command, SyncStrategy};
 use gulfi_common::Document;
 use gulfi_server::{ApplicationSettings, startup::run_server};
 use gulfi_sqlite::{init_sqlite, insert_base_data, setup_sqlite, sync_fts_data, sync_vec_data};
+use password_hash::{SaltString, rand_core::OsRng};
+use rusqlite::params;
 use tracing::{Level, debug, level_filters::LevelFilter};
 use tracing_error::ErrorLayer;
 use tracing_subscriber::{Registry, fmt::Layer, layer::SubscriberExt};
@@ -44,15 +47,12 @@ fn main() -> eyre::Result<()> {
                 println!("{doc}");
             }
         }
-
         Command::Add => {
             gulfi_cli::helper::run_new()?;
         }
-
         Command::Delete { document } => {
             gulfi_cli::helper::delete_document(&document)?;
         }
-
         Command::Serve {
             interface,
             port,
@@ -105,6 +105,7 @@ fn main() -> eyre::Result<()> {
             force,
             base_delay,
             document,
+            chunk_size,
         } => {
             let base_delay = base_delay * 1000;
             let db_path = cli.db.clone();
@@ -174,7 +175,8 @@ fn main() -> eyre::Result<()> {
                     let rt = tokio::runtime::Runtime::new()?;
 
                     let start = Instant::now();
-                    let (inserted, media) = rt.block_on(sync_vec_data(&db, doc, base_delay))?;
+                    let (inserted, media) =
+                        rt.block_on(sync_vec_data(&db, doc, base_delay, chunk_size))?;
 
                     eprintln!("{}", "-".repeat(100));
                     eprintln!(
@@ -190,7 +192,8 @@ fn main() -> eyre::Result<()> {
 
                     let rt = tokio::runtime::Runtime::new()?;
                     let start = Instant::now();
-                    let (inserted, media) = rt.block_on(sync_vec_data(&db, doc, base_delay))?;
+                    let (inserted, media) =
+                        rt.block_on(sync_vec_data(&db, doc, base_delay, chunk_size))?;
                     let vec_elapsed = start.elapsed().as_millis();
 
                     eprintln!("{}", "-".repeat(100));
@@ -210,6 +213,40 @@ fn main() -> eyre::Result<()> {
             eprintln!(
                 "\n🎉 Sincronización finalizada, tomó {} ms.\n",
                 start.elapsed().as_millis()
+            );
+        }
+        Command::CreateUser { username, password } => {
+            let db_path = cli.db.clone();
+            let db = init_sqlite(&db_path)?;
+
+            db.execute_batch(
+                "create table if not exists users (
+                    id integer primary key autoincrement,
+                    username text not null unique,
+                    password_hash text not null,
+                    auth_token text,
+                    created_at datetime default current_timestamp,
+                    updated_at datetime default current_timestamp
+                )",
+            )?;
+
+            let salt = SaltString::generate(&mut OsRng);
+            let argon2 = Argon2::default();
+            let password_hash = argon2
+                .hash_password(password.as_bytes(), &salt)
+                .expect("TODO")
+                .to_string();
+
+            let updated = db.execute(
+                "insert or replace into users(username, password_hash) values (?,?)",
+                params![username, password_hash],
+            )?;
+
+            assert_eq!(updated, 1);
+
+            println!(
+                "Se ha creado exitosamente el usuario {}",
+                username.bold().green()
             );
         }
     }

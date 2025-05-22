@@ -2,6 +2,7 @@
 name = "gulfi"
 edition = "2024"
 authors = ["Lautaro <acostaquintanalautaro@gmail.com>"]
+license.workspace = true
 version.workspace = true
 
 [dependencies]
@@ -19,6 +20,8 @@ tokio.workspace = true
 chrono.workspace = true
 rusqlite.workspace = true
 serde_json.workspace = true
+argon2.workspace = true
+password-hash.workspace = true
 
 gulfi-sqlite = { path = "../gulfi-sqlite/"}
 gulfi-common = { path = "../gulfi-common/"}

@@ -28,7 +28,10 @@ test:
 build-ui:
     cd ./crates/gulfi-server/ui/ && pnpm build
 
-ci: fmt check hack test udeps build-ui
+deny:
+    cargo-deny --all-features check
+
+ci: fmt check hack test udeps deny build-ui
 
 validate-ci:
     circleci config validate
