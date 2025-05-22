@@ -2,6 +2,8 @@ use axum::Extension;
 use color_eyre::owo_colors::OwoColorize;
 use eyre::{Result, eyre};
 use gulfi_common::Document;
+use gulfi_sqlite::init_sqlite;
+use gulfi_sqlite::pooling::AsyncConnectionPool;
 use http::Method;
 use rusqlite::{Connection, params};
 use std::net::IpAddr;
@@ -28,9 +30,10 @@ use crate::search::SearchStrategy;
 
 #[derive(Debug, Clone)]
 pub struct AppState {
-    pub db_path: String,
+    // pub db_path: String,
     pub documents: Vec<Document>,
     pub writer: UnboundedSender<WriteJob>,
+    pub connection_pool: AsyncConnectionPool,
 }
 
 #[derive(Debug)]
@@ -42,11 +45,11 @@ pub struct Application {
 
 impl Application {
     /// # Errors
-    /// Fallará si no logra obtener la direccion local del `tokio::net::TcpListener`.
+    /// Fails if it's not capable of acquiring a port for`tokio::net::TcpListener`.
     ///
     /// # Panics
-    /// Entrará en panicos si no es capaz de:
-    /// 1. Vincular un `tokio::net::TcpListener` a la dirección dada.
+    /// It panics if it's not able to get a port for the given address.
+    ///
     pub async fn build(
         configuration: &ApplicationSettings,
         documents: Vec<Document>,
@@ -56,11 +59,11 @@ impl Application {
         let listener = match TcpListener::bind(&address).await {
             Ok(listener) => listener,
             Err(err) => {
-                error!("{err}. Tratando con otro puerto...");
+                error!("{err}. Trying with another port...");
                 match TcpListener::bind(format!("{}:0", configuration.host)).await {
                     Ok(listener) => listener,
                     Err(err) => {
-                        error!("No hay puertos disponibles, finalizando la aplicación...");
+                        error!("There aren't available ports, closing application...");
                         return Err(err.into());
                     }
                 }
@@ -69,24 +72,26 @@ impl Application {
 
         let port = listener
             .local_addr()
-            .expect("Fallo al encontrar la local address")
+            .expect("It should be able to find the locall adress")
             .port();
 
         let host = configuration.host;
 
         let db_path = std::env::var("DATABASE_URL").map_err(|err| {
             eyre!(
-                "La variable de ambiente `DATABASE_URL` no fue encontrada. {}",
+                "Environment variable `DATABASE_URL` is not set. Err: {}",
                 err
             )
         })?;
 
+        let connection_pool = AsyncConnectionPool::new(5, || init_sqlite(&db_path))?;
+
         let writer = spawn_writer_task(&db_path)?;
 
         let state = AppState {
-            db_path,
             documents,
             writer,
+            connection_pool,
         };
 
         let server = build_server(listener, state)?;
@@ -103,11 +108,10 @@ impl Application {
     }
 
     /// # Errors
+    /// Fails if there is an inconvenient while programming the async task.
     ///
-    /// Devolverá error si ocurre algun inconveniente con tokio para programar la tarea asíncrona.
     /// # Panics
-    ///
-    /// Entrará en pánico si no es capaz de instalar el handler requerido.
+    /// Panics if it is unable to install the handler.
     pub async fn run_until_stopped(self) -> io::Result<()> {
         self.server
             // https://github.com/tokio-rs/axum/blob/main/examples/graceful-shutdown/src/main.rs
@@ -185,7 +189,7 @@ pub fn build_server(listener: TcpListener, state: AppState) -> Result<Serve<Rout
                             let request_id = request
                                 .extensions()
                                 .get::<RequestId>()
-                                .map_or_else(|| "desconocido".into(), ToString::to_string);
+                                .map_or_else(|| "unknown".into(), ToString::to_string);
 
                             error_span!(
                                 "request",
@@ -414,7 +418,7 @@ fn spawn_writer_task(db_path: &str) -> eyre::Result<mpsc::UnboundedSender<WriteJ
                         "insert or replace into historial(query, strategy, doc, peso_fts, peso_semantic, neighbors) values (?,?,?,?,?,?)",
                         params![query, strategy, doc, peso_fts, peso_semantic, k_neighbors],
                     );
-                    println!("registros fueron añadidos al historial!");
+                    // println!("registros fueron añadidos al historial!");
                     res
                 }
                 WriteJob::Cache {

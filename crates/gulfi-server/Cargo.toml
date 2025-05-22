@@ -26,6 +26,7 @@ serde_urlencoded.workspace = true
 chrono.workspace = true
 
 gulfi-query = { path = "../gulfi-query/"}
+gulfi-sqlite= { path = "../gulfi-sqlite/"}
 gulfi-common = { path = "../gulfi-common/"}
 gulfi-openai = { path = "../gulfi-openai/"}
 

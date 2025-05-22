@@ -12,7 +12,6 @@ use tracing::debug;
 use crate::into_http::HttpError;
 use axum::extract::State;
 use http::StatusCode;
-use rusqlite::Connection;
 use rusqlite::params;
 use serde::Deserialize;
 
@@ -31,11 +30,10 @@ pub async fn favoritos(
     Path(doc): Path<String>,
     State(app): State<AppState>,
 ) -> Result<Json<serde_json::Value>, HttpError> {
-    let db = Connection::open(app.db_path)
-        .expect("Deberia ser un path valido a una base de datos SQLite");
+    let conn_handle = app.connection_pool.acquire().await?;
 
     let favoritos = {
-        let mut statement = db.prepare(
+        let mut statement = conn_handle.prepare(
         "select id, nombre, data, timestamp, busquedas, tipos from favoritos where doc = :doc order by timestamp desc",
     )?;
 
@@ -102,8 +100,7 @@ pub async fn add_favoritos(
     State(app): State<AppState>,
     Json(payload): Json<FavParams>,
 ) -> Result<(StatusCode, String), HttpError> {
-    let db = Connection::open(app.db_path)
-        .expect("Deberia ser un path valido a una base de datos SQLite");
+    let conn_handle = app.connection_pool.acquire().await?;
 
     let nombre = payload.nombre.replace(|c: char| c.is_whitespace(), "_");
     let data = payload.data.join(", ");
@@ -125,7 +122,7 @@ pub async fn add_favoritos(
             .collect::<Vec<String>>(),
     )?;
 
-    let mut statement = db.prepare(
+    let mut statement = conn_handle.prepare(
         "insert into favoritos (nombre, data, doc, busquedas,tipos, timestamp) values (?,?,?,?,?,datetime('now', 'localtime'))",
     )?;
 
@@ -143,9 +140,10 @@ pub async fn delete_favoritos(
     State(app): State<AppState>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Result<StatusCode, HttpError> {
-    let db = Connection::open(app.db_path)
-        .expect("Deberia ser un path valido a una base de datos SQLite");
-    let mut statement = db.prepare("delete from favoritos where nombre = ? and doc = ?")?;
+    let conn_handle = app.connection_pool.acquire().await?;
+
+    let mut statement =
+        conn_handle.prepare("delete from favoritos where nombre = ? and doc = ?")?;
 
     let nombre = {
         if let Some(nombre) = params.get("nombre") {

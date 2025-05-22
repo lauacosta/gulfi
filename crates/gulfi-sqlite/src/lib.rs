@@ -1,3 +1,5 @@
+pub mod pooling;
+
 use std::{
     fmt::Debug,
     fs::File,
@@ -223,7 +225,7 @@ pub fn sync_fts_data(db: &Connection, doc: &Document) -> usize {
     inserted
 }
 
-pub fn init_sqlite(db_path: &str) -> Result<Connection> {
+pub fn init_sqlite(db_path: &str) -> Result<Connection, rusqlite::Error> {
     unsafe {
         sqlite3_auto_extension(Some(std::mem::transmute::<
             *const (),

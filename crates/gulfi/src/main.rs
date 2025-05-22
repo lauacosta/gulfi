@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_lines)]
+
 use std::{fs::File, time::Instant};
 
 use clap::{Parser, crate_name, crate_version};

@@ -25,7 +25,10 @@ check:
 test:
     cargo test --locked --all-features --all-targets
 
-ci: fmt check hack test udeps
+build-ui:
+    cd ./crates/gulfi-server/ui/ && pnpm build
+
+ci: fmt check hack test udeps build-ui
 
 validate-ci:
     circleci config validate
