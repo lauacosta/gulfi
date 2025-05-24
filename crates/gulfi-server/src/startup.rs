@@ -75,7 +75,7 @@ impl Application {
 
         let port = listener
             .local_addr()
-            .expect("It should be able to find the locall adress")
+            .expect("It should be able to find the locall address")
             .port();
 
         let host = configuration.host;

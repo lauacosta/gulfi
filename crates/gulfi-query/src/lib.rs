@@ -20,13 +20,13 @@ impl Display for Constraint {
 
 #[derive(Error, Debug)]
 pub enum ParsingError {
-    #[error("La busqueda no contiene un 'query'")]
+    #[error("Search doesnt have 'query' key.")]
     MissingQuery,
-    #[error("No hay un valor luego del '{0}'")]
+    #[error("No value after '{0}'")]
     MissingValue(char),
-    #[error("No hay un campo antes del '{0}'")]
+    #[error("No value before '{0}'")]
     MissingKey(char),
-    #[error("'{0}' es un token invalido")]
+    #[error("Invalid token: '{0}'")]
     InvalidToken(String),
 }
 

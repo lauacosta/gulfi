@@ -86,7 +86,7 @@ impl DataSources {
         let file = match ext {
             "csv" => DataSources::Csv,
             "json" => DataSources::Json,
-            _ => return Err(eyre!("Extension desconocida {ext}")),
+            _ => return Err(eyre!("unknown file extension: {ext}")),
         };
 
         Ok(file)
@@ -98,29 +98,30 @@ pub fn parse_sources<T: AsRef<Path> + Debug>(path: T) -> eyre::Result<Vec<(PathB
 
     match metadata(&path) {
         Err(err) => {
-            error!("El directorio `{path:?}` no existe!: {err}");
-            info!("Para solucionarlo, se creara un directorio con ese path");
+            error!("Directory `{path:?}` doesn't exists!: {err}");
+            info!("To fix it, create the directory.");
             DirBuilder::new().recursive(true).create(&path)?;
         }
         Ok(metadata) => {
             if metadata.is_dir() {
-                let entries = std::fs::read_dir(&path).expect("Deberia poder leer el directorio");
+                let entries =
+                    std::fs::read_dir(&path).expect("Should be able to read the directory");
                 if entries.into_iter().count() == 0 {
-                    warn!("El directorio {path:?}` existe, pero no tiene archivos.");
+                    warn!("Directory {path:?}` exists but is empty.");
                 }
             } else {
-                error!("`{path:?}` no es un directorio!");
+                error!("`{path:?}` is not a directory!");
                 info!(
-                    "Para solucionarlo, cree un directorio en `datasources` con el nombre de su documento."
+                    "To fix it, create a directory in `datasources` with the name of your document or use the CLI command."
                 );
-                return Err(eyre!("No es un directorio"));
+                return Err(eyre!("Not a directory"));
             }
         }
     }
 
     for entry in std::fs::read_dir(&path)? {
         let path = entry?.path();
-        let utf_8_path = Utf8Path::from_path(&path).expect("Deberia ser UTF-8");
+        let utf_8_path = Utf8Path::from_path(&path).expect("Should be UTF-8");
 
         if utf_8_path.is_file() {
             if let Some(ext) = utf_8_path.extension() {
