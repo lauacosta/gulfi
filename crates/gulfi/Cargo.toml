@@ -18,9 +18,9 @@ clap.workspace = true
 axum.workspace = true
 tokio.workspace = true
 chrono.workspace = true
-rusqlite.workspace = true
 serde_json.workspace = true
 argon2.workspace = true
+rusqlite.workspace = true
 password-hash.workspace = true
 
 gulfi-sqlite = { path = "../gulfi-sqlite/"}

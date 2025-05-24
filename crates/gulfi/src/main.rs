@@ -35,14 +35,14 @@ fn main() -> eyre::Result<()> {
         File::open("meta.json")
     }?;
 
-    let documents: Vec<Document> = serde_json::from_reader(file)
-        .map_err(|err| eyre!("Error al parsear `meta.json`. {err}"))?;
+    let documents: Vec<Document> =
+        serde_json::from_reader(file).map_err(|err| eyre!("Error parsing `meta.json`. {err}"))?;
 
     debug!(?documents);
 
     match cli.command() {
         Command::List => {
-            println!("Documentos definidos en `meta.json`:");
+            println!("Document definitions in `meta.json`:");
             for doc in documents {
                 println!("{doc}");
             }
@@ -111,10 +111,10 @@ fn main() -> eyre::Result<()> {
             let db_path = cli.db.clone();
 
             if db_path.trim() == ":memory:" {
-                println!(
-                    "Estas ejecutando el comando '{}' en una {}.",
+                eprintln!(
+                    "You are running '{}' in a {}.",
                     "Sync".cyan().bold(),
-                    "instancia transitiva".yellow().underline().bold()
+                    "transient in-memory database".yellow().underline().bold()
                 );
                 std::process::exit(1);
             }
@@ -129,7 +129,7 @@ fn main() -> eyre::Result<()> {
                     .join(", ");
 
                 return Err(eyre!(
-                    "{} no es uno de los documentos disponibles: [{available_documents}]",
+                    "{} is not one of the available documents: [{available_documents}]",
                     document.bright_red()
                 ));
             };
@@ -166,7 +166,7 @@ fn main() -> eyre::Result<()> {
 
                     eprintln!("{}", "-".repeat(100));
                     eprintln!(
-                        "{inserted} registros fueron sincronizados en {} ({} ms).",
+                        "{inserted} entries were synced in {} ({} ms).",
                         format!("fts_{}", doc.name).bright_cyan().bold(),
                         start.elapsed().as_millis(),
                     );
@@ -180,7 +180,7 @@ fn main() -> eyre::Result<()> {
 
                     eprintln!("{}", "-".repeat(100));
                     eprintln!(
-                        "{inserted} registros fueron sincronizados en {} ({} ms, media de {media} ms por chunk).",
+                        "{inserted} entries were synced in {} ({} ms, average of {media} ms per chunk).",
                         format!("vec_{}", doc.name).bright_purple().bold(),
                         start.elapsed().as_millis(),
                     );
@@ -199,19 +199,19 @@ fn main() -> eyre::Result<()> {
                     eprintln!("{}", "-".repeat(100));
 
                     eprintln!(
-                        "{inserted_fts} registros fueron sincronizados en {} ({fts_elapsed} ms).",
+                        "{inserted_fts} entries were synced in {} ({fts_elapsed} ms).",
                         format!("fts_{}", doc.name).bright_cyan().bold(),
                     );
 
                     eprintln!(
-                        "{inserted} registros fueron sincronizados en {} ({vec_elapsed} ms, media de {media} ms por chunk).",
+                        "{inserted} entries were synced in {} ({vec_elapsed} ms, average of {media} ms per chunk).",
                         format!("vec_{}", doc.name).bright_purple().bold(),
                     );
                 }
             }
 
             eprintln!(
-                "\n🎉 Sincronización finalizada, tomó {} ms.\n",
+                "\n🎉 Synchronization finished! took {} ms.\n",
                 start.elapsed().as_millis()
             );
         }
@@ -244,10 +244,7 @@ fn main() -> eyre::Result<()> {
 
             assert_eq!(updated, 1);
 
-            println!(
-                "Se ha creado exitosamente el usuario {}",
-                username.bold().green()
-            );
+            println!("User {} was created", username.bold().bright_green());
         }
     }
 
@@ -258,7 +255,7 @@ fn setup_tracing(loglevel: &str) -> eyre::Result<()> {
     color_eyre::install()?;
 
     if dotenvy::dotenv().is_err() {
-        eprintln!("El archivo {} no fue encontrado.", "\'env\'".green().bold());
+        eprintln!("{} was not found.", "\'env\'".green().bold());
     }
 
     let level = match loglevel.to_lowercase().trim() {
@@ -266,9 +263,7 @@ fn setup_tracing(loglevel: &str) -> eyre::Result<()> {
         "debug" => Level::DEBUG,
         "info" => Level::INFO,
         _ => {
-            return Err(eyre!(
-                "Log Level desconocido, utiliza `INFO`, `DEBUG` o `TRACE`."
-            ));
+            return Err(eyre!("unknown log level, use `INFO`, `DEBUG` or `TRACE`."));
         }
     };
 
@@ -300,7 +295,6 @@ impl GulfiTimer {
 impl tracing_subscriber::fmt::time::FormatTime for GulfiTimer {
     fn format_time(&self, w: &mut tracing_subscriber::fmt::format::Writer<'_>) -> fmt::Result {
         let datetime = chrono::Local::now().format("%H:%M:%S");
-        // let time = format!("~{}ms", elapsed.as_millis());
         let str = format!("{}", datetime.bright_blue());
 
         write!(w, "{str}")?;

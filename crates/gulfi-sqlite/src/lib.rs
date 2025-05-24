@@ -41,7 +41,7 @@ pub async fn sync_vec_data(
     let doc_name = doc.name.clone();
     let mp = MultiProgress::new();
 
-    eprintln!("Sincronizando tablas VEC en {doc_name}");
+    eprintln!("Syncing VEC tables in {doc_name}");
 
     let mut statement = db.prepare(&format!("select id, vec_input from {doc_name}"))?;
 
@@ -51,13 +51,13 @@ pub async fn sync_vec_data(
         Ok((id, input))
     }) {
         Ok(rows) => rows
-            .map(|v| v.expect("Deberia tener una vec_input"))
+            .map(|v| v.expect("Should have a 'vec_input' field"))
             .collect(),
         Err(err) => return Err(eyre!(err)),
     };
 
     eprintln!(
-        "{}  Recopilados {} registros para procesamiento",
+        "{} {} entries to process",
         "ⓘ".bright_green(),
         v_inputs.len()
     );
@@ -73,12 +73,12 @@ pub async fn sync_vec_data(
     let embed_style = ProgressStyle::with_template(
         "   {spinner:.cyan} [{bar:40.green}] {pos}/{len} chunks ({percent}%) [{elapsed_precise}]",
     )
-    .expect("Deberia ser un template valido")
+    .expect("Should be an empty template")
     .progress_chars("##-");
 
     embed_pb.set_style(embed_style);
     embed_pb.enable_steady_tick(Duration::from_millis(100));
-    embed_pb.set_message("Generando embeddings");
+    embed_pb.set_message("Generating embeddings");
 
     let futures_iterator = v_inputs
         .chunks(chunk_size)
@@ -86,20 +86,21 @@ pub async fn sync_vec_data(
         .map(|(proc_id, chunk)| {
             let (indices, v_inputs) = chunk.iter().cloned().unzip();
 
+            // TODO: should change to something more robust than a string
             let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(10);
 
             let status_pb = mp.insert_before(&embed_pb, ProgressBar::new_spinner());
             status_pb.set_style(
                 ProgressStyle::with_template("      {spinner:.yellow} {wide_msg}")
-                    .expect("Deberia ser un template valido")
+                    .expect("Should be an empty template")
                     .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ "),
             );
             status_pb.enable_steady_tick(Duration::from_millis(100));
-            status_pb.set_message(format!("Procesando chunk {} - preparando...", proc_id + 1));
+            status_pb.set_message(format!("Processing chunk {} - preparing...", proc_id + 1));
 
             tokio::spawn(async move {
                 while let Some(msg) = rx.recv().await {
-                    if msg.contains("completados") {
+                    if msg.contains("done") {
                         status_pb.set_message(format!(
                             "{} Chunk {} - {}",
                             "✔".bright_green().bold(),
@@ -131,21 +132,21 @@ pub async fn sync_vec_data(
                 Ok((data, millis)) => {
 
                     let mut statement =
-                        db.prepare(&format!("insert into vec_{sent_doc_name}(row_id, vec_input_embedding) values (?,?)")).expect("Deberia poder preparar el query de inserción.");
+                        db.prepare(&format!("insert into vec_{sent_doc_name}(row_id, vec_input_embedding) values (?,?)")).expect("Should be able to prepare query");
 
                     db.execute("BEGIN TRANSACTION", []).expect(
-                        "Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite",
+                        "Should be a C compatible string",
                     );
 
                     let mut insertions = 0;
                     for (id, embedding) in data {
                         insertions += statement.execute(
                             rusqlite::params![id, embedding.as_bytes()],
-                        ).unwrap_or_else(|_| panic!("Error insertando en vec_{sent_doc_name}"));
+                        ).unwrap_or_else(|_| panic!("Error inserting in vec_{sent_doc_name}"));
 
                     }
                     db.execute("COMMIT", []).expect(
-                        "Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite",
+                    "Should be a C compatible string",
                     );
 
                      total_inserted.fetch_add(insertions, Ordering::Relaxed);
@@ -156,7 +157,7 @@ pub async fn sync_vec_data(
                     embed_pb.lock().await.inc(1);
                 }
                 Err(err) => {
-                    error!("Error procesando el chunk: {err}");
+                    error!("Error processing chunk: {err}");
                 },
             }
         }
@@ -180,12 +181,12 @@ pub fn sync_fts_data(db: &Connection, doc: &Document) -> usize {
 
     let pb = ProgressBar::new_spinner();
     let style = ProgressStyle::with_template("{spinner:.green}{wide_msg}")
-        .expect("Deberia ser un template valido")
+        .expect("Should be a valid template")
         .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ ");
 
     pb.set_style(style);
     pb.enable_steady_tick(Duration::from_millis(100));
-    pb.set_message(format!("Sincronizando tablas FTS en {doc_name}..."));
+    pb.set_message(format!("Syncing FTS tables in {doc_name}..."));
 
     let field_names = {
         let fields: Vec<String> = doc
@@ -209,16 +210,14 @@ pub fn sync_fts_data(db: &Connection, doc: &Document) -> usize {
             [],
         )
         .map_err(|err| eyre!(err))
-        .expect(
-            "Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite",
-        );
+        .expect("Should be a C compatible string");
 
     db.execute(
         &format!("insert into fts_{doc_name}(fts_{doc_name}) values('optimize')"),
         [],
     )
     .map_err(|err| eyre!(err))
-    .expect("Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite");
+    .expect("Should be a C compatible string");
 
     pb.finish();
 
@@ -300,9 +299,7 @@ pub fn setup_sqlite(db: &rusqlite::Connection, doc: &Document) -> Result<()> {
 
     db.execute_batch(&statement)
         .map_err(|err| eyre!(err))
-        .expect(
-            "Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite",
-        );
+        .expect("Should be a C compatible string");
 
     let doc_name = doc.name.clone();
 
@@ -378,9 +375,7 @@ pub fn setup_sqlite(db: &rusqlite::Connection, doc: &Document) -> Result<()> {
 
     db.execute_batch(&statement)
         .map_err(|err| eyre!(err))
-        .expect(
-            "Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite",
-        );
+        .expect("Should be a C compatible string");
 
     // TODO: Decidir si es necesario crear un index por cada campo que pueda ser comparado en un
     // where. Esto porque en la busqueda hago LOWER() sobre esos campos.
@@ -396,32 +391,27 @@ pub fn insert_base_data(db: &rusqlite::Connection, doc: &Document) -> Result<()>
     })?;
 
     if num != 0 {
-        eprintln!("📦 La base de datos de '{doc_name}' contiene {num} registros.");
+        eprintln!("📦 Document '{doc_name}' has {num} entries.");
     } else {
-        eprintln!("📦 La base de datos de '{doc_name}' está vacía.");
+        eprintln!("📦 Document '{doc_name}' is empty.");
     }
 
     let start = std::time::Instant::now();
-    let db_path = db.path().expect("Deberia poder ver el path a la db");
+    let db_path = db.path().expect("Should be able to access db path");
 
-    eprintln!("📁 Buscando archivos disponibles en \"./datasources/{doc_name}\"...");
+    eprintln!("📁 Searching files in \"./datasources/{doc_name}\"...");
 
     let inserted = parse_and_insert(format!("./datasources/{doc_name}"), db_path, doc)?;
     let elapsed = start.elapsed().as_millis();
 
     eprintln!(
-        "ℹ️ Se insertaron {inserted} registros en {doc_name}_raw! ({elapsed} ms). {}",
-        if inserted == 0 {
-            "No hubo nuevos registros."
-        } else {
-            ""
-        }
+        "ℹ️{inserted} entries inserted in {doc_name}_raw! ({elapsed} ms). {}",
+        if inserted == 0 { "No new entries." } else { "" }
     );
 
     let start = std::time::Instant::now();
-    db.execute("BEGIN TRANSACTION", []).expect(
-        "Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite",
-    );
+    db.execute("BEGIN TRANSACTION", [])
+        .expect("Should be a C compatible string");
 
     let fields_str = {
         let fields: Vec<String> = doc
@@ -447,17 +437,12 @@ pub fn insert_base_data(db: &rusqlite::Connection, doc: &Document) -> Result<()>
     let elapsed = start.elapsed().as_millis();
 
     eprintln!(
-        "ℹ️ Se insertaron {inserted} registros en {doc_name}! ({elapsed} ms). {}",
-        if inserted == 0 {
-            "No hubo nuevos registros."
-        } else {
-            ""
-        }
+        "ℹ️{inserted} entries inserted in {doc_name}! ({elapsed} ms). {}",
+        if inserted == 0 { "No new entries." } else { "" }
     );
 
-    db.execute("COMMIT", []).expect(
-        "Deberia poder ser convertido a un string compatible con C o hubo un error en SQLite",
-    );
+    db.execute("COMMIT", [])
+        .expect("Should be a C compatible string");
 
     Ok(())
 }
@@ -484,12 +469,12 @@ fn compare_records(mut records: Vec<String>, mut headers: Vec<String>) -> eyre::
 
     match (missing_members.as_slice(), extra_members.as_slice()) {
         ([], []) => Ok(()),
-        ([], extra) => Err(eyre!("\nEl archivo tiene campos extras: {extra:?}")),
+        ([], extra) => Err(eyre!("\nFile has unsupported fields: {extra:?}")),
 
-        (missing, []) => Err(eyre!("\nEl archivo no tiene los campos: {missing:?}")),
+        (missing, []) => Err(eyre!("\nFile has missing fields: {missing:?}")),
 
         (missing, extra) => Err(eyre!(
-            "\nEl archivo no tiene los campos: {missing:?} y le sobran los campos: {extra:?}"
+            "\nFile doesnt have fields: {missing:?} but has unsupported fields: {extra:?}"
         )),
     }
 }
@@ -506,7 +491,7 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
 
     let multi = MultiProgress::new();
     let style = ProgressStyle::with_template("{spinner:.green}   {wide_msg} [{elapsed}]")
-        .expect("Deberia ser un template valido")
+        .expect("Should be a valid template")
         .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ ");
 
     std::thread::scope(|s| {
@@ -518,13 +503,13 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
             let style = style.clone();
 
             let handler: ScopedJoinHandle<eyre::Result<()>> = s.spawn(move || {
-                let db = Connection::open(db_path)
-                    .expect("Debería ser un path valido a una base de datos sqlite.");
+                let db =
+                    Connection::open(db_path).expect("Should be a valid path to a sqlite db .");
 
                 let pb = multi.add(ProgressBar::new_spinner());
                 pb.set_style(style.clone());
                 pb.enable_steady_tick(Duration::from_millis(100));
-                pb.set_message(format!("Leyendo {source:?}"));
+                pb.set_message(format!("Reading {source:?}"));
 
                 let data = match ext {
                     DataSources::Csv => {
@@ -577,7 +562,7 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
                 let total_registros = data.len();
 
                 pb.set_message(format!(
-                    "Insertando {} registros de {:?}...",
+                    "Inserting {} entries from {:?}...",
                     total_registros,
                     source.file_name().unwrap_or_default()
                 ));
@@ -651,7 +636,7 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
 
                 db.execute("COMMIT", [])?;
                 pb.finish_with_message(format!(
-                    "{} Insertado {} registros de {:?}",
+                    "{} {} entries inserted from {:?}",
                     "✔".bright_green().bold(),
                     total_registros,
                     source.file_name().unwrap_or_default()
@@ -662,8 +647,8 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
         }
 
         for h in jh {
-            if let Err(e) = h.join().expect("El hilo entro en panico.") {
-                eprintln!("Ocurrio un error: {e:#?}");
+            if let Err(e) = h.join().expect("Thread panicked.") {
+                eprintln!("Something happened. error: {e:#?}");
             }
         }
     });

@@ -1,7 +1,7 @@
 version: 2.1
 
 orbs:
-  shadesmar: shadesmar/rust@1.1.0
+  shadesmar: shadesmar/rust@1.2.0
   node: circleci/node@7.1.0
   slack: circleci/slack@5.1.1
 
@@ -104,7 +104,7 @@ jobs:
     executor: shadesmar/rust
     steps:
       - checkout
-      - shadesmar/sync_with_taiga:
+      - shadesmar/update_taiga:
           project_name: Gulfi
           
       - slack/notify:

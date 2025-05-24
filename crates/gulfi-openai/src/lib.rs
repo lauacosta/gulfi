@@ -51,11 +51,11 @@ pub struct RequestBody {
 
 #[derive(Debug, thiserror::Error)]
 pub enum EmbeddingError {
-    #[error("Request falló: {0} {1}")]
+    #[error("Request failed: {0} {1}")]
     RequestError(reqwest::Error, String),
-    #[error("Rate limit excecido")]
+    #[error("Rate limit exceeded")]
     RateLimit,
-    #[error("Maximo número de intentos excedido")]
+    #[error("Max retries exceeded")]
     MaxRetriesExceeded,
 }
 
@@ -75,7 +75,7 @@ async fn request_embeddings(
     proc_id: usize,
 ) -> Result<reqwest::Response, EmbeddingError> {
     if attempt > 0 {
-        warn!("Intento {attempt}/{max_retries} [{proc_id}]");
+        warn!("Try {attempt}/{max_retries} [{proc_id}]");
 
         let base_delay = time_backoff * 2u64.pow(attempt);
         let jittered_delay = rand::rng().random_range(0..=base_delay / 2);
@@ -103,17 +103,11 @@ async fn request_embeddings(
                 .and_then(|s| s.parse::<u64>().ok());
 
             if attempt >= max_retries {
-                error!(
-                    "El maximo numero de intentos fue excedido debido al Rate limit [{proc_id}]"
-                );
                 Err(EmbeddingError::MaxRetriesExceeded)
             } else {
-                warn!("Rate limit excedido, volviendo a intentar... [{proc_id}]");
-
                 if let Some(retry_after) = retry_after {
                     tokio::time::sleep(Duration::from_secs(retry_after)).await;
                 }
-
                 Err(EmbeddingError::RateLimit)
             }
         }
@@ -128,8 +122,6 @@ async fn request_embeddings(
                 .unwrap_or_else(|_| "No response body".to_string());
 
             let error_msg = format!("{status} -> {err_body}",);
-
-            error!("El request ha fallado con status: {status}. Respuesta: {err_body} [{proc_id}]");
 
             Err(EmbeddingError::RequestError(error, error_msg))
         }
@@ -149,10 +141,7 @@ pub async fn embed_vec_with_progress(
     let global_start = Instant::now();
 
     let _ = tx
-        .send(format!(
-            "Preparando embedding para {} registros",
-            input.len()
-        ))
+        .send(format!("Preparing embeddings for {} entries", input.len()))
         .await;
 
     let request = RequestBody {
@@ -162,8 +151,7 @@ pub async fn embed_vec_with_progress(
         dimensions: Some(1536),
     };
 
-    let open_ai_key =
-        var("OPENAI_KEY").expect("No se encuentra la variable de entorno 'OPENAI_KEY'");
+    let open_ai_key = var("OPENAI_KEY").expect("'OPENAI_KEY' not found");
 
     let mut intento = 0;
     let mut response = None;
@@ -172,7 +160,7 @@ pub async fn embed_vec_with_progress(
         let req_start = Instant::now();
         let _ = tx
             .send(format!(
-                "Enviando request a OpenAI (intento {}/{})",
+                "Sending request. (intento {}/{})",
                 intento + 1,
                 MAX_INTENTOS + 1
             ))
@@ -190,14 +178,14 @@ pub async fn embed_vec_with_progress(
         {
             Ok(resp) => {
                 let elapsed = req_start.elapsed().as_millis();
-                let _ = tx.send(format!("Request exitoso en {elapsed} ms")).await;
+                let _ = tx.send(format!("Request successful {elapsed} ms")).await;
                 response = Some(resp);
                 break;
             }
             Err(EmbeddingError::RateLimit) => {
                 let _ = tx
                     .send(format!(
-                        "{} Rate limit alcanzado, reintentando ({}/{})",
+                        "{} Rate limit hit, trying again ({}/{})...",
                         "⚠️".bright_yellow(),
                         intento + 1,
                         MAX_INTENTOS + 1
@@ -214,12 +202,12 @@ pub async fn embed_vec_with_progress(
 
     let Some(mut response) = response else {
         let _ = tx
-            .send(format!("{} Máximo de intentos excedido", "❌".bright_red()))
+            .send(format!("{} Max retries exceeded", "❌".bright_red()))
             .await;
         return Err(EmbeddingError::MaxRetriesExceeded.into());
     };
 
-    let _ = tx.send("Deserializando respuesta...".to_string()).await;
+    let _ = tx.send("Parsing response...".to_string()).await;
     let start = Instant::now();
 
     let capacity = response.content_length().unwrap_or(0) as usize;
@@ -234,10 +222,10 @@ pub async fn embed_vec_with_progress(
 
     let elapsed = start.elapsed().as_millis();
     let _ = tx
-        .send(format!("Deserialización completada en {elapsed} ms"))
+        .send(format!("Parsing response done in {elapsed} ms"))
         .await;
 
-    let _ = tx.send("Procesando embeddings...".to_string()).await;
+    let _ = tx.send("Processing embeddings...".to_string()).await;
     let embedding: Vec<(u64, Vec<f32>)> = std::iter::zip(
         indices,
         EmbeddingObject::embeddings_iter(response.embeddings),
@@ -246,13 +234,13 @@ pub async fn embed_vec_with_progress(
 
     let total_elapsed = global_start.elapsed().as_millis();
     let _ = tx
-        .send(format!("Embeddings completados en ({total_elapsed}) ms"))
+        .send(format!("Embeddings done in ({total_elapsed}) ms"))
         .await;
 
     Ok((embedding, total_elapsed))
 }
 
-#[instrument(name = "Generando embedding a partir del query", skip(input, client))]
+#[instrument(name = "Generating embedding from query", skip(input, client))]
 pub async fn embed_single(input: String, client: &Client) -> Result<Vec<f32>> {
     let global_start = Instant::now();
 
@@ -271,11 +259,10 @@ pub async fn embed_single(input: String, client: &Client) -> Result<Vec<f32>> {
         dimensions: Some(1536),
     };
 
-    let open_ai_key =
-        var("OPENAI_KEY").expect("No se encuentra la variable de entorno 'OPENAI_KEY'");
+    let open_ai_key = var("OPENAI_KEY").expect("'OPENAI_KEY' not found");
 
     let req_start = Instant::now();
-    info!("Enviando request a Open AI...");
+    info!("Sending request to Open AI...");
     let response = client
         .post("https://api.openai.com/v1/embeddings")
         .bearer_auth(open_ai_key)
@@ -284,12 +271,12 @@ pub async fn embed_single(input: String, client: &Client) -> Result<Vec<f32>> {
         .await?;
 
     assert_eq!(response.status().as_u16(), 200);
-    info!("El request tomó {} ms", req_start.elapsed().as_millis());
+    info!("request took {} ms", req_start.elapsed().as_millis());
 
     let start = Instant::now();
     let response: ResponseBody = response.json().await?;
     info!(
-        "Deserializar la response a ResponseBody tomó {} ms",
+        "Parsing the response took {} ms",
         start.elapsed().as_millis()
     );
 
@@ -297,11 +284,11 @@ pub async fn embed_single(input: String, client: &Client) -> Result<Vec<f32>> {
         .embeddings
         .into_iter()
         .next()
-        .expect("Deberia tener minimo un elemento")
+        .expect("Parsed response should not be empty. ")
         .embedding;
 
     info!(
-        "Embedding generado correctamente! en total tomó {} ms",
+        "Embedding successfully generated! took {} ms",
         global_start.elapsed().as_millis()
     );
 
