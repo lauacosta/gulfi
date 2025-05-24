@@ -6,7 +6,7 @@ use argon2::{Argon2, PasswordHasher};
 use clap::{Parser, crate_name, crate_version};
 use color_eyre::owo_colors::OwoColorize;
 use eyre::eyre;
-use gulfi_cli::{Cli, Command, SyncStrategy};
+use gulfi_cli::{Cli, CliError, Command, SyncStrategy};
 use gulfi_common::Document;
 use gulfi_server::{ApplicationSettings, startup::run_server};
 use gulfi_sqlite::{init_sqlite, insert_base_data, setup_sqlite, sync_fts_data, sync_vec_data};
@@ -19,11 +19,11 @@ use tracing_subscriber::{Registry, fmt::Layer, layer::SubscriberExt};
 #[cfg(debug_assertions)]
 use eyre::Report;
 #[cfg(debug_assertions)]
-use gulfi_cli::Mode;
+use gulfi_cli::{CliError, Mode};
 #[cfg(debug_assertions)]
 use tokio::{process::Command as TokioCommand, try_join};
 
-fn main() -> eyre::Result<()> {
+fn main() -> Result<(), CliError> {
     let cli = Cli::parse();
 
     setup_tracing(&cli.loglevel)?;
