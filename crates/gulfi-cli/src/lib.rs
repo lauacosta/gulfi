@@ -1,8 +1,9 @@
+pub mod clierror;
 pub mod helper;
+pub use clierror::*;
 
 use clap::{Parser, Subcommand, ValueEnum, command, crate_version};
 use std::net::IpAddr;
-use thiserror::Error;
 
 #[derive(Parser)]
 #[command(version, about,  long_about = None, before_help = format!(r"
@@ -103,23 +104,6 @@ pub enum SyncStrategy {
 pub enum Cache {
     Enabled,
     Disabled,
-}
-
-#[derive(Error, Debug)]
-pub enum CliError {
-    #[error("Could not parse `meta.json`: {0}")]
-    MetaParseError(#[from] serde_json::Error),
-
-    #[error("Failed to open `meta.json`: {0}")]
-    MetaOpenError(#[from] std::io::Error),
-
-    #[error("SQLite error: {0}")]
-    SqliteError(#[from] rusqlite::Error),
-
-    // #[error("Password hashing failed: {0}")]
-    // HashingError(#[from] password_hash::Error),
-    #[error("Other: {0}")]
-    Other(#[from] eyre::Report),
 }
 
 // #[cfg(test)]

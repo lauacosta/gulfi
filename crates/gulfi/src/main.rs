@@ -6,7 +6,8 @@ use argon2::{Argon2, PasswordHasher};
 use clap::{Parser, crate_name, crate_version};
 use color_eyre::owo_colors::OwoColorize;
 use eyre::eyre;
-use gulfi_cli::{Cli, Command, SyncStrategy};
+use gulfi::{MEMORY_DB_PATH, META_JSON_FILE, MILLISECONDS_MULTIPLIER, SEPARATOR_LINE};
+use gulfi_cli::{Cli, CliError, Command, SyncStrategy};
 use gulfi_common::Document;
 use gulfi_server::{ApplicationSettings, startup::run_server};
 use gulfi_sqlite::{init_sqlite, insert_base_data, setup_sqlite, sync_fts_data, sync_vec_data};
@@ -25,18 +26,24 @@ use tokio::{process::Command as TokioCommand, try_join};
 
 fn main() -> eyre::Result<()> {
     let cli = Cli::parse();
+    setup_configuration(&cli.loglevel)?;
 
-    setup_tracing(&cli.loglevel)?;
+    if let Err(e) = run_cli(cli) {
+        e.exit_with_tips();
+    };
 
-    let file = if let Ok(file) = File::open("meta.json") {
+    Ok(())
+}
+
+fn run_cli(cli: Cli) -> Result<(), CliError> {
+    let file = if let Ok(file) = File::open(META_JSON_FILE) {
         Ok(file)
     } else {
         gulfi_cli::helper::initialize_meta_file()?;
-        File::open("meta.json")
+        File::open(META_JSON_FILE)
     }?;
 
-    let documents: Vec<Document> =
-        serde_json::from_reader(file).map_err(|err| eyre!("Error parsing `meta.json`. {err}"))?;
+    let documents: Vec<Document> = serde_json::from_reader(file)?;
 
     debug!(?documents);
 
@@ -107,10 +114,10 @@ fn main() -> eyre::Result<()> {
             document,
             chunk_size,
         } => {
-            let base_delay = base_delay * 1000;
+            let base_delay = base_delay * MILLISECONDS_MULTIPLIER;
             let db_path = cli.db.clone();
 
-            if db_path.trim() == ":memory:" {
+            if db_path.trim() == MEMORY_DB_PATH {
                 eprintln!(
                     "You are running '{}' in a {}.",
                     "Sync".cyan().bold(),
@@ -128,26 +135,18 @@ fn main() -> eyre::Result<()> {
                     .collect::<Vec<_>>()
                     .join(", ");
 
-                return Err(eyre!(
+                return Err(CliError::Other(eyre!(
                     "{} is not one of the available documents: [{available_documents}]",
                     document.bright_red()
-                ));
+                )));
             };
 
             if force {
-                let exists: String = match db.query_row(
+                let exists = db.query_row(
                     "select name from sqlite_master where type='table' and name=?",
                     [&document],
-                    |row| row.get(0),
-                ) {
-                    Ok(msg) => msg,
-                    Err(err) => {
-                        return Err(eyre!(
-                            "Es probable que la base de datos no esté creada. {}",
-                            err
-                        ));
-                    }
-                };
+                    |row| row.get::<_, String>(0),
+                )?;
 
                 if !exists.is_empty() {
                     db.execute(&format!("drop table {document}"), [])?;
@@ -164,7 +163,7 @@ fn main() -> eyre::Result<()> {
                     let start = Instant::now();
                     let inserted = sync_fts_data(&db, doc);
 
-                    eprintln!("{}", "-".repeat(100));
+                    eprintln!("{SEPARATOR_LINE}");
                     eprintln!(
                         "{inserted} entries were synced in {} ({} ms).",
                         format!("fts_{}", doc.name).bright_cyan().bold(),
@@ -178,7 +177,7 @@ fn main() -> eyre::Result<()> {
                     let (inserted, media) =
                         rt.block_on(sync_vec_data(&db, doc, base_delay, chunk_size))?;
 
-                    eprintln!("{}", "-".repeat(100));
+                    eprintln!("{SEPARATOR_LINE}");
                     eprintln!(
                         "{inserted} entries were synced in {} ({} ms, average of {media} ms per chunk).",
                         format!("vec_{}", doc.name).bright_purple().bold(),
@@ -196,7 +195,7 @@ fn main() -> eyre::Result<()> {
                         rt.block_on(sync_vec_data(&db, doc, base_delay, chunk_size))?;
                     let vec_elapsed = start.elapsed().as_millis();
 
-                    eprintln!("{}", "-".repeat(100));
+                    eprintln!("{SEPARATOR_LINE}");
 
                     eprintln!(
                         "{inserted_fts} entries were synced in {} ({fts_elapsed} ms).",
@@ -251,7 +250,7 @@ fn main() -> eyre::Result<()> {
     Ok(())
 }
 
-fn setup_tracing(loglevel: &str) -> eyre::Result<()> {
+fn setup_configuration(loglevel: &str) -> eyre::Result<()> {
     color_eyre::install()?;
 
     if dotenvy::dotenv().is_err() {

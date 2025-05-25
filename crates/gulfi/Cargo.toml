@@ -5,6 +5,9 @@ authors = ["Lautaro <acostaquintanalautaro@gmail.com>"]
 license.workspace = true
 version.workspace = true
 
+[lib]
+path= "./src/lib.rs"
+
 [dependencies]
 dotenvy = "0.15.7"
 tower-request-id = "0.3.0"
