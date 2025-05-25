@@ -3,8 +3,8 @@ use axum::{BoxError, Extension};
 use color_eyre::owo_colors::OwoColorize;
 use eyre::{Result, eyre};
 use gulfi_common::Document;
-use gulfi_sqlite::init_sqlite;
 use gulfi_sqlite::pooling::AsyncConnectionPool;
+use gulfi_sqlite::spawn_vec_connection;
 use http::{Method, StatusCode};
 use rusqlite::{Connection, params};
 use std::net::IpAddr;
@@ -87,7 +87,7 @@ impl Application {
             )
         })?;
 
-        let connection_pool = AsyncConnectionPool::new(5, || init_sqlite(&db_path))?;
+        let connection_pool = AsyncConnectionPool::new(5, || spawn_vec_connection(&db_path))?;
 
         let writer = spawn_writer_task(&db_path)?;
 
@@ -158,7 +158,7 @@ pub fn build_server(listener: TcpListener, state: AppState) -> Result<Serve<Rout
             .layer(HandleErrorLayer::new(|err: BoxError| async move {
                 (
                     StatusCode::TOO_MANY_REQUESTS,
-                    format!("Unhandled error {}", err),
+                    format!("Unhandled error {err}"),
                 )
             }))
             .layer(BufferLayer::new(1024))

@@ -20,35 +20,62 @@ pub struct Document {
 
 impl Display for Document {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        // Header with document name
         let name = self.name.to_uppercase();
-        writeln!(f, "{:<4}- {name}:", "")?;
+        writeln!(
+            f,
+            "╭─ {} {}",
+            "📄".bright_yellow(),
+            name.bright_cyan().bold()
+        )?;
 
-        for field in &self.fields {
-            let field_name = &field.name;
-            let formatted = if field.vec_input && field.unique {
-                format!(
-                    "{:<6}- {field_name} \t {}, {}",
-                    "",
-                    "vec_input".bright_blue().bold(),
-                    "único".bright_magenta().bold(),
-                )
-            } else if field.vec_input {
-                format!(
-                    "{:<6}- {field_name} \t {}",
-                    "",
-                    "vec_input".bright_blue().bold()
-                )
-            } else if field.unique {
-                format!(
-                    "{:<6}- {field_name} \t {}",
-                    "",
-                    "único".bright_magenta().bold()
-                )
+        // Field count summary
+        let field_count = self.fields.len();
+        let vec_count = self.fields.iter().filter(|f| f.vec_input).count();
+        let unique_count = self.fields.iter().filter(|f| f.unique).count();
+
+        writeln!(
+            f,
+            "│  {} {} fields • {} vectorized • {} unique",
+            "📊".bright_blue(),
+            field_count.bright_white().bold(),
+            vec_count.bright_blue().bold(),
+            unique_count.bright_magenta().bold()
+        )?;
+
+        writeln!(f, "│")?;
+
+        // Fields
+        for (i, field) in self.fields.iter().enumerate() {
+            let is_last = i == self.fields.len() - 1;
+            let connector = if is_last { "╰─" } else { "├─" };
+
+            // Field name with proper alignment
+            let field_name = format!("{:<20}", field.name);
+
+            // Build badges
+            let mut badges = Vec::new();
+            if field.vec_input {
+                badges.push("🔍 vec".bright_blue().bold().to_string());
+            }
+            if field.unique {
+                badges.push("⭐ único".bright_magenta().bold().to_string());
+            }
+
+            let badge_str = if badges.is_empty() {
+                String::new()
             } else {
-                format!("{:<6}- {field_name}", "")
+                format!(" {}", badges.join(" "))
             };
 
-            writeln!(f, "{formatted}")?;
+            writeln!(
+                f,
+                "{} {} {}{}",
+                connector.bright_white(),
+                field_name.bright_green(),
+                "│".bright_white().dimmed(),
+                badge_str
+            )?;
         }
 
         Ok(())

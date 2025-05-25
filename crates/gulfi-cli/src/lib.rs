@@ -1,5 +1,7 @@
 pub mod clierror;
+pub mod commands;
 pub mod helper;
+
 pub use clierror::*;
 
 use clap::{Parser, Subcommand, ValueEnum, command, crate_version};
@@ -32,7 +34,9 @@ pub struct Cli {
 impl Cli {
     #[must_use]
     pub fn command(&self) -> Command {
-        self.command.clone().unwrap_or(Command::List)
+        self.command.clone().unwrap_or(Command::List {
+            format: Format::Pretty,
+        })
     }
 }
 
@@ -76,7 +80,10 @@ pub enum Command {
         chunk_size: usize,
     },
     /// Lists all defined documents.
-    List,
+    List {
+        #[arg(value_enum, long, default_value_t = Format::Pretty)]
+        format: Format,
+    },
     /// Adds a new document.
     Add,
     /// Deletes a document.
@@ -90,6 +97,12 @@ pub enum Command {
 pub enum Mode {
     Prod,
     Dev,
+}
+
+#[derive(Debug, Clone, ValueEnum)]
+pub enum Format {
+    Json,
+    Pretty,
 }
 
 #[derive(Debug, Clone, ValueEnum)]

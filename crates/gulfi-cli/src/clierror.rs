@@ -10,8 +10,8 @@ pub enum CliError {
     SqliteError(#[from] rusqlite::Error),
     #[error("Other: {0}")]
     Other(#[from] eyre::Report),
-    // #[error("Password hashing failed: {0}")]
-    // HashingError(#[from] password_hash::Error),
+    #[error("Password hashing failed: {0}")]
+    HashingError(password_hash::Error),
 }
 
 impl CliError {
@@ -32,7 +32,7 @@ impl CliError {
                         eprintln!("   • Look for trailing commas or unclosed strings");
                     }
                     serde_json::Error { .. } if error.is_data() => {
-                        eprintln!("   • Data format error: {}", error);
+                        eprintln!("   • Data format error: {error}");
                         eprintln!("   • JSON structure doesn't match expected format");
                         eprintln!("   • Check if all required fields are present");
                         eprintln!("   • Verify field names and types are correct");
@@ -44,12 +44,12 @@ impl CliError {
                         eprintln!("   • Ensure all brackets and braces are properly closed");
                     }
                     serde_json::Error { .. } if error.is_io() => {
-                        eprintln!("   • I/O error while reading JSON: {}", error);
+                        eprintln!("   • I/O error while reading JSON: {error}");
                         eprintln!("   • Check file permissions and disk space");
                         eprintln!("   • Ensure the file is not locked by another process");
                     }
                     _ => {
-                        eprintln!("   • JSON parsing error: {}", error);
+                        eprintln!("   • JSON parsing error: {error}");
                         eprintln!("   • Check if meta.json contains valid JSON syntax");
                         eprintln!("   • You may need to recreate meta.json if it's corrupted");
                     }
@@ -104,12 +104,12 @@ impl CliError {
                         eprintln!("   • Check if the file is unusually large");
                     }
                     std::io::ErrorKind::Other => {
-                        eprintln!("   • Other I/O error: {}", error);
+                        eprintln!("   • Other I/O error: {error}");
                         eprintln!("   • Check disk space and file system integrity");
                         eprintln!("   • Ensure the storage device is functioning properly");
                     }
                     _ => {
-                        eprintln!("   • File system error: {}", error);
+                        eprintln!("   • File system error: {error}");
                         eprintln!("   • Check disk space and file system integrity");
                         eprintln!("   • Ensure the file is not locked by another process");
                     }
@@ -165,19 +165,18 @@ impl CliError {
                         }
                     },
                     rusqlite::Error::InvalidColumnName(name) => {
-                        eprintln!("   • Invalid column name: '{}'", name);
+                        eprintln!("   • Invalid column name: '{name}'");
                         eprintln!("   • Check your SQL query for typos");
                         eprintln!("   • Verify the database schema matches expectations");
                     }
                     rusqlite::Error::InvalidColumnIndex(index) => {
-                        eprintln!("   • Invalid column index: {}", index);
+                        eprintln!("   • Invalid column index: {index}");
                         eprintln!("   • Column index is out of bounds");
                         eprintln!("   • Check your query result handling");
                     }
                     rusqlite::Error::InvalidColumnType(index, name, ty) => {
                         eprintln!(
-                            "   • Type mismatch for column {} ('{}'): expected different type than {:?}",
-                            index, name, ty
+                            "   • Type mismatch for column {index} ('{name}'): expected different type than {ty:?}"
                         );
                         eprintln!("   • Check data types in your query");
                         eprintln!("   • Verify column contains expected data type");
@@ -196,21 +195,104 @@ impl CliError {
                         eprintln!("   • Verify file permissions");
                     }
                     rusqlite::Error::SqlInputError { error, .. } => {
-                        eprintln!("   • SQL syntax error: {}", error);
+                        eprintln!("   • SQL syntax error: {error}");
                         eprintln!("   • Check your SQL query for syntax issues");
                         eprintln!("   • Verify table and column names");
                     }
                     _ => {
-                        eprintln!("   • Database error: {}", error);
+                        eprintln!("   • Database error: {error}");
                         eprintln!("   • Check database file integrity");
                         eprintln!("   • Ensure sufficient disk space");
                         eprintln!("   • Try recreating the database if issue persists");
                     }
                 }
             }
+            CliError::HashingError(error) => {
+                eprintln!("💡 Password hashing failed:");
+                match error {
+                    password_hash::Error::Algorithm => {
+                        eprintln!("   • Unsupported or invalid algorithm");
+                        eprintln!("   • Check if the specified algorithm is available");
+                        eprintln!("   • Supported algorithms: Argon2, bcrypt, scrypt, pbkdf2");
+                        eprintln!("   • Verify algorithm name spelling and case");
+                    }
+                    password_hash::Error::B64Encoding(_) => {
+                        eprintln!("   • Base64 encoding error");
+                        eprintln!("   • Hash or salt contains invalid base64 characters");
+                        eprintln!("   • Check if the hash string was corrupted");
+                        eprintln!("   • Try regenerating the hash");
+                    }
+                    password_hash::Error::Crypto => {
+                        eprintln!("   • Cryptographic operation failed");
+                        eprintln!("   • Internal crypto library error");
+                        eprintln!("   • This may indicate insufficient system resources");
+                        eprintln!("   • Try again or use different parameters");
+                    }
+                    password_hash::Error::OutputSize { .. } => {
+                        eprintln!("   • Invalid output size specified");
+                        eprintln!("   • Hash output length is not supported");
+                        eprintln!("   • Check algorithm-specific output size limits");
+                        eprintln!("   • Use default output size if unsure");
+                    }
+                    password_hash::Error::ParamNameDuplicated => {
+                        eprintln!("   • Duplicate parameter name in hash string");
+                        eprintln!("   • PHC string format is malformed");
+                        eprintln!("   • Check for repeated parameter names");
+                        eprintln!("   • Regenerate the hash string");
+                    }
+                    password_hash::Error::ParamNameInvalid => {
+                        eprintln!("   • Invalid parameter name");
+                        eprintln!("   • Parameter name doesn't match algorithm specification");
+                        eprintln!("   • Check parameter names in hash string");
+                        eprintln!("   • Refer to algorithm documentation");
+                    }
+                    password_hash::Error::ParamValueInvalid(_) => {
+                        eprintln!("   • Invalid parameter value");
+                        eprintln!("   • Parameter value is out of acceptable range");
+                        eprintln!("   • Check cost/iteration parameters");
+                        eprintln!("   • Use recommended values for your algorithm");
+                    }
+                    password_hash::Error::Password => {
+                        eprintln!("   • Password format is invalid");
+                        eprintln!("   • Password may contain unsupported characters");
+                        eprintln!("   • Check for null bytes or control characters");
+                        eprintln!("   • Ensure password is properly UTF-8 encoded");
+                    }
+                    password_hash::Error::PhcStringField => {
+                        eprintln!("   • Invalid PHC string field");
+                        eprintln!("   • Hash string format is malformed");
+                        eprintln!("   • Check if hash follows $algorithm$params$salt$hash format");
+                        eprintln!("   • Verify all required fields are present");
+                    }
+                    password_hash::Error::PhcStringTrailingData => {
+                        eprintln!("   • Unexpected trailing data in hash string");
+                        eprintln!("   • Hash string has extra characters at the end");
+                        eprintln!("   • Remove any trailing whitespace or characters");
+                        eprintln!("   • Ensure hash string ends properly");
+                    }
+                    password_hash::Error::SaltInvalid(_) => {
+                        eprintln!("   • Invalid salt format or length");
+                        eprintln!("   • Salt must be properly base64 encoded");
+                        eprintln!("   • Check if salt meets minimum length requirements");
+                        eprintln!("   • Try regenerating a new random salt");
+                    }
+                    password_hash::Error::Version => {
+                        eprintln!("   • Unsupported algorithm version");
+                        eprintln!("   • Algorithm version in hash string is not supported");
+                        eprintln!("   • Check if you're using a compatible version");
+                        eprintln!("   • Consider upgrading or using a different version");
+                    }
+                    _ => {
+                        eprintln!("   • Password hashing error: {error:?}");
+                        eprintln!("   • Check if all hashing parameters are valid");
+                        eprintln!("   • Verify the password and salt format");
+                        eprintln!("   • Consider trying a different hashing algorithm");
+                    }
+                }
+            }
             CliError::Other(error) => {
                 eprintln!("💡 Unexpected error occurred:");
-                eprintln!("   • Error details: {}", error);
+                eprintln!("   • Error details: {error}");
                 eprintln!("   • This may be a bug in the application");
                 eprintln!("   • Try running the command again");
                 eprintln!("   • Check if all required dependencies are installed");
@@ -224,7 +306,7 @@ impl CliError {
 
     pub fn exit_code(&self) -> i32 {
         match self {
-            CliError::MetaParseError(_) => 10,
+            CliError::MetaParseError(_) | CliError::HashingError(_) => 10,
             CliError::MetaOpenError(_) => 11,
             CliError::SqliteError(_) => 12,
             CliError::Other(_) => 99,
@@ -232,19 +314,23 @@ impl CliError {
     }
 
     pub fn exit_with_tips(self) -> ! {
-        eprintln!("❌ {}", self);
+        eprintln!("❌ {self}");
         self.print_tip();
         std::process::exit(self.exit_code());
     }
 }
 
-#[allow(dead_code)]
-trait ExitOnError<T> {
+pub trait ExitOnError<T> {
     fn or_exit(self) -> T;
 }
 
 impl<T> ExitOnError<T> for Result<T, CliError> {
     fn or_exit(self) -> T {
         self.unwrap_or_else(|err| err.exit_with_tips())
+    }
+}
+impl From<password_hash::Error> for CliError {
+    fn from(err: password_hash::Error) -> Self {
+        CliError::HashingError(err)
     }
 }

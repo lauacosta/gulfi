@@ -878,7 +878,6 @@ checksum = "07e28edb80900c19c28f1072f2e8aeca7fa06b23cd4169cefe1af5aa3260783f"
 name = "gulfi"
 version = "1.2.0"
 dependencies = [
- "argon2",
  "axum",
  "chrono",
  "clap",
@@ -887,9 +886,6 @@ dependencies = [
  "eyre",
  "gulfi-cli",
  "gulfi-common",
- "gulfi-server",
- "gulfi-sqlite",
- "password-hash",
  "rusqlite",
  "serde_json",
  "tokio",
@@ -903,14 +899,19 @@ dependencies = [
 name = "gulfi-cli"
 version = "1.2.0"
 dependencies = [
+ "argon2",
  "clap",
  "color-eyre",
  "eyre",
  "gulfi-common",
+ "gulfi-server",
+ "gulfi-sqlite",
+ "password-hash",
  "rusqlite",
  "serde",
  "serde_json",
  "thiserror 2.0.12",
+ "tokio",
 ]
 
 [[package]]

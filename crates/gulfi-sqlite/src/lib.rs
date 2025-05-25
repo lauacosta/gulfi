@@ -224,7 +224,7 @@ pub fn sync_fts_data(db: &Connection, doc: &Document) -> usize {
     inserted
 }
 
-pub fn init_sqlite(db_path: &str) -> Result<Connection, rusqlite::Error> {
+pub fn spawn_vec_connection(db_path: &str) -> Result<Connection, rusqlite::Error> {
     unsafe {
         sqlite3_auto_extension(Some(std::mem::transmute::<
             *const (),

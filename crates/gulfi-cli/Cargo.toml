@@ -12,7 +12,11 @@ color-eyre.workspace = true
 serde_json.workspace = true
 serde.workspace = true
 rusqlite.workspace = true
-# password-hash.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+argon2.workspace = true
+password-hash.workspace = true
 
 gulfi-common = { path = "../gulfi-common/"}
-thiserror.workspace = true
+gulfi-server = { path = "../gulfi-server/"}
+gulfi-sqlite= { path = "../gulfi-sqlite/"}

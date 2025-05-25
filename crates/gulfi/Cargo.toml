@@ -22,12 +22,8 @@ axum.workspace = true
 tokio.workspace = true
 chrono.workspace = true
 serde_json.workspace = true
-argon2.workspace = true
 rusqlite.workspace = true
-password-hash.workspace = true
 
-gulfi-sqlite = { path = "../gulfi-sqlite/"}
 gulfi-common = { path = "../gulfi-common/"}
-gulfi-server = { path = "../gulfi-server/"}
 gulfi-cli = { path = "../gulfi-cli/"}
 
