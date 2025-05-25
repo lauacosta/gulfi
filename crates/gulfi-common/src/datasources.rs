@@ -20,35 +20,62 @@ pub struct Document {
 
 impl Display for Document {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        // Header with document name
         let name = self.name.to_uppercase();
-        writeln!(f, "{:<4}- {name}:", "")?;
+        writeln!(
+            f,
+            "╭─ {} {}",
+            "📄".bright_yellow(),
+            name.bright_cyan().bold()
+        )?;
 
-        for field in &self.fields {
-            let field_name = &field.name;
-            let formatted = if field.vec_input && field.unique {
-                format!(
-                    "{:<6}- {field_name} \t {}, {}",
-                    "",
-                    "vec_input".bright_blue().bold(),
-                    "único".bright_magenta().bold(),
-                )
-            } else if field.vec_input {
-                format!(
-                    "{:<6}- {field_name} \t {}",
-                    "",
-                    "vec_input".bright_blue().bold()
-                )
-            } else if field.unique {
-                format!(
-                    "{:<6}- {field_name} \t {}",
-                    "",
-                    "único".bright_magenta().bold()
-                )
+        // Field count summary
+        let field_count = self.fields.len();
+        let vec_count = self.fields.iter().filter(|f| f.vec_input).count();
+        let unique_count = self.fields.iter().filter(|f| f.unique).count();
+
+        writeln!(
+            f,
+            "│  {} {} fields • {} vectorized • {} unique",
+            "📊".bright_blue(),
+            field_count.bright_white().bold(),
+            vec_count.bright_blue().bold(),
+            unique_count.bright_magenta().bold()
+        )?;
+
+        writeln!(f, "│")?;
+
+        // Fields
+        for (i, field) in self.fields.iter().enumerate() {
+            let is_last = i == self.fields.len() - 1;
+            let connector = if is_last { "╰─" } else { "├─" };
+
+            // Field name with proper alignment
+            let field_name = format!("{:<20}", field.name);
+
+            // Build badges
+            let mut badges = Vec::new();
+            if field.vec_input {
+                badges.push("🔍 vec".bright_blue().bold().to_string());
+            }
+            if field.unique {
+                badges.push("⭐ único".bright_magenta().bold().to_string());
+            }
+
+            let badge_str = if badges.is_empty() {
+                String::new()
             } else {
-                format!("{:<6}- {field_name}", "")
+                format!(" {}", badges.join(" "))
             };
 
-            writeln!(f, "{formatted}")?;
+            writeln!(
+                f,
+                "{} {} {}{}",
+                connector.bright_white(),
+                field_name.bright_green(),
+                "│".bright_white().dimmed(),
+                badge_str
+            )?;
         }
 
         Ok(())
@@ -86,7 +113,7 @@ impl DataSources {
         let file = match ext {
             "csv" => DataSources::Csv,
             "json" => DataSources::Json,
-            _ => return Err(eyre!("Extension desconocida {ext}")),
+            _ => return Err(eyre!("unknown file extension: {ext}")),
         };
 
         Ok(file)
@@ -98,29 +125,30 @@ pub fn parse_sources<T: AsRef<Path> + Debug>(path: T) -> eyre::Result<Vec<(PathB
 
     match metadata(&path) {
         Err(err) => {
-            error!("El directorio `{path:?}` no existe!: {err}");
-            info!("Para solucionarlo, se creara un directorio con ese path");
+            error!("Directory `{path:?}` doesn't exists!: {err}");
+            info!("To fix it, create the directory.");
             DirBuilder::new().recursive(true).create(&path)?;
         }
         Ok(metadata) => {
             if metadata.is_dir() {
-                let entries = std::fs::read_dir(&path).expect("Deberia poder leer el directorio");
+                let entries =
+                    std::fs::read_dir(&path).expect("Should be able to read the directory");
                 if entries.into_iter().count() == 0 {
-                    warn!("El directorio {path:?}` existe, pero no tiene archivos.");
+                    warn!("Directory {path:?}` exists but is empty.");
                 }
             } else {
-                error!("`{path:?}` no es un directorio!");
+                error!("`{path:?}` is not a directory!");
                 info!(
-                    "Para solucionarlo, cree un directorio en `datasources` con el nombre de su documento."
+                    "To fix it, create a directory in `datasources` with the name of your document or use the CLI command."
                 );
-                return Err(eyre!("No es un directorio"));
+                return Err(eyre!("Not a directory"));
             }
         }
     }
 
     for entry in std::fs::read_dir(&path)? {
         let path = entry?.path();
-        let utf_8_path = Utf8Path::from_path(&path).expect("Deberia ser UTF-8");
+        let utf_8_path = Utf8Path::from_path(&path).expect("Should be UTF-8");
 
         if utf_8_path.is_file() {
             if let Some(ext) = utf_8_path.extension() {

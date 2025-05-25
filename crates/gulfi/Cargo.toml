@@ -5,6 +5,9 @@ authors = ["Lautaro <acostaquintanalautaro@gmail.com>"]
 license.workspace = true
 version.workspace = true
 
+[lib]
+path= "./src/lib.rs"
+
 [dependencies]
 dotenvy = "0.15.7"
 tower-request-id = "0.3.0"
@@ -18,13 +21,9 @@ clap.workspace = true
 axum.workspace = true
 tokio.workspace = true
 chrono.workspace = true
-rusqlite.workspace = true
 serde_json.workspace = true
-argon2.workspace = true
-password-hash.workspace = true
+rusqlite.workspace = true
 
-gulfi-sqlite = { path = "../gulfi-sqlite/"}
 gulfi-common = { path = "../gulfi-common/"}
-gulfi-server = { path = "../gulfi-server/"}
 gulfi-cli = { path = "../gulfi-cli/"}
 

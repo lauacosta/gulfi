@@ -2,57 +2,48 @@
 
 use std::{fs::File, time::Instant};
 
-use argon2::{Argon2, PasswordHasher};
-use clap::{Parser, crate_name, crate_version};
+use clap::Parser;
 use color_eyre::owo_colors::OwoColorize;
 use eyre::eyre;
-use gulfi_cli::{Cli, Command, SyncStrategy};
+use gulfi::GulfiTimer;
+use gulfi_cli::commands;
+use gulfi_cli::{Cli, CliError, Command, ExitOnError, helper::initialize_meta_file};
 use gulfi_common::Document;
-use gulfi_server::{ApplicationSettings, startup::run_server};
-use gulfi_sqlite::{init_sqlite, insert_base_data, setup_sqlite, sync_fts_data, sync_vec_data};
-use password_hash::{SaltString, rand_core::OsRng};
-use rusqlite::params;
+use gulfi_common::{META_JSON_FILE, MILLISECONDS_MULTIPLIER};
 use tracing::{Level, debug, level_filters::LevelFilter};
 use tracing_error::ErrorLayer;
 use tracing_subscriber::{Registry, fmt::Layer, layer::SubscriberExt};
 
-#[cfg(debug_assertions)]
-use eyre::Report;
-#[cfg(debug_assertions)]
-use gulfi_cli::Mode;
-#[cfg(debug_assertions)]
-use tokio::{process::Command as TokioCommand, try_join};
-
 fn main() -> eyre::Result<()> {
     let cli = Cli::parse();
+    setup_configuration(&cli.loglevel)?;
 
-    setup_tracing(&cli.loglevel)?;
+    if let Err(e) = run_cli(&cli) {
+        e.exit_with_tips();
+    }
 
-    let file = if let Ok(file) = File::open("meta.json") {
+    Ok(())
+}
+
+fn run_cli(cli: &Cli) -> Result<(), CliError> {
+    let file = if let Ok(file) = File::open(META_JSON_FILE) {
         Ok(file)
     } else {
-        gulfi_cli::helper::initialize_meta_file()?;
-        File::open("meta.json")
+        initialize_meta_file()?;
+        File::open(META_JSON_FILE)
     }?;
 
-    let documents: Vec<Document> = serde_json::from_reader(file)
-        .map_err(|err| eyre!("Error al parsear `meta.json`. {err}"))?;
+    let documents: Vec<Document> = serde_json::from_reader(file)?;
 
     debug!(?documents);
 
     match cli.command() {
-        Command::List => {
-            println!("Documentos definidos en `meta.json`:");
-            for doc in documents {
-                println!("{doc}");
-            }
+        Command::List { format } => {
+            commands::list::handle(&documents, META_JSON_FILE, &format).or_exit();
         }
-        Command::Add => {
-            gulfi_cli::helper::run_new()?;
-        }
-        Command::Delete { document } => {
-            gulfi_cli::helper::delete_document(&document)?;
-        }
+
+        Command::Add => commands::documents::add_document().or_exit(),
+        Command::Delete { document } => commands::documents::delete_document(&document).or_exit(),
         Command::Serve {
             interface,
             port,
@@ -60,45 +51,10 @@ fn main() -> eyre::Result<()> {
             #[cfg(debug_assertions)]
             mode,
         } => {
-            let start = Instant::now();
-            let name = crate_name!().to_owned();
-            let version = crate_version!().to_owned();
-
-            let configuration = ApplicationSettings::new(name, version, port, interface, open);
-
-            debug!(?configuration);
-            let rt = tokio::runtime::Runtime::new()?;
-
             #[cfg(debug_assertions)]
-            match mode {
-                Mode::Dev => {
-                    let frontend_future = async {
-                        TokioCommand::new("pnpm")
-                            .arg("run")
-                            .arg("dev")
-                            .arg("--clearScreen=false")
-                            .current_dir("./crates/gulfi-server/ui")
-                            .stdout(std::process::Stdio::inherit())
-                            .stderr(std::process::Stdio::inherit())
-                            .spawn()
-                            .map_err(Report::from)?
-                            .wait()
-                            .await
-                            .map_err(Report::from)?;
-                        Ok::<(), Report>(())
-                    };
-
-                    rt.block_on(async {
-                        try_join!(run_server(configuration, start, documents), frontend_future)
-                    })?;
-                }
-                Mode::Prod => rt.block_on(run_server(configuration, start, documents))?,
-            }
-
+            commands::server::start_server(interface, port, open, documents, &mode)?;
             #[cfg(not(debug_assertions))]
-            {
-                rt.block_on(run_server(configuration, start, documents))?;
-            }
+            commands::server::start_server(interface, port, open, documents)?;
         }
         Command::Sync {
             sync_strat,
@@ -107,158 +63,32 @@ fn main() -> eyre::Result<()> {
             document,
             chunk_size,
         } => {
-            let base_delay = base_delay * 1000;
+            let base_delay = base_delay * MILLISECONDS_MULTIPLIER;
             let db_path = cli.db.clone();
 
-            if db_path.trim() == ":memory:" {
-                println!(
-                    "Estas ejecutando el comando '{}' en una {}.",
-                    "Sync".cyan().bold(),
-                    "instancia transitiva".yellow().underline().bold()
-                );
-                std::process::exit(1);
-            }
-
-            let db = init_sqlite(&db_path)?;
-
-            let Some(doc) = documents.iter().find(|doc| doc.name == document) else {
-                let available_documents = documents
-                    .into_iter()
-                    .map(|x| x.name)
-                    .collect::<Vec<_>>()
-                    .join(", ");
-
-                return Err(eyre!(
-                    "{} no es uno de los documentos disponibles: [{available_documents}]",
-                    document.bright_red()
-                ));
-            };
-
-            if force {
-                let exists: String = match db.query_row(
-                    "select name from sqlite_master where type='table' and name=?",
-                    [&document],
-                    |row| row.get(0),
-                ) {
-                    Ok(msg) => msg,
-                    Err(err) => {
-                        return Err(eyre!(
-                            "Es probable que la base de datos no esté creada. {}",
-                            err
-                        ));
-                    }
-                };
-
-                if !exists.is_empty() {
-                    db.execute(&format!("drop table {document}"), [])?;
-                    db.execute(&format!("drop table {document}_raw"), [])?;
-                    db.execute(&format!("drop table vec_{document}"), [])?;
-                }
-            }
-
             let start = Instant::now();
-            setup_sqlite(&db, doc)?;
-            insert_base_data(&db, doc)?;
-            match sync_strat {
-                SyncStrategy::Fts => {
-                    let start = Instant::now();
-                    let inserted = sync_fts_data(&db, doc);
+            let doc = commands::setup_db::handle(&db_path, &documents, &document, force)?;
 
-                    eprintln!("{}", "-".repeat(100));
-                    eprintln!(
-                        "{inserted} registros fueron sincronizados en {} ({} ms).",
-                        format!("fts_{}", doc.name).bright_cyan().bold(),
-                        start.elapsed().as_millis(),
-                    );
-                }
-                SyncStrategy::Vector => {
-                    let rt = tokio::runtime::Runtime::new()?;
-
-                    let start = Instant::now();
-                    let (inserted, media) =
-                        rt.block_on(sync_vec_data(&db, doc, base_delay, chunk_size))?;
-
-                    eprintln!("{}", "-".repeat(100));
-                    eprintln!(
-                        "{inserted} registros fueron sincronizados en {} ({} ms, media de {media} ms por chunk).",
-                        format!("vec_{}", doc.name).bright_purple().bold(),
-                        start.elapsed().as_millis(),
-                    );
-                }
-                SyncStrategy::All => {
-                    let start = Instant::now();
-                    let inserted_fts = sync_fts_data(&db, doc);
-                    let fts_elapsed = start.elapsed().as_millis();
-
-                    let rt = tokio::runtime::Runtime::new()?;
-                    let start = Instant::now();
-                    let (inserted, media) =
-                        rt.block_on(sync_vec_data(&db, doc, base_delay, chunk_size))?;
-                    let vec_elapsed = start.elapsed().as_millis();
-
-                    eprintln!("{}", "-".repeat(100));
-
-                    eprintln!(
-                        "{inserted_fts} registros fueron sincronizados en {} ({fts_elapsed} ms).",
-                        format!("fts_{}", doc.name).bright_cyan().bold(),
-                    );
-
-                    eprintln!(
-                        "{inserted} registros fueron sincronizados en {} ({vec_elapsed} ms, media de {media} ms por chunk).",
-                        format!("vec_{}", doc.name).bright_purple().bold(),
-                    );
-                }
-            }
+            commands::sync::handle_update(&db_path, &doc, &sync_strat, base_delay, chunk_size)?;
 
             eprintln!(
-                "\n🎉 Sincronización finalizada, tomó {} ms.\n",
+                "\n🎉 Synchronization finished! took {} ms.\n",
                 start.elapsed().as_millis()
             );
         }
         Command::CreateUser { username, password } => {
-            let db_path = cli.db.clone();
-            let db = init_sqlite(&db_path)?;
-
-            db.execute_batch(
-                "create table if not exists users (
-                    id integer primary key autoincrement,
-                    username text not null unique,
-                    password_hash text not null,
-                    auth_token text,
-                    created_at datetime default current_timestamp,
-                    updated_at datetime default current_timestamp
-                )",
-            )?;
-
-            let salt = SaltString::generate(&mut OsRng);
-            let argon2 = Argon2::default();
-            let password_hash = argon2
-                .hash_password(password.as_bytes(), &salt)
-                .expect("TODO")
-                .to_string();
-
-            let updated = db.execute(
-                "insert or replace into users(username, password_hash) values (?,?)",
-                params![username, password_hash],
-            )?;
-
-            assert_eq!(updated, 1);
-
-            println!(
-                "Se ha creado exitosamente el usuario {}",
-                username.bold().green()
-            );
+            commands::users::create_user(&cli.db, &username, &password).or_exit();
         }
     }
 
     Ok(())
 }
 
-fn setup_tracing(loglevel: &str) -> eyre::Result<()> {
+fn setup_configuration(loglevel: &str) -> eyre::Result<()> {
     color_eyre::install()?;
 
     if dotenvy::dotenv().is_err() {
-        eprintln!("El archivo {} no fue encontrado.", "\'env\'".green().bold());
+        eprintln!("{} was not found.", "\'env\'".green().bold());
     }
 
     let level = match loglevel.to_lowercase().trim() {
@@ -266,9 +96,7 @@ fn setup_tracing(loglevel: &str) -> eyre::Result<()> {
         "debug" => Level::DEBUG,
         "info" => Level::INFO,
         _ => {
-            return Err(eyre!(
-                "Log Level desconocido, utiliza `INFO`, `DEBUG` o `TRACE`."
-            ));
+            return Err(eyre!("unknown log level, use `INFO`, `DEBUG` or `TRACE`."));
         }
     };
 
@@ -285,25 +113,4 @@ fn setup_tracing(loglevel: &str) -> eyre::Result<()> {
     tracing::subscriber::set_global_default(subscriber)?;
 
     Ok(())
-}
-
-use std::fmt;
-
-struct GulfiTimer;
-
-impl GulfiTimer {
-    fn new() -> Self {
-        Self
-    }
-}
-
-impl tracing_subscriber::fmt::time::FormatTime for GulfiTimer {
-    fn format_time(&self, w: &mut tracing_subscriber::fmt::format::Writer<'_>) -> fmt::Result {
-        let datetime = chrono::Local::now().format("%H:%M:%S");
-        // let time = format!("~{}ms", elapsed.as_millis());
-        let str = format!("{}", datetime.bright_blue());
-
-        write!(w, "{str}")?;
-        Ok(())
-    }
 }

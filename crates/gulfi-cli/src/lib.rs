@@ -1,4 +1,8 @@
+pub mod clierror;
+pub mod commands;
 pub mod helper;
+
+pub use clierror::*;
 
 use clap::{Parser, Subcommand, ValueEnum, command, crate_version};
 use std::net::IpAddr;
@@ -19,7 +23,7 @@ pub struct Cli {
     #[arg(long = "level", default_value = "INFO")]
     pub loglevel: String,
 
-    /// Path a la base de datos sqlite
+    /// Path to the sqlite database
     #[arg(long = "database-path", default_value = "./gulfi.db")]
     pub db: String,
 
@@ -30,56 +34,61 @@ pub struct Cli {
 impl Cli {
     #[must_use]
     pub fn command(&self) -> Command {
-        self.command.clone().unwrap_or(Command::List)
+        self.command.clone().unwrap_or(Command::List {
+            format: Format::Pretty,
+        })
     }
 }
 
 #[derive(Subcommand, Clone, Debug)]
 pub enum Command {
-    /// Inicia el servidor HTTP y expone la interfaz web
+    /// Starts the HTTP server.
     Serve {
         #[cfg(debug_assertions)]
         #[arg(value_enum)]
         mode: Mode,
-        /// Establece la dirección IP.
+        /// Sets the IP address.
         #[clap(short = 'I', long, default_value = "127.0.0.1")]
         interface: IpAddr,
 
-        /// Establece el puerto en el cual escuchar.
+        /// Sets the port.
         #[clap(short = 'P', long, default_value_t = 3000)]
         port: u16,
 
-        /// Automaticamente abre la aplicación en el navegador.
+        /// Opens the web interface.
         #[arg(long, default_value = "false")]
         open: bool,
     },
-    /// Actualiza la base de datos.
+    /// Updates the database.
     Sync {
         document: String,
 
-        /// Fuerza la actualización incluso cuando la base de datos no está vacía.
+        /// Updates from scratch.
         #[arg(long, default_value = "false")]
         force: bool,
 
-        /// Determina la estrategia para actualizar la base de datos.
+        /// Sets the strategy for updating.
         #[arg(value_enum,  default_value_t = SyncStrategy::Fts)]
         sync_strat: SyncStrategy,
 
-        /// Determina la cantidad de tiempo base al hacer backoff en los requests. En millisegundos.
-        #[arg(short = 'T', long, default_value_t = 2)]
+        /// Sets the base time for backoff in requests in ms.
+        #[arg(long, default_value_t = 2)]
         base_delay: u64,
 
-        #[arg(short = 'T', long, default_value_t = 1024)]
+        /// Sets the size of the chunks when splitting the entries for processing.
+        #[arg(long, default_value_t = 1024)]
         chunk_size: usize,
     },
-    /// Lista todos los documentos disponibles documento.
-    List,
-    /// Añade un nuevo documento.
+    /// Lists all defined documents.
+    List {
+        #[arg(value_enum, long, default_value_t = Format::Pretty)]
+        format: Format,
+    },
+    /// Adds a new document.
     Add,
-    /// Borra un documento.
+    /// Deletes a document.
     Delete { document: String },
-
-    /// Crear un nuevo usuario en la db.
+    /// Creates a new user in the database.
     CreateUser { username: String, password: String },
 }
 
@@ -88,6 +97,12 @@ pub enum Command {
 pub enum Mode {
     Prod,
     Dev,
+}
+
+#[derive(Debug, Clone, ValueEnum)]
+pub enum Format {
+    Json,
+    Pretty,
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -114,4 +129,5 @@ pub enum Cache {
 //     //     assert_eq!(result, 4);
 //     // }
 // }
+//
 //

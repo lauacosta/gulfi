@@ -1,3 +1,12 @@
+use std::{sync::Arc, time::Duration};
+
+use crossbeam::queue::ArrayQueue;
+use rusqlite::Connection;
+use tokio::{
+    sync::{AcquireError, OwnedSemaphorePermit, Semaphore, TryAcquireError},
+    time::timeout,
+};
+
 #[derive(Debug, thiserror::Error)]
 pub enum PoolError {
     #[error("Database error: {0}")]
@@ -9,199 +18,6 @@ pub enum PoolError {
     #[error("Failed to try acquire semaphore: {0}")]
     TryAcquire(#[from] TryAcquireError),
 }
-
-// impl ConnectionPool {
-//     /// Creates a new connection pool with the specified capacity
-//     ///
-//     /// # Arguments
-//     /// * `capacity` - Maximum number of connections in the pool
-//     /// * `conn_fn` - Function to create new database connections
-//     ///
-//     /// # Example
-//     /// ``` rust
-//     /// use gulfi_sqlite::pooling::ConnectionPool;
-//     /// use rusqlite::Connection;
-//     ///
-//     /// let pool = ConnectionPool::new(6, || {
-//     ///     Connection::open(":memory:")
-//     /// }).unwrap();
-//     /// ```
-//     pub fn new<F>(capacity: usize, conn_fn: F) -> Result<Self, PoolError>
-//     where
-//         F: Fn() -> Result<Connection, rusqlite::Error>,
-//     {
-//         if capacity == 0 {
-//             return Err(PoolError::Database(rusqlite::Error::InvalidParameterName(
-//                 "Capacity must be greater than 0".to_owned(),
-//             )));
-//         }
-
-//         let inner = Arc::new(ArrayQueue::new(capacity));
-
-//         for _ in 0..capacity {
-//             let conn = conn_fn()?;
-
-//             inner.push(conn).map_err(|_| {
-//                 PoolError::Database(rusqlite::Error::InvalidParameterName(
-//                     "Queue capacity exceded".to_owned(),
-//                 ))
-//             })?
-//         }
-
-//         Ok(Self { inner, capacity })
-//     }
-
-//     pub fn try_get(&self) -> Option<ConnectionHandle> {
-//         self.inner.pop().map(|connection| ConnectionHandle {
-//             conn: Some(connection),
-//             inner: self.inner.clone(),
-//         })
-//     }
-
-//     /// Get the capacity of the pool
-//     pub fn capacity(&self) -> usize {
-//         self.inner.capacity()
-//     }
-
-//     /// Get the current number of available connections
-//     pub fn available(&self) -> usize {
-//         self.inner.len()
-//     }
-
-//     /// Checks if all connections are ready
-//     pub fn is_full(&self) -> bool {
-//         self.inner.is_full()
-//     }
-
-//     /// Check if the pool is empty (no connections available)
-//     pub fn is_empty(&self) -> bool {
-//         self.inner.is_empty()
-//     }
-
-//     /// Close the pool and all connections
-//     pub fn close(self) -> Vec<Result<(), (Connection, rusqlite::Error)>> {
-//         let mut results = Vec::with_capacity(self.capacity);
-
-//         while let Some(connection) = self.inner.pop() {
-//             results.push(connection.close());
-//         }
-//         results
-//     }
-// }
-
-// // impl Drop for ConnectionHandle {
-// //     fn drop(&mut self) {
-// //         if let Some(conn) = self.conn.take() {
-// //             // Is it better than panicking?
-// //             let _ = self.inner.push(conn);
-// //         }
-// //     }
-// // }
-
-// #[derive(Clone, Debug)]
-// pub struct AsyncConnectionPool {
-//     pool: ConnectionPool,
-//     semaphore: Arc<Semaphore>,
-// }
-
-// #[derive(Debug)]
-// pub struct AsyncConnectionHandle {
-//     connection: Option<ConnectionHandle>,
-//     _permit: OwnedSemaphorePermit,
-// }
-
-// impl AsyncConnectionPool {
-//     /// Creates a new async connection pool with the specified capacity
-//     ///
-//     /// # Arguments
-//     /// * `capacity` - Maximum number of connections in the pool
-//     /// * `conn_fn` - Function to create new database connections
-//     ///
-//     /// # Example
-//     /// ``` rust
-//     /// use gulfi_sqlite::pooling::AsyncConnectionPool;
-//     /// use rusqlite::Connection;
-//     ///
-//     /// let pool = AsyncConnectionPool::new(6, || {
-//     ///     Connection::open(":memory:")
-//     /// }).unwrap();
-//     /// ```
-//     pub fn new<F>(capacity: usize, conn_fn: F) -> Result<Self, PoolError>
-//     where
-//         F: Fn() -> Result<Connection, rusqlite::Error>,
-//     {
-//         let pool = ConnectionPool::new(capacity, conn_fn)?;
-//         let semaphore = Arc::new(Semaphore::new(capacity));
-
-//         Ok(Self { pool, semaphore })
-//     }
-
-//     /// Get the capacity of the pool
-//     pub fn capacity(&self) -> usize {
-//         self.pool.capacity()
-//     }
-
-//     /// Get the current number of available connections
-//     pub fn available(&self) -> usize {
-//         self.pool.available()
-//     }
-
-//     /// Checks if all connections are ready
-//     pub fn is_full(&self) -> bool {
-//         self.pool.is_full()
-//     }
-
-//     /// Asynchronously acquires a connection from the pool.
-//     ///
-//     /// Waits until a permit is available via the semaphore. This method yields the task,
-//     /// allowing other tasks to progress while waiting.
-//     ///
-//     /// # Errors
-//     /// Returns an error if the semaphore is closed or the task is cancelled while waiting.
-//     pub async fn acquire(&self) -> Result<AsyncConnectionHandle, PoolError> {
-//         let _permit = self.semaphore.clone().acquire_owned().await?;
-
-//         let conn = self
-//             .pool
-//             .try_get()
-//             .expect("Semaphore should guarantee connection availability");
-
-//         Ok(AsyncConnectionHandle {
-//             connection: Some(conn),
-//             _permit,
-//         })
-//     }
-
-//     /// Attempts to acquire a connection without waiting.
-//     ///
-//     /// If no permits are available, returns an error immediately.
-//     /// Panics if a permit is acquired but no connection is available in the pool.
-//     /// This indicates internal pool corruption.
-//     ///
-//     /// # Errors
-//     /// Returns an error if the semaphore has no available permits at the moment.
-//     pub fn try_acquire(&self) -> Result<AsyncConnectionHandle, PoolError> {
-//         let _permit = self.semaphore.clone().try_acquire_owned()?;
-
-//         let conn = self
-//             .pool
-//             .try_get()
-//             .expect("Semaphore should guarantee connection availability");
-
-//         Ok(AsyncConnectionHandle {
-//             connection: Some(conn),
-//             _permit,
-//         })
-//     }
-
-use std::{sync::Arc, time::Duration};
-
-use crossbeam::queue::ArrayQueue;
-use rusqlite::Connection;
-use tokio::{
-    sync::{AcquireError, OwnedSemaphorePermit, Semaphore, TryAcquireError},
-    time::timeout,
-};
 
 #[derive(Clone, Debug)]
 pub struct ConnectionPool {
@@ -357,10 +173,10 @@ impl core::borrow::BorrowMut<Connection> for ConnectionHandle {
 
 impl Drop for ConnectionHandle {
     fn drop(&mut self) {
-        let conn = self.connection.take().expect("No deberia ser None");
+        let conn = self.connection.take().expect("should not be None");
         self.inner
             .push(conn)
-            .expect("No debe sobrepasar la capacidad de la queue");
+            .expect("Shouldn't surpass queue capacity");
     }
 }
 
@@ -411,10 +227,7 @@ impl AsyncConnectionPool {
     /// Returns an error if the semaphore is closed or the task is cancelled while waiting.
     pub async fn acquire(&self) -> Result<AsyncConnectionHandle, PoolError> {
         let _permit = Semaphore::acquire_owned(self.semaphore.clone()).await?;
-        let conn = self
-            .pool
-            .try_get()
-            .expect("permite guarantees availability");
+        let conn = self.pool.try_get().expect("Permit guarantees availability");
 
         Ok(AsyncConnectionHandle {
             connection: conn,
@@ -442,10 +255,7 @@ impl AsyncConnectionPool {
     /// Returns an error if the semaphore has no available permits at the moment.
     pub async fn try_acquire(&self) -> Result<AsyncConnectionHandle, PoolError> {
         let _permit = Semaphore::try_acquire_owned(self.semaphore.clone())?;
-        let conn = self
-            .pool
-            .try_get()
-            .expect("permite guarantees availability");
+        let conn = self.pool.try_get().expect("Permit guarantees availability");
 
         Ok(AsyncConnectionHandle {
             connection: conn,
