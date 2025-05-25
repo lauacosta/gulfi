@@ -238,6 +238,7 @@ impl CliError {
     }
 }
 
+#[allow(dead_code)]
 trait ExitOnError<T> {
     fn or_exit(self) -> T;
 }
