@@ -63,8 +63,12 @@ impl SearchStrategy {
         let rrf_k: i64 = 60;
         let k = params.k_neighbors;
 
-        let string = format!("query:{}", params.search_str);
+        let string = format!("query: {}", params.search_str);
         let query = Query::parse(&string).map_err(HttpError::from)?;
+
+        println!("params -> {}", &params.search_str);
+        println!("string -> {}", &string);
+        dbg!("{}", &query);
 
         let (valid_fields, invalid_fields) = {
             let mut invalid = Vec::new();

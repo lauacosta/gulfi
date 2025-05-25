@@ -142,7 +142,7 @@ mod tests {
                 query: "Lautaro".to_owned(),
                 constraints: None,
             }
-        )
+        );
     }
 
     #[test]
