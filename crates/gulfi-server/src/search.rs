@@ -66,10 +66,6 @@ impl SearchStrategy {
         let string = format!("query: {}", params.search_str);
         let query = Query::parse(&string).map_err(HttpError::from)?;
 
-        println!("params -> {}", &params.search_str);
-        println!("string -> {}", &string);
-        dbg!("{}", &query);
-
         let (valid_fields, invalid_fields) = {
             let mut invalid = Vec::new();
             let fields: Vec<_> = document
@@ -439,16 +435,21 @@ fn build_conditions(
             for (i, cons) in values.iter().enumerate() {
                 let param_name = format!(":{k}_{i}");
                 let condition = match cons {
-                    Constraint::Exact(_) => format!("LOWER({k}) = LOWER({param_name})"),
+                    Constraint::Exact(_) => {
+                        format!("LOWER({k}) like LOWER('%' || {param_name} || '%')")
+                    }
                     Constraint::GreaterThan(_) => format!("{k} > {param_name}"),
                     Constraint::LesserThan(_) => format!("{k} < {param_name}"),
                 };
+
+                conditions.push(condition);
+
                 let value = match cons {
                     Constraint::Exact(v)
                     | Constraint::GreaterThan(v)
                     | Constraint::LesserThan(v) => v,
                 };
-                conditions.push(condition);
+
                 binding_values.push(value);
             }
         }

@@ -125,7 +125,7 @@ impl IntoResponse for HttpError {
                     })),
                 )
                     .into_response(),
-                ParsingError::MissingQuery => (
+                ParsingError::MissingQuery | ParsingError::EmptyInput => (
                     StatusCode::BAD_REQUEST,
                     Json(json!({
                         "err": e.to_string(),

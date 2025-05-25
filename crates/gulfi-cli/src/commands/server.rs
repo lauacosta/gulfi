@@ -1,10 +1,12 @@
 use clap::{crate_name, crate_version};
-use eyre::Report;
 use gulfi_common::Document;
 use gulfi_server::{ApplicationSettings, startup::run_server};
 use std::{net::IpAddr, time::Instant};
 
 use crate::CliError;
+
+#[cfg(debug_assertions)]
+use eyre::Report;
 
 #[cfg(debug_assertions)]
 use crate::Mode;
