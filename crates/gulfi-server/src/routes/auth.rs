@@ -6,7 +6,7 @@ use rusqlite::params;
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::{into_http::HttpError, startup::AppState};
+use crate::{into_http::HttpError, startup::ServerState};
 
 #[derive(Deserialize, Debug)]
 pub(crate) struct AuthParams {
@@ -16,10 +16,10 @@ pub(crate) struct AuthParams {
 
 #[tracing::instrument(skip(app, payload), name = "generando nuevo auth_token")]
 pub async fn auth(
-    State(app): State<AppState>,
+    State(app): State<ServerState>,
     Json(payload): Json<AuthParams>,
 ) -> Result<Json<serde_json::Value>, HttpError> {
-    let conn_handle = app.connection_pool.acquire().await?;
+    let conn_handle = app.pool.acquire().await?;
 
     let mut stmt =
         conn_handle.prepare("SELECT id, username, password_hash FROM users WHERE username = ?")?;

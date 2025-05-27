@@ -12,6 +12,7 @@ use gulfi_common::Document;
 use gulfi_common::{META_JSON_FILE, MILLISECONDS_MULTIPLIER};
 use tracing::{Level, debug, level_filters::LevelFilter};
 use tracing_error::ErrorLayer;
+use tracing_subscriber::fmt;
 use tracing_subscriber::{Registry, fmt::Layer, layer::SubscriberExt};
 
 fn main() -> eyre::Result<()> {
@@ -106,7 +107,8 @@ fn setup_configuration(loglevel: &str) -> eyre::Result<()> {
             Layer::new()
                 .compact()
                 .with_ansi(true)
-                .with_timer(GulfiTimer::new()),
+                .with_timer(GulfiTimer::new())
+                .with_span_events(fmt::format::FmtSpan::FULL),
         )
         .with(ErrorLayer::default());
 

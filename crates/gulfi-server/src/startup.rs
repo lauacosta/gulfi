@@ -6,8 +6,10 @@ use gulfi_common::Document;
 use gulfi_sqlite::pooling::AsyncConnectionPool;
 use gulfi_sqlite::spawn_vec_connection;
 use http::{Method, StatusCode};
+use moka::future::Cache;
 use rusqlite::{Connection, params};
 use std::net::IpAddr;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::{fmt, io};
 use tokio::sync::mpsc::{self, UnboundedSender};
@@ -22,7 +24,7 @@ use tokio::{net::TcpListener, signal};
 use tower::ServiceBuilder;
 use tower_http::trace::{OnResponse, TraceLayer};
 use tower_request_id::{RequestId, RequestIdLayer};
-use tracing::{Level, error, error_span, info};
+use tracing::{Level, debug_span, error, info};
 
 use crate::ApplicationSettings;
 use crate::routes::{
@@ -32,11 +34,11 @@ use crate::routes::{
 use crate::search::SearchStrategy;
 
 #[derive(Debug, Clone)]
-pub struct AppState {
-    // pub db_path: String,
+pub struct ServerState {
     pub documents: Vec<Document>,
     pub writer: UnboundedSender<WriteJob>,
-    pub connection_pool: AsyncConnectionPool,
+    pub pool: AsyncConnectionPool,
+    pub embeddings_cache: Cache<String, Arc<Vec<f32>>>,
 }
 
 #[derive(Debug)]
@@ -87,14 +89,20 @@ impl Application {
             )
         })?;
 
-        let connection_pool = AsyncConnectionPool::new(10, || spawn_vec_connection(&db_path))?;
+        let pool = AsyncConnectionPool::new(10, || spawn_vec_connection(&db_path))?;
 
         let writer = spawn_writer_task(&db_path)?;
 
-        let state = AppState {
+        let state = ServerState {
             documents,
             writer,
-            connection_pool,
+            pool,
+            embeddings_cache: Cache::builder()
+                // TTL
+                .time_to_live(Duration::from_secs(5 * 60))
+                // TTI
+                .time_to_idle(Duration::from_secs(60))
+                .build(),
         };
 
         let server = build_server(listener, state)?;
@@ -148,7 +156,7 @@ impl Application {
     }
 }
 
-pub fn build_server(listener: TcpListener, state: AppState) -> Result<Serve<Router, Router>> {
+pub fn build_server(listener: TcpListener, state: ServerState) -> Result<Serve<Router, Router>> {
     let historial_routes = Router::new()
         .route("/:doc/historial", get(historial).delete(delete_historial))
         .route("/:doc/historial-full", get(historial_full));
@@ -161,8 +169,7 @@ pub fn build_server(listener: TcpListener, state: AppState) -> Result<Serve<Rout
                     format!("Unhandled error {err}"),
                 )
             }))
-            .layer(BufferLayer::new(1024))
-            .layer(RateLimitLayer::new(1000, Duration::from_secs(1))),
+            .layer(BufferLayer::new(1024)), // .layer(RateLimitLayer::new(1000, Duration::from_secs(1))),
     );
 
     let frontend_routes = Router::new()
@@ -207,7 +214,7 @@ pub fn build_server(listener: TcpListener, state: AppState) -> Result<Serve<Rout
                                 .get::<RequestId>()
                                 .map_or_else(|| "unknown".into(), ToString::to_string);
 
-                            error_span!(
+                            debug_span!(
                                 "request",
                                 id = %request_id,
                                 method = %request.method().blue().bold(),
@@ -314,7 +321,7 @@ impl fmt::Display for Latency {
             LatencyUnit::Millis => write!(f, "{} ms", self.duration.as_millis()),
             LatencyUnit::Micros => write!(f, "{} μs", self.duration.as_micros()),
             LatencyUnit::Nanos => write!(f, "{} ns", self.duration.as_nanos()),
-            _ => write!(f, "unidad desconocida."),
+            _ => write!(f, "unknown unitdesconocida."),
         }
     }
 }

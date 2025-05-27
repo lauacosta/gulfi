@@ -15,16 +15,16 @@ use tracing::debug;
 use crate::{
     HistorialView,
     search::SearchStrategy,
-    startup::AppState,
+    startup::ServerState,
     views::{HistorialFullView, HistorialParams},
 };
 
 #[axum::debug_handler]
 pub async fn historial(
     Path(doc): Path<String>,
-    State(app): State<AppState>,
+    State(app): State<ServerState>,
 ) -> eyre::Result<Json<Vec<HistorialView>>, HttpError> {
-    let conn_handle = app.connection_pool.acquire().await?;
+    let conn_handle = app.pool.acquire().await?;
 
     let result = get_historial(
         &conn_handle,
@@ -47,9 +47,9 @@ pub async fn historial(
 #[tracing::instrument(name = "Consultando el historial", skip(app))]
 pub async fn historial_full(
     Path(doc): Path<String>,
-    State(app): State<AppState>,
+    State(app): State<ServerState>,
 ) -> eyre::Result<Json<Vec<HistorialFullView>>, HttpError> {
-    let conn_handle = app.connection_pool.acquire().await?;
+    let conn_handle = app.pool.acquire().await?;
 
     let result = get_historial(
         &conn_handle,
@@ -104,10 +104,10 @@ pub async fn historial_full(
 #[tracing::instrument(skip(app), name = "borrando busqueda del historial")]
 pub async fn delete_historial(
     Path(doc): Path<String>,
-    State(app): State<AppState>,
+    State(app): State<ServerState>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Result<StatusCode, HttpError> {
-    let conn_handle = app.connection_pool.acquire().await?;
+    let conn_handle = app.pool.acquire().await?;
 
     let mut statement = conn_handle.prepare("delete from historial where query = ? and doc = ?")?;
 
