@@ -20,7 +20,7 @@ use rusqlite::{
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use thiserror::Error;
-use tracing::{Span, debug, info, instrument};
+use tracing::{Span, debug, info, info_span, instrument};
 use zerocopy::IntoBytes;
 
 use crate::startup::ServerState;
@@ -107,6 +107,8 @@ impl SearchStrategy {
                     query_emb = Some(cached_embedding);
                     span.record("source", "hit");
                 } else {
+                    let embedding_span = info_span!("embedding.request");
+                    let _guard = embedding_span.enter();
                     let embedding =
                         Arc::new(embed_single(query.query.clone(), client).await.map_err(
                             |err| {
@@ -135,10 +137,17 @@ impl SearchStrategy {
 
         let (column_names, table, total_query_count) = {
             let pool = state.pool.clone();
-            let conn_handle = pool.acquire().await?;
+            let conn_handle = {
+                let conn_span = info_span!("conn.acquire");
+                let _guard = conn_span.enter();
+                pool.acquire().await?
+            };
 
             debug!("{:?}", pool.stats());
             debug!("{:?}", pool.corruption_info());
+
+            let query_execution_span = info_span!("query.execution");
+            let _guard = query_execution_span.enter();
 
             match self {
                 // I dont use `task::spawn_blocking` here because it proved to just add overhead.
@@ -173,7 +182,7 @@ impl SearchStrategy {
 
                     let sql = format!("{search} {where_clause}");
 
-                    let mut stmt = conn_handle.prepare(&sql)?;
+                    let mut stmt = conn_handle.prepare_cached(&sql)?;
 
                     let column_names: Vec<String> =
                         stmt.column_names().into_iter().map(String::from).collect();
@@ -240,7 +249,7 @@ impl SearchStrategy {
 
                             let sql = format!("{search} {where_clause}");
 
-                            let mut stmt = conn_handle.prepare(&sql)?;
+                            let mut stmt = conn_handle.prepare_cached(&sql)?;
                             let column_names: Vec<String> =
                                 stmt.column_names().into_iter().map(String::from).collect();
 
@@ -362,7 +371,7 @@ impl SearchStrategy {
 
                             let sql = build_final_query(&where_clause);
 
-                            let mut stmt = conn_handle.prepare(&sql)?;
+                            let mut stmt = conn_handle.prepare_cached(&sql)?;
                             let column_names: Vec<String> =
                                 stmt.column_names().into_iter().map(String::from).collect();
 
