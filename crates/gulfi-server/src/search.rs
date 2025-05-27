@@ -108,7 +108,7 @@ impl SearchStrategy {
                         }
                     })?,
             ),
-            _ => None,
+            SearchStrategy::Fts => None,
         };
 
         debug!(?query);
@@ -363,7 +363,7 @@ impl SearchStrategy {
 
                             (column_names, table, count)
                         }
-                        _ => unreachable!(),
+                        SearchStrategy::Fts => unreachable!(),
                     };
                     Ok(result)
                     }).await.map_err(|join_err|  {

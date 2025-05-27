@@ -74,16 +74,13 @@ impl Query {
     }
 
     fn split_query_and_constraints(input: &str) -> Result<(String, Option<&str>), ParsingError> {
-        match input.split_once(',') {
-            Some((left, right)) => {
-                let query = Self::extract_query_value(left)?;
-                Ok((query, Some(right)))
-            }
-            None => {
-                // No comma - could be "query:value" or just "value"
-                let query = Self::extract_query_value(input).unwrap_or_else(|_| input.to_string());
-                Ok((query, None))
-            }
+        if let Some((left, right)) = input.split_once(',') {
+            let query = Self::extract_query_value(left)?;
+            Ok((query, Some(right)))
+        } else {
+            // No comma - could be "query:value" or just "value"
+            let query = Self::extract_query_value(input).unwrap_or_else(|_| input.to_string());
+            Ok((query, None))
         }
     }
 

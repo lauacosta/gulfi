@@ -253,7 +253,7 @@ impl AsyncConnectionPool {
     ///
     /// # Errors
     /// Returns an error if the semaphore has no available permits at the moment.
-    pub async fn try_acquire(&self) -> Result<AsyncConnectionHandle, PoolError> {
+    pub fn try_acquire(&self) -> Result<AsyncConnectionHandle, PoolError> {
         let _permit = Semaphore::try_acquire_owned(self.semaphore.clone())?;
         let conn = self.pool.try_get().expect("Permit guarantees availability");
 
