@@ -39,8 +39,9 @@ pub async fn sync_vec_data(
     chunk_size: usize,
 ) -> Result<(usize, f32)> {
     let doc_name = doc.name.clone();
-    let mp = MultiProgress::new();
+    validate_sql_identifier(&doc_name).expect("Should be a safe identifier");
 
+    let mp = MultiProgress::new();
     eprintln!("Syncing VEC tables in {doc_name}");
 
     let mut statement = db.prepare(&format!("select id, vec_input from {doc_name}"))?;
@@ -176,8 +177,9 @@ pub async fn sync_vec_data(
     Ok((total, media))
 }
 
-pub fn sync_fts_data(db: &Connection, doc: &Document) -> usize {
+pub fn sync_fts_data(conn: &Connection, doc: &Document) -> usize {
     let doc_name = doc.name.clone();
+    validate_sql_identifier(&doc_name).expect("Should be a safe identifier");
 
     let pb = ProgressBar::new_spinner();
     let style = ProgressStyle::with_template("{spinner:.green}{wide_msg}")
@@ -187,6 +189,10 @@ pub fn sync_fts_data(db: &Connection, doc: &Document) -> usize {
     pb.set_style(style);
     pb.enable_steady_tick(Duration::from_millis(100));
     pb.set_message(format!("Syncing FTS tables in {doc_name}..."));
+
+    for field in doc.fields.iter() {
+        validate_sql_identifier(&field.name).expect("Should be a safe identifier");
+    }
 
     let field_names = {
         let fields: Vec<String> = doc
@@ -199,7 +205,7 @@ pub fn sync_fts_data(db: &Connection, doc: &Document) -> usize {
         fields.join(", ")
     };
 
-    let inserted = db
+    let inserted = conn
         .execute(
             &format!(
                 "
@@ -212,7 +218,14 @@ pub fn sync_fts_data(db: &Connection, doc: &Document) -> usize {
         .map_err(|err| eyre!(err))
         .expect("Should be a C compatible string");
 
-    db.execute(
+    conn.execute(
+        &format!("insert into fts_{doc_name}(fts_{doc_name}) values('rebuild')"),
+        [],
+    )
+    .map_err(|err| eyre!(err))
+    .expect("Should be a C compatible string");
+
+    conn.execute(
         &format!("insert into fts_{doc_name}(fts_{doc_name}) values('optimize')"),
         [],
     )
@@ -655,4 +668,26 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
 
     let inserted = inserted.load(Ordering::Relaxed);
     Ok(inserted)
+}
+
+fn validate_sql_identifier(name: &str) -> Result<()> {
+    if name.is_empty() || name.len() > 64 {
+        return Err(eyre!("Invalid identifier length"));
+    }
+
+    if !name.chars().next().unwrap().is_alphabetic() {
+        return Err(eyre!("Identifier must start with letter"));
+    }
+
+    if !name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+        return Err(eyre!("Identifier contains invalid characters"));
+    }
+
+    // Prevent SQL keywords (basic list)
+    let keywords = ["SELECT", "DROP", "DELETE", "UPDATE", "INSERT", "TABLE"];
+    if keywords.contains(&name.to_uppercase().as_str()) {
+        return Err(eyre!("Identifier cannot be SQL keyword"));
+    }
+
+    Ok(())
 }
