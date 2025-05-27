@@ -469,12 +469,12 @@ fn compare_records(mut records: Vec<String>, mut headers: Vec<String>) -> eyre::
 
     match (missing_members.as_slice(), extra_members.as_slice()) {
         ([], []) => Ok(()),
-        ([], extra) => Err(eyre!("\nFile has unsupported fields: {extra:?}")),
+        ([], extra) => Err(eyre!("File has unsupported fields: {extra:?}")),
 
-        (missing, []) => Err(eyre!("\nFile has missing fields: {missing:?}")),
+        (missing, []) => Err(eyre!("File has missing fields: {missing:?}")),
 
         (missing, extra) => Err(eyre!(
-            "\nFile doesnt have fields: {missing:?} but has unsupported fields: {extra:?}"
+            "File doesnt have fields: {missing:?} but has unsupported fields: {extra:?}"
         )),
     }
 }
