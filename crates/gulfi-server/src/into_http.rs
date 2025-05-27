@@ -169,3 +169,8 @@ impl From<ParsingError> for HttpError {
         HttpError::Parsing(e)
     }
 }
+impl From<argon2::password_hash::Error> for HttpError {
+    fn from(err: argon2::password_hash::Error) -> Self {
+        Self::from_report(eyre::eyre!("argon2 error: {:?}", err))
+    }
+}
