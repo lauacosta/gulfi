@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 use std::{fmt, io};
 use tokio::sync::mpsc::{self, UnboundedSender};
 use tower::buffer::BufferLayer;
-use tower::limit::RateLimitLayer;
+// use tower::limit::RateLimitLayer;
 use tower_http::LatencyUnit;
 use tower_http::cors::Any;
 use tower_http::{compression::CompressionLayer, cors::CorsLayer};
