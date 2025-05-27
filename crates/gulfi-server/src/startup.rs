@@ -87,7 +87,7 @@ impl Application {
             )
         })?;
 
-        let connection_pool = AsyncConnectionPool::new(5, || spawn_vec_connection(&db_path))?;
+        let connection_pool = AsyncConnectionPool::new(10, || spawn_vec_connection(&db_path))?;
 
         let writer = spawn_writer_task(&db_path)?;
 

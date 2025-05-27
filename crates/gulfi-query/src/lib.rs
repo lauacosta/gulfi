@@ -1,7 +1,7 @@
 use std::{collections::HashMap, fmt::Display};
 use thiserror::Error;
 
-#[derive(PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum Constraint {
     Exact(String),
     GreaterThan(String),
@@ -32,7 +32,7 @@ pub enum ParsingError {
     InvalidToken(String),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Query {
     pub query: String,
     pub constraints: Option<HashMap<String, Vec<Constraint>>>,

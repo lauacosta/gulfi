@@ -25,6 +25,9 @@ impl<T: IntoResponse> IntoHttp for T {
 
 #[derive(Debug)]
 pub enum HttpError {
+    MissingDocument {
+        msg: String,
+    },
     Internal {
         err: String,
     },
@@ -71,6 +74,12 @@ impl HttpError {
             invalid_fields,
         }
     }
+
+    pub fn missing_document(message: impl Into<String>) -> Self {
+        HttpError::MissingDocument {
+            msg: message.into(),
+        }
+    }
 }
 
 macro_rules! impl_from {
@@ -94,6 +103,11 @@ impl IntoResponse for HttpError {
     fn into_response(self) -> Response {
         let date = Local::now().to_rfc3339();
         match self {
+            HttpError::MissingDocument { msg } => (
+                StatusCode::BAD_REQUEST,
+                Json(json!( { "msg":msg, "date": date } )),
+            )
+                .into_response(),
             HttpError::Internal { err } => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!( { "err":err, "date":date })),
