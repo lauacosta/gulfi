@@ -10,7 +10,7 @@ use gulfi_query::{
     Constraint::{self, Exact, GreaterThan, LesserThan},
     Query,
 };
-use std::{collections::HashMap, fmt::Write};
+use std::{collections::HashMap, fmt::Write, sync::Arc};
 
 use reqwest::Client;
 use rusqlite::{
@@ -20,10 +20,10 @@ use rusqlite::{
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use thiserror::Error;
-use tracing::{debug, info};
+use tracing::{Span, debug, info, instrument};
 use zerocopy::IntoBytes;
 
-use crate::startup::AppState;
+use crate::startup::ServerState;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Default)]
 pub enum SearchStrategy {
@@ -47,13 +47,16 @@ pub struct SearchParams {
 
 type QueryResult = Result<(Vec<String>, Vec<Vec<String>>, usize), HttpError>;
 impl SearchStrategy {
+    #[instrument(name = "Realizando la búsqueda", skip(self, state, client, params), fields(source = tracing::field::Empty))]
     pub async fn search(
         self,
-        app_state: &AppState,
+        state: &ServerState,
         client: &Client,
         params: SearchParams,
     ) -> SearchResult {
-        let document = app_state
+        let span = Span::current();
+
+        let document = state
             .documents
             .iter()
             .find(|x| x.name.to_lowercase() == params.document.to_lowercase())
@@ -97,24 +100,41 @@ impl SearchStrategy {
             ));
         }
 
-        let query_emb = match self {
-            SearchStrategy::Semantic | SearchStrategy::ReciprocalRankFusion => Some(
-                embed_single(query.query.clone(), client)
-                    .await
-                    .map_err(|err| {
-                        tracing::error!("{err}");
-                        HttpError::Internal {
-                            err: "Failed to create query embedding".to_string(),
-                        }
-                    })?,
-            ),
-            SearchStrategy::Fts => None,
+        let mut query_emb: Option<Arc<Vec<f32>>> = None;
+        match self {
+            SearchStrategy::Semantic | SearchStrategy::ReciprocalRankFusion => {
+                if let Some(cached_embedding) = state.embeddings_cache.get(&query.query).await {
+                    query_emb = Some(cached_embedding);
+                    span.record("source", "hit");
+                } else {
+                    let embedding =
+                        Arc::new(embed_single(query.query.clone(), client).await.map_err(
+                            |err| {
+                                tracing::error!("{err}");
+                                HttpError::Internal {
+                                    err: "Failed to create query embedding".to_string(),
+                                }
+                            },
+                        )?);
+
+                    state
+                        .embeddings_cache
+                        .insert(query.query.clone(), embedding.clone())
+                        .await;
+
+                    query_emb = Some(embedding);
+                    span.record("source", "miss");
+                }
+            }
+            SearchStrategy::Fts => {
+                span.record("source", "dynamic");
+            }
         };
 
         debug!(?query);
 
         let (column_names, table, total_query_count) = {
-            let pool = app_state.connection_pool.clone();
+            let pool = state.pool.clone();
             let conn_handle = pool.acquire().await?;
 
             debug!("{:?}", pool.stats());
@@ -380,7 +400,7 @@ impl SearchStrategy {
             query.query, total_query_count,
         );
 
-        if let Err(e) = app_state.writer.send(WriteJob::Historial {
+        if let Err(e) = state.writer.send(WriteJob::Historial {
             query: params.search_str,
             doc: params.document,
             strategy: params.strategy,

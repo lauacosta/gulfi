@@ -37,3 +37,4 @@ webbrowser = "1.0.3"
 include_dir = "0.7.4"
 termcolor = "1.4.1"
 rand = "0.9.1"
+moka = { version = "0.12.10", features = ["future", "logging"] }

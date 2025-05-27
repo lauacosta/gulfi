@@ -8,7 +8,7 @@ use tracing::{info, instrument, warn};
 
 use crate::ASSETS;
 
-#[instrument]
+#[instrument(level = "info")]
 pub async fn serve_ui(uri: Uri) -> impl IntoResponse {
     let path = uri.path();
 

@@ -1,14 +1,15 @@
 use crate::into_http::SearchResult;
 use axum::{Extension, extract::State};
-use tracing::{debug, instrument};
+use tracing::debug;
 
-use crate::{SearchStrategy, extractors::SearchExtractor, search::SearchParams, startup::AppState};
+use crate::{
+    SearchStrategy, extractors::SearchExtractor, search::SearchParams, startup::ServerState,
+};
 
 #[axum::debug_handler]
-#[instrument(name = "Realizando la búsqueda", skip(app, client, params))]
 pub async fn search(
     SearchExtractor(params): SearchExtractor<SearchParams>,
-    State(app): State<AppState>,
+    State(app): State<ServerState>,
     client: Extension<reqwest::Client>,
 ) -> SearchResult {
     debug!(?params);

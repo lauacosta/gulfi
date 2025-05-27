@@ -15,7 +15,7 @@ use http::StatusCode;
 use rusqlite::params;
 use serde::Deserialize;
 
-use crate::startup::AppState;
+use crate::startup::ServerState;
 
 #[derive(Debug, Clone, Default, Serialize)]
 struct Resultados {
@@ -28,9 +28,9 @@ struct Resultados {
 
 pub async fn favoritos(
     Path(doc): Path<String>,
-    State(app): State<AppState>,
+    State(app): State<ServerState>,
 ) -> Result<Json<serde_json::Value>, HttpError> {
-    let conn_handle = app.connection_pool.acquire().await?;
+    let conn_handle = app.pool.acquire().await?;
 
     let favoritos = {
         let mut statement = conn_handle.prepare(
@@ -97,10 +97,10 @@ struct Busquedas {
 #[tracing::instrument(skip(app), name = "añadiendo busqueda a favoritos")]
 pub async fn add_favoritos(
     Path(doc): Path<String>,
-    State(app): State<AppState>,
+    State(app): State<ServerState>,
     Json(payload): Json<FavParams>,
 ) -> Result<(StatusCode, String), HttpError> {
-    let conn_handle = app.connection_pool.acquire().await?;
+    let conn_handle = app.pool.acquire().await?;
 
     let nombre = payload.nombre.replace(|c: char| c.is_whitespace(), "_");
     let data = payload.data.join(", ");
@@ -137,10 +137,10 @@ pub async fn add_favoritos(
 #[tracing::instrument(skip(app), name = "borrando busqueda de favoritos")]
 pub async fn delete_favoritos(
     Path(doc): Path<String>,
-    State(app): State<AppState>,
+    State(app): State<ServerState>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Result<StatusCode, HttpError> {
-    let conn_handle = app.connection_pool.acquire().await?;
+    let conn_handle = app.pool.acquire().await?;
 
     let mut statement =
         conn_handle.prepare("delete from favoritos where nombre = ? and doc = ?")?;
