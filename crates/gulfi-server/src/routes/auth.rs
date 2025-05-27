@@ -21,8 +21,8 @@ pub async fn auth(
 ) -> Result<Json<serde_json::Value>, HttpError> {
     let conn_handle = app.pool.acquire().await?;
 
-    let mut stmt =
-        conn_handle.prepare("SELECT id, username, password_hash FROM users WHERE username = ?")?;
+    let mut stmt = conn_handle
+        .prepare_cached("SELECT id, username, password_hash FROM users WHERE username = ?")?;
 
     let username = payload.username;
     let password = payload.password;

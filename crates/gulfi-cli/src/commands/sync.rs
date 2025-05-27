@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use color_eyre::owo_colors::OwoColorize;
 use gulfi_common::Document;
-use gulfi_sqlite::{spawn_vec_connection, sync_fts_data, sync_vec_data};
+use gulfi_sqlite::{create_indexes, spawn_vec_connection, sync_fts_data, sync_vec_data};
 use rusqlite::Connection;
 
 use crate::{CliError, ExitOnError, SyncStrategy};
@@ -38,11 +38,11 @@ pub fn handle_update(
     base_delay: u64,
     chunk_size: usize,
 ) -> Result<(), CliError> {
-    let db = spawn_vec_connection(db_path)?;
+    let conn = spawn_vec_connection(db_path)?;
 
     match strat {
         SyncStrategy::Fts => {
-            let (inserted, elapsed) = handle_fts(&db, doc);
+            let (inserted, elapsed) = handle_fts(&conn, doc);
 
             eprintln!(
                 "{inserted} entries were synced in {} ({elapsed} ms).",
@@ -51,7 +51,7 @@ pub fn handle_update(
         }
         SyncStrategy::Vector => {
             let (inserted, average, vec_elapsed) =
-                handle_vector(&db, doc, base_delay, chunk_size).or_exit();
+                handle_vector(&conn, doc, base_delay, chunk_size).or_exit();
 
             eprintln!(
                 "{inserted} entries were synced in {} ({vec_elapsed} ms, average of {average} ms per chunk).",
@@ -59,10 +59,10 @@ pub fn handle_update(
             );
         }
         SyncStrategy::All => {
-            let (inserted_fts, fts_elapsed) = handle_fts(&db, doc);
+            let (inserted_fts, fts_elapsed) = handle_fts(&conn, doc);
 
             let (inserted, average, vec_elapsed) =
-                handle_vector(&db, doc, base_delay, chunk_size).or_exit();
+                handle_vector(&conn, doc, base_delay, chunk_size).or_exit();
 
             eprintln!(
                 "{inserted_fts} entries were synced in {} ({fts_elapsed} ms).",
@@ -75,5 +75,8 @@ pub fn handle_update(
             );
         }
     }
+
+    create_indexes(&conn, doc)?;
+
     Ok(())
 }

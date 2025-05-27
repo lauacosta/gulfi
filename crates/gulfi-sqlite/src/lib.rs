@@ -31,9 +31,10 @@ use tracing::{debug, error};
 use zerocopy::IntoBytes;
 
 pub const DIMENSION: usize = 1536;
+const KEYWORDS: &[&str] = &["SELECT", "DROP", "DELETE", "UPDATE", "INSERT", "TABLE"];
 
 pub async fn sync_vec_data(
-    db: &Connection,
+    conn: &Connection,
     doc: &Document,
     base_delay: u64,
     chunk_size: usize,
@@ -44,7 +45,7 @@ pub async fn sync_vec_data(
     let mp = MultiProgress::new();
     eprintln!("Syncing VEC tables in {doc_name}");
 
-    let mut statement = db.prepare(&format!("select id, vec_input from {doc_name}"))?;
+    let mut statement = conn.prepare_cached(&format!("select id, vec_input from {doc_name}"))?;
 
     let v_inputs: Vec<(u64, String)> = match statement.query_map([], |row| {
         let id: u64 = row.get(0)?;
@@ -133,10 +134,10 @@ pub async fn sync_vec_data(
                 Ok((data, millis)) => {
 
                     let mut statement =
-                        db.prepare(&format!("insert into vec_{sent_doc_name}(row_id, vec_input_embedding) values (?,?)")).expect("Should be able to prepare query");
+                        conn.prepare(&format!("insert into vec_{sent_doc_name}(row_id, vec_input_embedding) values (?,?)")).expect("Should be able to prepare query");
 
-                    db.execute("BEGIN TRANSACTION", []).expect(
-                        "Should be a C compatible string",
+                    conn.execute("BEGIN TRANSACTION", []).expect(
+                        "Should be a valid SQL sentence",
                     );
 
                     let mut insertions = 0;
@@ -146,8 +147,8 @@ pub async fn sync_vec_data(
                         ).unwrap_or_else(|_| panic!("Error inserting in vec_{sent_doc_name}"));
 
                     }
-                    db.execute("COMMIT", []).expect(
-                    "Should be a C compatible string",
+                    conn.execute("COMMIT", []).expect(
+                    "Should be a valid SQL sentence",
                     );
 
                      total_inserted.fetch_add(insertions, Ordering::Relaxed);
@@ -177,6 +178,18 @@ pub async fn sync_vec_data(
     Ok((total, media))
 }
 
+pub fn create_indexes(conn: &Connection, doc: &Document) -> Result<()> {
+    let doc_name = doc.name.clone();
+    let queries = vec![format!(
+        "CREATE INDEX IF NOT EXISTS idx_{doc_name}_vec_input ON {doc_name}(vec_input) WHERE length(vec_input) > 0"
+    )];
+
+    for query in queries {
+        conn.execute(&query, [])?;
+    }
+    Ok(())
+}
+
 pub fn sync_fts_data(conn: &Connection, doc: &Document) -> usize {
     let doc_name = doc.name.clone();
     validate_sql_identifier(&doc_name).expect("Should be a safe identifier");
@@ -190,7 +203,7 @@ pub fn sync_fts_data(conn: &Connection, doc: &Document) -> usize {
     pb.enable_steady_tick(Duration::from_millis(100));
     pb.set_message(format!("Syncing FTS tables in {doc_name}..."));
 
-    for field in doc.fields.iter() {
+    for field in &doc.fields {
         validate_sql_identifier(&field.name).expect("Should be a safe identifier");
     }
 
@@ -216,21 +229,17 @@ pub fn sync_fts_data(conn: &Connection, doc: &Document) -> usize {
             [],
         )
         .map_err(|err| eyre!(err))
-        .expect("Should be a C compatible string");
+        .expect("Should be a valid SQL sentence");
 
-    conn.execute(
-        &format!("insert into fts_{doc_name}(fts_{doc_name}) values('rebuild')"),
-        [],
-    )
-    .map_err(|err| eyre!(err))
-    .expect("Should be a C compatible string");
+    let statements = vec![
+        format!("insert into fts_{doc_name}(fts_{doc_name}) values('rebuild')"),
+        format!("insert into fts_{doc_name}(fts_{doc_name}) values('optimize')"),
+    ];
 
-    conn.execute(
-        &format!("insert into fts_{doc_name}(fts_{doc_name}) values('optimize')"),
-        [],
-    )
-    .map_err(|err| eyre!(err))
-    .expect("Should be a C compatible string");
+    for statement in statements {
+        conn.execute(&statement, [])
+            .expect("Should be a valid SQL sentence");
+    }
 
     pb.finish();
 
@@ -255,11 +264,13 @@ pub fn spawn_vec_connection(db_path: &str) -> Result<Connection, rusqlite::Error
     Ok(db)
 }
 
-pub fn setup_sqlite(db: &rusqlite::Connection, doc: &Document) -> Result<()> {
+pub fn setup_sqlite(conn: &rusqlite::Connection, doc: &Document) -> Result<()> {
     let (sqlite_version, vec_version): (String, String) =
-        db.query_row("select sqlite_version(), vec_version()", [], |row| {
+        conn.query_row("select sqlite_version(), vec_version()", [], |row| {
             Ok((row.get(0)?, row.get(1)?))
         })?;
+
+    validate_sql_identifier(&doc.name)?;
 
     debug!("sqlite_version={sqlite_version}, vec_version={vec_version}");
     let statement = "
@@ -310,9 +321,9 @@ pub fn setup_sqlite(db: &rusqlite::Connection, doc: &Document) -> Result<()> {
             "
     .to_owned();
 
-    db.execute_batch(&statement)
+    conn.execute_batch(&statement)
         .map_err(|err| eyre!(err))
-        .expect("Should be a C compatible string");
+        .expect("Should be a valid SQL sentence");
 
     let doc_name = doc.name.clone();
 
@@ -374,7 +385,10 @@ pub fn setup_sqlite(db: &rusqlite::Connection, doc: &Document) -> Result<()> {
 
             create virtual table if not exists fts_{doc_name} using fts5(
                 vec_input, {field_names},
-                content='{doc_name}', content_rowid='id'
+                content='{doc_name}',
+                content_rowid='id', 
+                prefix='2 3 4',
+                tokenize='unicode61 remove_diacritics 1'
             );
 
             create virtual table if not exists vec_{doc_name} using vec0(
@@ -386,20 +400,17 @@ pub fn setup_sqlite(db: &rusqlite::Connection, doc: &Document) -> Result<()> {
 
     debug!(?statement);
 
-    db.execute_batch(&statement)
+    conn.execute_batch(&statement)
         .map_err(|err| eyre!(err))
-        .expect("Should be a C compatible string");
-
-    // TODO: Decidir si es necesario crear un index por cada campo que pueda ser comparado en un
-    // where. Esto porque en la busqueda hago LOWER() sobre esos campos.
+        .expect("Should be a valid SQL sentence");
 
     Ok(())
 }
 
-pub fn insert_base_data(db: &rusqlite::Connection, doc: &Document) -> Result<()> {
+pub fn insert_base_data(conn: &rusqlite::Connection, doc: &Document) -> Result<()> {
     let doc_name = doc.name.clone();
 
-    let num: usize = db.query_row(&format!("select count(*) from {doc_name}"), [], |row| {
+    let num: usize = conn.query_row(&format!("select count(*) from {doc_name}"), [], |row| {
         row.get(0)
     })?;
 
@@ -410,7 +421,7 @@ pub fn insert_base_data(db: &rusqlite::Connection, doc: &Document) -> Result<()>
     }
 
     let start = std::time::Instant::now();
-    let db_path = db.path().expect("Should be able to access db path");
+    let db_path = conn.path().expect("Should be able to access db path");
 
     eprintln!("📁 Searching files in \"./datasources/{doc_name}\"...");
 
@@ -423,8 +434,8 @@ pub fn insert_base_data(db: &rusqlite::Connection, doc: &Document) -> Result<()>
     );
 
     let start = std::time::Instant::now();
-    db.execute("BEGIN TRANSACTION", [])
-        .expect("Should be a C compatible string");
+    conn.execute("BEGIN TRANSACTION", [])
+        .expect("Should be a valid SQL sentence");
 
     let fields_str = {
         let fields: Vec<String> = doc
@@ -438,7 +449,7 @@ pub fn insert_base_data(db: &rusqlite::Connection, doc: &Document) -> Result<()>
     };
 
     let sql_statement = doc.generate_vec_input();
-    let mut statement = db.prepare(&format!(
+    let mut statement = conn.prepare(&format!(
         "insert or ignore into {doc_name} ({fields_str}, vec_input)
             select {fields_str}, {sql_statement} as vec_input from {doc_name}_raw; "
     ))?;
@@ -454,8 +465,8 @@ pub fn insert_base_data(db: &rusqlite::Connection, doc: &Document) -> Result<()>
         if inserted == 0 { "No new entries." } else { "" }
     );
 
-    db.execute("COMMIT", [])
-        .expect("Should be a C compatible string");
+    conn.execute("COMMIT", [])
+        .expect("Should be a valid SQL sentence");
 
     Ok(())
 }
@@ -675,8 +686,9 @@ fn validate_sql_identifier(name: &str) -> Result<()> {
         return Err(eyre!("Invalid identifier length"));
     }
 
-    if !name.chars().next().unwrap().is_alphabetic() {
-        return Err(eyre!("Identifier must start with letter"));
+    match name.chars().next() {
+        Some(first) if first.is_alphabetic() => (),
+        _ => return Err(eyre!("Identifier must start with a letter")),
     }
 
     if !name.chars().all(|c| c.is_alphanumeric() || c == '_') {
@@ -684,9 +696,8 @@ fn validate_sql_identifier(name: &str) -> Result<()> {
     }
 
     // Prevent SQL keywords (basic list)
-    let keywords = ["SELECT", "DROP", "DELETE", "UPDATE", "INSERT", "TABLE"];
-    if keywords.contains(&name.to_uppercase().as_str()) {
-        return Err(eyre!("Identifier cannot be SQL keyword"));
+    if KEYWORDS.contains(&name.to_ascii_uppercase().as_str()) {
+        return Err(eyre!("Identifier cannot be an SQL keyword"));
     }
 
     Ok(())
