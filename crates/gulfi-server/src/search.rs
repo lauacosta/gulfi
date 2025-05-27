@@ -300,7 +300,9 @@ impl SearchStrategy {
                             for (i, cons) in values.iter().enumerate() {
                                 let param_name = format!(":{k}_{i}");
                                 let condition = match cons {
-                                    Exact(_) => format!("LOWER({k}) = LOWER({param_name})"),
+                                    Exact(_) => {
+                                        format!("LOWER({k}) like LOWER('%' || {param_name} || '%')")
+                                    }
                                     GreaterThan(_) => format!("{k} > {param_name}"),
                                     LesserThan(_) => format!("{k} < {param_name}"),
                                 };
