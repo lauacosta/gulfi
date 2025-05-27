@@ -183,7 +183,7 @@ impl SearchStrategy {
                     tokio::task::spawn_blocking( move || -> QueryResult  {
                     let result = match search_strategy {
                         SearchStrategy::Semantic => {
-                            /// TODO: Should add caching for the same embedding.
+                            // TODO: Should add caching for the same embedding.
                             let embedding = query_emb.ok_or_else(|| HttpError::Internal { err: "failed to create embedding".to_owned()})?;
                             let embedding = embedding.as_bytes();
 
