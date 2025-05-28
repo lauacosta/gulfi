@@ -1,4 +1,4 @@
-use clap::{crate_name, crate_version};
+use clap::crate_version;
 use gulfi_common::Document;
 use gulfi_server::{ApplicationSettings, startup::run_server};
 use std::{net::IpAddr, time::Instant};
@@ -22,7 +22,7 @@ pub fn start_server(
     #[cfg(debug_assertions)] mode: &Mode,
 ) -> Result<(), CliError> {
     let start = Instant::now();
-    let name = crate_name!().to_owned();
+    let name = String::from("Gulfi");
     let version = crate_version!().to_owned();
 
     let configuration = ApplicationSettings::new(name, version, port, interface, open);

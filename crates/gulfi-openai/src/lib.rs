@@ -240,7 +240,7 @@ pub async fn embed_vec_with_progress(
     Ok((embedding, total_elapsed))
 }
 
-#[instrument(name = "Generating embedding from query", skip(input, client))]
+#[instrument(name = "embed.request", skip(input, client))]
 pub async fn embed_single(input: String, client: &Client) -> Result<Vec<f32>> {
     let global_start = Instant::now();
 

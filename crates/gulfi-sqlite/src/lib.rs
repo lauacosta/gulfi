@@ -451,7 +451,7 @@ pub fn insert_base_data(conn: &rusqlite::Connection, doc: &Document) -> Result<(
     let sql_statement = doc.generate_vec_input();
     let mut statement = conn.prepare(&format!(
         "insert or ignore into {doc_name} ({fields_str}, vec_input)
-            select {fields_str}, {sql_statement} as vec_input from {doc_name}_raw; "
+        select {fields_str}, {sql_statement} as vec_input from {doc_name}_raw; "
     ))?;
 
     let inserted = statement
@@ -498,7 +498,7 @@ fn compare_records(mut records: Vec<String>, mut headers: Vec<String>) -> eyre::
         (missing, []) => Err(eyre!("File has missing fields: {missing:?}")),
 
         (missing, extra) => Err(eyre!(
-            "File doesnt have fields: {missing:?} but has unsupported fields: {extra:?}"
+            "File doesn't have fields: {missing:?} but has unsupported fields: {extra:?}"
         )),
     }
 }

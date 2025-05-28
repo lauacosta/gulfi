@@ -27,12 +27,13 @@
         }
     }
 
-    $inspect(historialItems);
-
     async function deleteHistorialItem(id: number, queryText: string) {
         try {
+            let delete_url = 
+                `${apiUrl}/api/${$selectedDocument}/historial?query=${encodeURIComponent(queryText)}`;
+
             const deleteResponse = await fetch(
-                `${apiUrl}/api/${$selectedDocument}/historial?query=${encodeURIComponent(queryText)}`,
+                delete_url,
                 {
                     method: "DELETE",
                 },

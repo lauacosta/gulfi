@@ -29,7 +29,7 @@ use tracing::{Level, debug_span, error, info};
 use crate::ApplicationSettings;
 use crate::routes::{
     add_favoritos, auth, delete_favoritos, delete_historial, documents, favoritos, health_check,
-    historial, historial_full, search, serve_ui,
+    historial_detailed, historial_summary, search, serve_ui,
 };
 use crate::search::SearchStrategy;
 
@@ -158,8 +158,11 @@ impl Application {
 
 pub fn build_server(listener: TcpListener, state: ServerState) -> Result<Serve<Router, Router>> {
     let historial_routes = Router::new()
-        .route("/:doc/historial", get(historial).delete(delete_historial))
-        .route("/:doc/historial-full", get(historial_full));
+        .route(
+            "/:doc/historial",
+            get(historial_summary).delete(delete_historial),
+        )
+        .route("/:doc/historial-full", get(historial_detailed));
 
     let search_routes = Router::new().route("/search", get(search)).layer(
         ServiceBuilder::new()
@@ -180,7 +183,7 @@ pub fn build_server(listener: TcpListener, state: ServerState) -> Result<Serve<R
         .nest("/api", search_routes)
         .nest("/api", historial_routes)
         .route("/api/auth", get(auth))
-        .route("/api/health", get(health_check))
+        .route("/api/health_check", get(health_check))
         .route(
             "/api/:doc/favoritos",
             get(favoritos).post(add_favoritos).delete(delete_favoritos),
@@ -245,7 +248,7 @@ pub async fn run_server(
             let url = format!("http://{}:{}", app.host(), app.port());
 
             eprintln!(
-                "\n\n  {} {} listo en {} ms\n",
+                "\n\n  {} {} ready in {} ms\n",
                 configuration.name.to_uppercase().bold().bright_green(),
                 format!("v{}", configuration.version).green(),
                 start.elapsed().as_millis().bold().bright_white(),

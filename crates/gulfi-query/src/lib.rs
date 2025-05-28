@@ -20,7 +20,7 @@ impl Display for Constraint {
 
 #[derive(Error, Debug)]
 pub enum ParsingError {
-    #[error("Search doesnt have 'query' key.")]
+    #[error("Search doesn't have 'query' key.")]
     MissingQuery,
     #[error("Search is empty.")]
     EmptyInput,

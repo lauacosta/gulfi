@@ -47,7 +47,7 @@ pub struct SearchParams {
 
 type QueryResult = Result<(Vec<String>, Vec<Vec<String>>, usize), HttpError>;
 impl SearchStrategy {
-    #[instrument(name = "Realizando la búsqueda", skip(self, state, client, params), fields(source = tracing::field::Empty))]
+    #[instrument(name = "searching", skip(self, state, client, params), fields(source = tracing::field::Empty))]
     pub async fn search(
         self,
         state: &ServerState,

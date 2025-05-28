@@ -47,6 +47,7 @@
     ] as const;
 
     export const options: RouterOptions<RouteNames> = { routes } as const;
+
 </script>
 
 <Layout>
