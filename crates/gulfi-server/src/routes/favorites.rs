@@ -8,6 +8,7 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::iter::zip;
 use tracing::debug;
+use tracing::info_span;
 
 use crate::into_http::HttpError;
 use axum::extract::State;
@@ -26,17 +27,32 @@ struct Resultados {
     fecha: String,
 }
 
+#[tracing::instrument(name = "favorites.fetch", skip(app))]
 pub async fn favoritos(
     Path(doc): Path<String>,
     State(app): State<ServerState>,
 ) -> Result<Json<serde_json::Value>, HttpError> {
-    let conn_handle = app.pool.acquire().await?;
+    let doc_exists = { app.documents.iter().any(|document| document.name == doc) };
+
+    if !doc_exists {
+        return Err(HttpError::MissingDocument {
+            msg: format!("Document '{doc}' doesn't exists."),
+        });
+    }
+
+    let conn = {
+        let acquire_span = info_span!("conn.acquiring");
+        let _guard = acquire_span.enter();
+        app.pool.acquire().await?
+    };
 
     let favoritos = {
-        let mut statement = conn_handle.prepare(
-        "select id, nombre, data, timestamp, busquedas, tipos from favoritos where doc = :doc order by timestamp desc",
-    )?;
+        let query_span = info_span!("query.favorites");
+        let _guard = query_span.enter();
 
+        let mut statement = conn.prepare(
+            "select id, nombre, data, timestamp, busquedas, tipos from favoritos where doc = :doc order by timestamp desc",
+        )?;
         statement
             .query_map([doc], |row| {
                 let id: u64 = row.get(0).unwrap_or_default();
@@ -94,13 +110,25 @@ struct Busquedas {
     strategy: String,
 }
 
-#[tracing::instrument(skip(app), name = "añadiendo busqueda a favoritos")]
+#[tracing::instrument(skip(app), name = "favorites.add")]
 pub async fn add_favoritos(
     Path(doc): Path<String>,
     State(app): State<ServerState>,
     Json(payload): Json<FavParams>,
 ) -> Result<(StatusCode, String), HttpError> {
-    let conn_handle = app.pool.acquire().await?;
+    let doc_exists = { app.documents.iter().any(|document| document.name == doc) };
+
+    if !doc_exists {
+        return Err(HttpError::MissingDocument {
+            msg: format!("Document '{doc}' doesn't exists."),
+        });
+    }
+
+    let conn = {
+        let acquire_span = info_span!("conn.acquiring");
+        let _guard = acquire_span.enter();
+        app.pool.acquire().await?
+    };
 
     let nombre = payload.nombre.replace(|c: char| c.is_whitespace(), "_");
     let data = payload.data.join(", ");
@@ -122,7 +150,7 @@ pub async fn add_favoritos(
             .collect::<Vec<String>>(),
     )?;
 
-    let mut statement = conn_handle.prepare(
+    let mut statement = conn.prepare(
         "insert into favoritos (nombre, data, doc, busquedas,tipos, timestamp) values (?,?,?,?,?,datetime('now', 'localtime'))",
     )?;
 
@@ -134,16 +162,27 @@ pub async fn add_favoritos(
     ))
 }
 
-#[tracing::instrument(skip(app), name = "borrando busqueda de favoritos")]
+#[tracing::instrument(skip(app), name = "favorites.deleting")]
 pub async fn delete_favoritos(
     Path(doc): Path<String>,
     State(app): State<ServerState>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Result<StatusCode, HttpError> {
-    let conn_handle = app.pool.acquire().await?;
+    let doc_exists = { app.documents.iter().any(|document| document.name == doc) };
 
-    let mut statement =
-        conn_handle.prepare("delete from favoritos where nombre = ? and doc = ?")?;
+    if !doc_exists {
+        return Err(HttpError::MissingDocument {
+            msg: format!("Document '{doc}' doesn't exists."),
+        });
+    }
+
+    let conn = {
+        let acquire_span = info_span!("conn.acquiring");
+        let _guard = acquire_span.enter();
+        app.pool.acquire().await?
+    };
+
+    let mut statement = conn.prepare("delete from favoritos where nombre = ? and doc = ?")?;
 
     let nombre = {
         if let Some(nombre) = params.get("nombre") {

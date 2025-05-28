@@ -10,7 +10,7 @@ use axum::{
 };
 use http::StatusCode;
 use rusqlite::Connection;
-use tracing::debug;
+use tracing::{debug, info_span};
 
 use crate::{
     HistorialView,
@@ -20,14 +20,27 @@ use crate::{
 };
 
 #[axum::debug_handler]
-pub async fn historial(
+#[tracing::instrument(name = "history.fetch_summary", skip(app))]
+pub async fn historial_summary(
     Path(doc): Path<String>,
     State(app): State<ServerState>,
 ) -> eyre::Result<Json<Vec<HistorialView>>, HttpError> {
-    let conn_handle = app.pool.acquire().await?;
+    let doc_exists = { app.documents.iter().any(|document| document.name == doc) };
+
+    if !doc_exists {
+        return Err(HttpError::MissingDocument {
+            msg: format!("Document '{doc}' doesn't exists."),
+        });
+    }
+
+    let conn = {
+        let acquire_span = info_span!("conn.acquiring");
+        let _guard = acquire_span.enter();
+        app.pool.acquire().await?
+    };
 
     let result = get_historial(
-        &conn_handle,
+        &conn,
         "select id, query from historial where doc = :doc order by timestamp desc",
         |row| {
             let id: u64 = row.get(0).unwrap_or_default();
@@ -44,15 +57,27 @@ pub async fn historial(
 }
 
 #[axum::debug_handler]
-#[tracing::instrument(name = "Consultando el historial", skip(app))]
-pub async fn historial_full(
+#[tracing::instrument(name = "history.fetch_detailed", skip(app))]
+pub async fn historial_detailed(
     Path(doc): Path<String>,
     State(app): State<ServerState>,
 ) -> eyre::Result<Json<Vec<HistorialFullView>>, HttpError> {
-    let conn_handle = app.pool.acquire().await?;
+    let doc_exists = { app.documents.iter().any(|document| document.name == doc) };
+
+    if !doc_exists {
+        return Err(HttpError::MissingDocument {
+            msg: format!("Document '{doc}' doesn't exists."),
+        });
+    }
+
+    let conn = {
+        let acquire_span = info_span!("conn.acquiring");
+        let _guard = acquire_span.enter();
+        app.pool.acquire().await?
+    };
 
     let result = get_historial(
-        &conn_handle,
+        &conn,
         "select id, query, strategy, peso_fts, peso_semantic, neighbors, timestamp from historial where doc = :doc order by timestamp desc",
         |row| {
             let id: u64 = row.get(0).unwrap_or_default();
@@ -101,15 +126,27 @@ pub async fn historial_full(
     Ok(Json(result))
 }
 
-#[tracing::instrument(skip(app), name = "borrando busqueda del historial")]
+#[tracing::instrument(skip(app), name = "history.deleting")]
 pub async fn delete_historial(
     Path(doc): Path<String>,
     State(app): State<ServerState>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Result<StatusCode, HttpError> {
-    let conn_handle = app.pool.acquire().await?;
+    let doc_exists = { app.documents.iter().any(|document| document.name == doc) };
 
-    let mut statement = conn_handle.prepare("delete from historial where query = ? and doc = ?")?;
+    if !doc_exists {
+        return Err(HttpError::MissingDocument {
+            msg: format!("Document '{doc}' doesn't exists."),
+        });
+    }
+
+    let conn = {
+        let acquire_span = info_span!("conn.acquiring");
+        let _guard = acquire_span.enter();
+        app.pool.acquire().await?
+    };
+
+    let mut statement = conn.prepare("delete from historial where query = ? and doc = ?")?;
 
     let query = {
         if let Some(query) = params.get("query") {
@@ -127,11 +164,16 @@ pub async fn delete_historial(
     Ok(StatusCode::OK)
 }
 
-fn get_historial<T, U>(db: &Connection, query: &str, f: U, doc: String) -> Result<Vec<T>, HttpError>
+fn get_historial<T, U>(
+    conn: &Connection,
+    query: &str,
+    f: U,
+    doc: String,
+) -> Result<Vec<T>, HttpError>
 where
     U: Fn(&Row) -> Result<T, rusqlite::Error>,
 {
-    let mut statement = db.prepare(query)?;
+    let mut statement = conn.prepare_cached(query)?;
 
     let rows = statement
         .query_map([doc], |row| f(row))?

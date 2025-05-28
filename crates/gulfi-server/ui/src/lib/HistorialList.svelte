@@ -1,50 +1,53 @@
 <script lang="ts">
-    import { getBgColor } from "../lib/utils";
-    import type Historial from "../lib/types";
-    export let items: Historial[];
-    import Empty from "../lib/Empty.svelte";
-    import { selectedDocument } from "../stores";
+import { getBgColor } from "../lib/utils";
+import type { Historial } from "../lib/types";
+export let items: Historial[];
+import Empty from "../lib/Empty.svelte";
+import { selectedDocument } from "../stores";
 
-    const apiUrl = import.meta.env.VITE_API_URL;
+const apiUrl = import.meta.env.VITE_API_URL;
 
-    const strategyLabels = {
-        Fts: "Full Text Search",
-        Semantic: "Búsqueda semántica",
-        ReciprocalRankFusion: "ReciprocalRankFusion",
-    };
+const strategyLabels = {
+	Fts: "Full Text Search",
+	Semantic: "Búsqueda semántica",
+	ReciprocalRankFusion: "ReciprocalRankFusion",
+};
 
-    async function deleteHistorialItem(id: number, queryText: string) {
-        try {
-            const deleteResponse = await fetch(
-                `${apiUrl}/api/${selectedDocument}/historial?query=${encodeURIComponent(queryText)}`,
-                {
-                    method: "DELETE",
-                },
-            );
+async function deleteHistorialItem(id: number, queryText: string) {
+	try {
+		if (!$selectedDocument) {
+			console.error("No document selected");
+			return;
+		}
+		const delete_url = `${apiUrl}/api/${$selectedDocument}/historial?query=${encodeURIComponent(queryText)}`;
 
-            if (deleteResponse.ok) {
-                items = items.filter((item) => item.id !== id);
-            } else {
-                throw Error("Error al eliminar el elemento.");
-            }
-        } catch (error) {
-            console.error(
-                "Ha ocurrido un error al intentar eliminar el elemento.",
-            );
-        }
-    }
+		console.log(delete_url);
 
-    function buildQueryString(item: Historial) {
-        const params = new URLSearchParams();
-        params.append("query", `${item.query}, ${item.filters}`);
-        params.append("strategy", item.strategy);
-        params.append("doc", item.doc);
-        params.append("peso_fts", item.peso_fts.toString());
-        params.append("peso_semantic", item.peso_semantic.toString());
-        params.append("neighbors", item.neighbors.toString());
+		const deleteResponse = await fetch(delete_url, {
+			method: "DELETE",
+		});
 
-        return `/?${params.toString()}`;
-    }
+		if (deleteResponse.ok) {
+			items = items.filter((item) => item.id !== id);
+		} else {
+			throw Error("Error al eliminar el elemento.");
+		}
+	} catch (error) {
+		console.error("Ha ocurrido un error al intentar eliminar el elemento.");
+	}
+}
+
+function buildQueryString(item: Historial) {
+	const params = new URLSearchParams();
+	params.append("query", `${item.query}, ${item.filters}`);
+	params.append("strategy", item.strategy);
+	params.append("doc", item.doc);
+	params.append("peso_fts", item.peso_fts.toString());
+	params.append("peso_semantic", item.peso_semantic.toString());
+	params.append("neighbors", item.neighbors.toString());
+
+	return `/?${params.toString()}`;
+}
 </script>
 
 <div>

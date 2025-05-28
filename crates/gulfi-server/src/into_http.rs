@@ -25,6 +25,10 @@ impl<T: IntoResponse> IntoHttp for T {
 
 #[derive(Debug)]
 pub enum HttpError {
+    AuthError {
+        msg: String,
+        err: String,
+    },
     MissingDocument {
         msg: String,
     },
@@ -108,6 +112,13 @@ impl IntoResponse for HttpError {
                 Json(json!( { "msg":msg, "date": date } )),
             )
                 .into_response(),
+
+            HttpError::AuthError { msg, err } => (
+                StatusCode::BAD_REQUEST,
+                Json(json!( { "msg":msg, "err": err, "date": date } )),
+            )
+                .into_response(),
+
             HttpError::Internal { err } => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!( { "err":err, "date":date })),

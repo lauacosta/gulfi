@@ -15,7 +15,7 @@ pub(crate) struct AuthParams {
     password: String,
 }
 
-#[tracing::instrument(skip(app, payload), name = "generando nuevo auth_token", fields(username =  %payload.username))]
+#[tracing::instrument(skip(app, payload), name = "auth.new_token", fields(username =  %payload.username))]
 pub async fn auth(
     State(app): State<ServerState>,
     Json(payload): Json<AuthParams>,
@@ -31,13 +31,18 @@ pub async fn auth(
     let mut stmt =
         conn.prepare_cached("SELECT id, username, password_hash FROM users WHERE username = ?")?;
 
-    let (id, username, password_hash) = stmt.query_row(params![username], |row| {
-        let id: usize = row.get(0)?;
-        let username: String = row.get(1)?;
-        let password_hash: String = row.get(2)?;
+    let (id, username, password_hash) = stmt
+        .query_row(params![username], |row| {
+            let id: usize = row.get(0)?;
+            let username: String = row.get(1)?;
+            let password_hash: String = row.get(2)?;
 
-        Ok((id, username, password_hash))
-    })?;
+            Ok((id, username, password_hash))
+        })
+        .map_err(|err| HttpError::AuthError {
+            msg: format!("username '{username}' doesn't exists."),
+            err: err.to_string(),
+        })?;
 
     let parsed_hash = match PasswordHash::new(&password_hash) {
         Ok(h) => h,
@@ -59,7 +64,7 @@ pub async fn auth(
     }
 
     let token: String = {
-        let generate_span = info_span!("auth.generate_token_string", %username);
+        let generate_span = info_span!("auth.gen_token", %username);
         let _guard = generate_span.enter();
         rand::rng()
             .sample_iter(&Alphanumeric)

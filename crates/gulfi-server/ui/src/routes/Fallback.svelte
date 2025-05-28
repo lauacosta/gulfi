@@ -19,20 +19,20 @@
             />
         </svg>
     </div>
-    <h1 class="error_title">Error Encontrado</h1>
+    <h1 class="error_title">Page not found</h1>
     <div class="error_timestamp">{date}</div>
     <p class="error_message">
-        Ha ocurrido un error. Por favor, intente nuevamente o busque ayuda.
+        An error ocurred. Please, try again or go to the <a href="/"> homepage </a>
     </p>
     <div class="error_details">{err}</div>
-    <div class="button_group">
-        <a href="" class="button primary_button" role="button"
-            >Intentar Nuevamente</a
-        >
-        <a href="/" class="button secondary_button" role="button"
-            >Volver al Inicio</a
-        >
-    </div>
+    <!-- <div class="button_group"> -->
+    <!--     <a href="" class="button primary_button" role="button" -->
+    <!--         >Intentar Nuevamente</a -->
+    <!--     > -->
+    <!--     <a href="/" class="button secondary_button" role="button" -->
+    <!--         >Volver al Inicio</a -->
+    <!--     > -->
+    <!-- </div> -->
 </div>
 
 <style>

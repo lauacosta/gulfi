@@ -1,8 +1,8 @@
 mod serve_ui;
 pub use serve_ui::*;
 
-mod favoritos;
-pub use favoritos::*;
+mod favorites;
+pub use favorites::*;
 
 mod auth;
 pub use auth::*;
@@ -10,11 +10,11 @@ pub use auth::*;
 mod health_check;
 pub use health_check::*;
 
-mod historial;
-pub use historial::*;
+mod history;
+pub use history::*;
 
 pub(crate) mod search;
 pub use search::*;
 
-mod documentos;
-pub use documentos::*;
+mod documents;
+pub use documents::*;
