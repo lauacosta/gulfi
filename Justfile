@@ -33,12 +33,9 @@ check_report:
     cargo deduplicate-warnings < clippy_raw.json > clippy.json
 
 # Runs the test suite
-test:
-    cargo test --locked --all-features --all-targets
 
-# Runs the test suite and uses cargo2junit to generate a XML report
-junit:
-    RUSTC_BOOTSTRAP=1 cargo test -- -Z unstable-options --format json --report-time | cargo2junit > results.xml
+test:
+    cargo nextest r --locked --all-features --all-targets --profile ci
 
 # Builds the UI
 build-ui:

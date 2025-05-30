@@ -83,12 +83,12 @@ jobs:
       - shadesmar/with_rust:
           steps:
             - run: |
-                just junit
+                just test
 
             - persist_to_workspace:
                 root: /root/project
                 paths:
-                  - report.xml
+                  - junit.xml
 
       - slack/notify:
           event: fail
