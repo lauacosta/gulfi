@@ -4,6 +4,7 @@ orbs:
   shadesmar: shadesmar/rust@1.2.0
   node: circleci/node@7.1.0
   slack: circleci/slack@5.1.1
+  sonarcloud: sonarsource/sonarcloud@3.0
 
 workflows:
   version: 2
@@ -18,10 +19,13 @@ workflows:
       - deny:
           context: [aws, slack]
       - build
+      - sonarcloud:
+          context: [slack, sonarqube]
       - update_taiga:
           context: [aws, taiga, slack]
           requires:
             - check
+            - sonarcloud
             - test
             - udeps
             - deny
@@ -95,6 +99,17 @@ jobs:
       - run:
           name: build
           command: cd crates/gulfi-server/ui/ && pnpm build
+
+      - slack/notify:
+          event: fail
+          template: basic_fail_1
+
+  sonarcloud:
+    docker:
+      - image: node:latest
+    steps:
+      - checkout
+      - sonarcloud/scan
 
       - slack/notify:
           event: fail
