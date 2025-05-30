@@ -5,31 +5,52 @@ orbs:
   node: circleci/node@7.1.0
   slack: circleci/slack@5.1.1
   sonarcloud: sonarsource/sonarcloud@3.0
+  codecov: codecov/codecov@5.4.3
 
 workflows:
   version: 2
+
   build_and_test:
     jobs:
       - check:
           context: [aws, slack]
-      - test:
-          context: [aws, slack]
+
+      - test_and_coverage: 
+          context: [aws, slack, codecov]
+
       - udeps:
           context: [aws, slack]
+
       - deny:
           context: [aws, slack]
-      - build
+
+      - audit:
+          context: [aws, slack]
+
+      - cargo-sonar:
+          context: [aws, slack]
+          requires:
+            - check
+            - audit
+            - deny
+            - udeps
+
+      - build-ui:
+          context: [slack]
+          
       - sonarcloud:
-          context: [slack, sonarqube]
+          context: [aws, slack, sonarqube]
+          requires:
+            - cargo-sonar
+
       - update_taiga:
           context: [aws, taiga, slack]
           requires:
             - check
-            - sonarcloud
-            - test
-            - udeps
+            - test_and_coverage
+            - audit
             - deny
-            - build 
+            - udeps
 
 jobs:
   check:
@@ -39,20 +60,38 @@ jobs:
       - shadesmar/with_rust:
           steps:
             - run: |
-                just check
+                just check_report
+            - persist_to_workspace:
+                root: /root/project
+                paths:
+                  - clippy.json
 
       - slack/notify:
           event: fail
           template: basic_fail_1
 
-  test:
+  # test:
+  #   executor: shadesmar/rust
+  #   steps:
+  #     - checkout
+  #     - shadesmar/with_rust:
+  #         steps:
+  #           - run: |
+  #               just test
+
+  #     - slack/notify:
+  #         event: fail
+  #         template: basic_fail_1
+
+  test_and_coverage:
     executor: shadesmar/rust
     steps:
       - checkout
       - shadesmar/with_rust:
           steps:
             - run: |
-                just test
+                just coverage
+            - codecov/upload
 
       - slack/notify:
           event: fail
@@ -65,7 +104,12 @@ jobs:
       - shadesmar/with_rust:
           steps:
             - run: |
-                just udeps
+                just udeps_report
+
+            - persist_to_workspace:
+                root: /root/project
+                paths:
+                  - udeps.json
                 
       - slack/notify:
           event: fail
@@ -78,13 +122,56 @@ jobs:
       - shadesmar/with_rust:
           steps:
             - run: |
-                just deny
+                just deny_report
+
+            - persist_to_workspace:
+                root: /root/project
+                paths:
+                  - deny.json
                 
       - slack/notify:
           event: fail
           template: basic_fail_1
 
-  build:
+  audit:
+    executor: shadesmar/rust
+    steps:
+      - checkout
+      - shadesmar/with_rust:
+          steps:
+            - run: |
+                just audit_report
+
+            - persist_to_workspace:
+                root: /root/project
+                paths:
+                  - audit.json
+                
+      - slack/notify:
+          event: fail
+          template: basic_fail_1
+
+  cargo-sonar:
+    executor: shadesmar/rust
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /root/project
+      - shadesmar/with_rust:
+          steps:
+            - run: |
+                just sonar
+
+            - persist_to_workspace:
+                root: /root/project
+                paths:
+                  - sonar-issues.json
+                
+      - slack/notify:
+          event: fail
+          template: basic_fail_1
+
+  build-ui:
     docker:
       - image: cimg/base:stable
     steps:
@@ -109,8 +196,9 @@ jobs:
       - image: node:latest
     steps:
       - checkout
+      - attach_workspace:
+          at: /root/project
       - sonarcloud/scan
-
       - slack/notify:
           event: fail
           template: basic_fail_1
