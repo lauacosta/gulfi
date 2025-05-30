@@ -91,7 +91,13 @@ jobs:
           steps:
             - run: |
                 just coverage
+
             - codecov/upload
+
+            - persist_to_workspace:
+                root: /root/project
+                paths:
+                  - lcov.info
 
       - slack/notify:
           event: fail
