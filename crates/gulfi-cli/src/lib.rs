@@ -55,6 +55,10 @@ pub enum Command {
         #[clap(short = 'P', long, default_value_t = 3000)]
         port: u16,
 
+        /// Number of sqlite connections in the pool.
+        #[clap(long, default_value_t = 10)]
+        pool_size: usize,
+
         /// Opens the web interface.
         #[arg(long, default_value = "false")]
         open: bool,

@@ -409,7 +409,7 @@ impl SearchStrategy {
             query.query, total_query_count,
         );
 
-        if let Err(e) = state.writer.send(WriteJob::Historial {
+        if let Err(e) = state.writer.send(WriteJob::History {
             query: params.search_str,
             doc: params.document,
             strategy: params.strategy,

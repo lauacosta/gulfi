@@ -27,17 +27,26 @@ pub struct ApplicationSettings {
     pub port: u16,
     pub host: IpAddr,
     pub open: bool,
+    pub pool_size: usize,
 }
 
 impl ApplicationSettings {
     #[must_use]
-    pub fn new(name: String, version: String, port: u16, host: IpAddr, open: bool) -> Self {
+    pub fn new(
+        name: String,
+        version: String,
+        port: u16,
+        host: IpAddr,
+        open: bool,
+        pool_size: usize,
+    ) -> Self {
         Self {
             name,
             version,
             port,
             host,
             open,
+            pool_size,
         }
     }
 }

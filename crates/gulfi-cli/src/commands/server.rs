@@ -18,6 +18,7 @@ pub fn start_server(
     interface: IpAddr,
     port: u16,
     open: bool,
+    pool_size: usize,
     documents: Vec<Document>,
     #[cfg(debug_assertions)] mode: &Mode,
 ) -> Result<(), CliError> {
@@ -25,7 +26,7 @@ pub fn start_server(
     let name = String::from("Gulfi");
     let version = crate_version!().to_owned();
 
-    let configuration = ApplicationSettings::new(name, version, port, interface, open);
+    let configuration = ApplicationSettings::new(name, version, port, interface, open, pool_size);
 
     let rt = tokio::runtime::Runtime::new()?;
 
