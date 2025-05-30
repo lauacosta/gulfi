@@ -18,16 +18,23 @@ workflows:
 
       - udeps:
           context: [aws, slack]
+          requires:
+            - check
 
       - deny:
           context: [aws, slack]
+          requires:
+            - check
 
       - audit:
           context: [aws, slack]
+          requires:
+            - check
 
       - cargo-sonar:
           context: [aws, slack]
           requires:
+            - check
             - test
             - audit
             - deny
@@ -53,11 +60,11 @@ jobs:
       - shadesmar/with_rust:
           steps:
             - run: |
-                just check
-            # - persist_to_workspace:
-            #     root: /root/project
-            #     paths:
-            #       - clippy.json
+                just check_report
+            - persist_to_workspace:
+                root: /root/project
+                paths:
+                  - clippy.json
 
       - slack/notify:
           event: fail
