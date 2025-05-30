@@ -12,24 +12,38 @@ workflows:
     jobs:
       - check:
           context: [aws, slack]
+
       - test:
           context: [aws, slack]
+
       - udeps:
           context: [aws, slack]
+
       - deny:
           context: [aws, slack]
+
+      - audit:
+          context: [aws, slack]
+
+      - cargo-sonar:
+          context: [aws, slack]
+          requires:
+            - test
+            - audit
+            - deny
+            - udeps
+
       - build
+
       - sonarcloud:
-          context: [slack, sonarqube]
+          context: [aws, slack, sonarqube]
+          requires:
+            - cargo-sonar
+
       - update_taiga:
           context: [aws, taiga, slack]
           requires:
-            - check
             - sonarcloud
-            - test
-            - udeps
-            - deny
-            - build 
 
 jobs:
   check:
@@ -39,7 +53,11 @@ jobs:
       - shadesmar/with_rust:
           steps:
             - run: |
-                just check
+                just check_report
+            - persist_to_workspace:
+                root: .
+                paths:
+                  - clippy.json
 
       - slack/notify:
           event: fail
@@ -65,7 +83,12 @@ jobs:
       - shadesmar/with_rust:
           steps:
             - run: |
-                just udeps
+                just udeps_report
+
+            - persist_to_workspace:
+                root: .
+                paths:
+                  - udeps.json
                 
       - slack/notify:
           event: fail
@@ -78,7 +101,48 @@ jobs:
       - shadesmar/with_rust:
           steps:
             - run: |
-                just deny
+                just deny_report
+
+            - persist_to_workspace:
+                root: .
+                paths:
+                  - deny.json
+                
+      - slack/notify:
+          event: fail
+          template: basic_fail_1
+
+  audit:
+    executor: shadesmar/rust
+    steps:
+      - checkout
+      - shadesmar/with_rust:
+          steps:
+            - run: |
+                just audit_report
+
+            - persist_to_workspace:
+                root: .
+                paths:
+                  - audit.json
+                
+      - slack/notify:
+          event: fail
+          template: basic_fail_1
+
+  cargo-sonar:
+    executor: shadesmar/rust
+    steps:
+      - checkout
+      - shadesmar/with_rust:
+          steps:
+            - run: |
+                just sonar
+
+            - persist_to_workspace:
+                root: .
+                paths:
+                  - sonar-issues.json
                 
       - slack/notify:
           event: fail
@@ -109,6 +173,8 @@ jobs:
       - image: node:latest
     steps:
       - checkout
+      - attach_workspace:
+          at: .
       - sonarcloud/scan
 
       - slack/notify:
