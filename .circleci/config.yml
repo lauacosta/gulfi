@@ -15,8 +15,13 @@ workflows:
       - check:
           context: [aws, slack]
 
-      - test_and_coverage: 
+      - test:
+          context: [aws, slack]
+
+      - coverage_report:
           context: [aws, slack, codecov]
+          requires:
+            - test
 
       - udeps:
           context: [aws, slack]
@@ -34,6 +39,7 @@ workflows:
             - audit
             - deny
             - udeps
+            - coverage_report
 
       - build-ui:
           context: [slack]
@@ -47,7 +53,7 @@ workflows:
           context: [aws, taiga, slack]
           requires:
             - check
-            - test_and_coverage
+            - test
             - audit
             - deny
             - udeps
@@ -70,20 +76,25 @@ jobs:
           event: fail
           template: basic_fail_1
 
-  # test:
-  #   executor: shadesmar/rust
-  #   steps:
-  #     - checkout
-  #     - shadesmar/with_rust:
-  #         steps:
-  #           - run: |
-  #               just test
+  test:
+    executor: shadesmar/rust
+    steps:
+      - checkout
+      - shadesmar/with_rust:
+          steps:
+            - run: |
+                just junit
 
-  #     - slack/notify:
-  #         event: fail
-  #         template: basic_fail_1
+            - persist_to_workspace:
+                root: /root/project
+                paths:
+                  - report.xml
 
-  test_and_coverage:
+      - slack/notify:
+          event: fail
+          template: basic_fail_1
+
+  coverage_report:
     executor: shadesmar/rust
     steps:
       - checkout

@@ -10,6 +10,7 @@ fmt:
 watch: 
     watchexec -r -e rs -- cargo run -- serve dev
 
+
 # Searches for unused dependencies
 udeps:
     RUSTC_BOOTSTRAP=1 cargo udeps --all-targets --backend depinfo
@@ -35,6 +36,10 @@ check_report:
 test:
     cargo test --locked --all-features --all-targets
 
+# Runs the test suite and uses cargo2junit to generate a XML report
+junit:
+    RUSTC_BOOTSTRAP=1 cargo test -- -Z unstable-options --format json --report-time | cargo2junit > results.xml
+
 # Builds the UI
 build-ui:
     cd ./crates/gulfi-server/ui/ && pnpm build
@@ -59,7 +64,7 @@ sonar:
     cargo sonar --audit --clippy --deny --udeps
 
 coverage:
-    cargo llvm-cov --locked --all-features --lcov --output-path lcov.info
+    cargo llvm-cov report --locked --lcov --output-path lcov.info
 
 ci: fmt check hack test udeps audit deny build-ui
 
