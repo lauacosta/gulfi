@@ -55,7 +55,7 @@ jobs:
             - run: |
                 just check_report
             - persist_to_workspace:
-                root: .
+                root: /project
                 paths:
                   - clippy.json
 
@@ -86,7 +86,7 @@ jobs:
                 just udeps_report
 
             - persist_to_workspace:
-                root: .
+                root: /project
                 paths:
                   - udeps.json
                 
@@ -104,7 +104,7 @@ jobs:
                 just deny_report
 
             - persist_to_workspace:
-                root: .
+                root: /project
                 paths:
                   - deny.json
                 
@@ -122,7 +122,7 @@ jobs:
                 just audit_report
 
             - persist_to_workspace:
-                root: .
+                root: /project
                 paths:
                   - audit.json
                 
@@ -134,13 +134,15 @@ jobs:
     executor: shadesmar/rust
     steps:
       - checkout
+      - attach_workspace:
+          at: /project
       - shadesmar/with_rust:
           steps:
             - run: |
                 just sonar
 
             - persist_to_workspace:
-                root: .
+                root: /project
                 paths:
                   - sonar-issues.json
                 
@@ -174,7 +176,8 @@ jobs:
     steps:
       - checkout
       - attach_workspace:
-          at: .
+          at: /project
+
       - sonarcloud/scan
 
       - slack/notify:
