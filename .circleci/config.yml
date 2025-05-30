@@ -5,43 +5,39 @@ orbs:
   node: circleci/node@7.1.0
   slack: circleci/slack@5.1.1
   sonarcloud: sonarsource/sonarcloud@3.0
+  codecov: codecov/codecov@5.4.3
 
 workflows:
   version: 2
+
   build_and_test:
     jobs:
       - check:
           context: [aws, slack]
 
-      - test:
-          context: [aws, slack]
+      - test_and_coverage: 
+          context: [aws, slack, codecov]
 
       - udeps:
           context: [aws, slack]
-          requires:
-            - check
 
       - deny:
           context: [aws, slack]
-          requires:
-            - check
 
       - audit:
           context: [aws, slack]
-          requires:
-            - check
 
       - cargo-sonar:
           context: [aws, slack]
           requires:
             - check
-            - test
             - audit
             - deny
             - udeps
 
-      - build
-
+      - build-ui:
+          context: [slack]
+          
       - sonarcloud:
           context: [aws, slack, sonarqube]
           requires:
@@ -51,7 +47,7 @@ workflows:
           context: [aws, taiga, slack]
           requires:
             - check
-            - test
+            - test_and_coverage
             - audit
             - deny
             - udeps
@@ -74,14 +70,28 @@ jobs:
           event: fail
           template: basic_fail_1
 
-  test:
+  # test:
+  #   executor: shadesmar/rust
+  #   steps:
+  #     - checkout
+  #     - shadesmar/with_rust:
+  #         steps:
+  #           - run: |
+  #               just test
+
+  #     - slack/notify:
+  #         event: fail
+  #         template: basic_fail_1
+
+  test_and_coverage:
     executor: shadesmar/rust
     steps:
       - checkout
       - shadesmar/with_rust:
           steps:
             - run: |
-                just test
+                just coverage
+            - codecov/upload
 
       - slack/notify:
           event: fail
@@ -161,7 +171,7 @@ jobs:
           event: fail
           template: basic_fail_1
 
-  build:
+  build-ui:
     docker:
       - image: cimg/base:stable
     steps:
@@ -188,9 +198,7 @@ jobs:
       - checkout
       - attach_workspace:
           at: /root/project
-
       - sonarcloud/scan
-
       - slack/notify:
           event: fail
           template: basic_fail_1

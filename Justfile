@@ -28,7 +28,8 @@ check:
 
 # Runs clippy and generates a json report
 check_report:
-    cargo clippy --locked --message-format=json -- -D warnings -D clippy::unwrap_used  | cargo deduplicate-warnings  > clippy.json
+    cargo clippy --locked --message-format=json -- -D warnings -D clippy::unwrap_used  > clippy_raw.json
+    cargo deduplicate-warnings < clippy_raw.json > clippy.json
 
 # Runs the test suite
 test:
@@ -58,7 +59,7 @@ sonar:
     cargo sonar --audit --clippy --deny --udeps
 
 coverage:
-    cargo tarpaulin
+    cargo llvm-cov --locked --all-features --lcov --output-path lcov.info
 
 ci: fmt check hack test udeps audit deny build-ui
 
