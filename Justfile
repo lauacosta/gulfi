@@ -57,6 +57,9 @@ audit_report:
 sonar:
     cargo sonar --audit --clippy --deny --udeps
 
+coverage:
+    cargo tarpaulin
+
 ci: fmt check hack test udeps audit deny build-ui
 
 validate-ci:

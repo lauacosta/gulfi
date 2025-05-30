@@ -50,7 +50,11 @@ workflows:
       - update_taiga:
           context: [aws, taiga, slack]
           requires:
-            - sonarcloud
+            - check
+            - test
+            - audit
+            - deny
+            - udeps
 
 jobs:
   check:
