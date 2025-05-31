@@ -8,8 +8,14 @@ license.workspace = true
 tower = { version = "0.5.0", features = ["limit", "buffer"] }
 tower-http = { version = "0.5.2", features = ["compression-gzip", "cors", "fs", "trace"] }
 tower-request-id = "0.3.0"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json"] }
+tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json", "time"] }
 mime_guess = "2.0.5"
+webbrowser = "1.0.3"
+include_dir = "0.7.4"
+termcolor = "1.4.1"
+rand = "0.9.1"
+moka = { version = "0.12.10", features = ["future", "logging"] }
+tracing-error = "0.2.0"
 
 eyre.workspace = true
 thiserror.workspace = true
@@ -20,21 +26,20 @@ tokio.workspace = true
 rusqlite.workspace = true
 reqwest.workspace = true
 serde.workspace = true
+serde-aux.workspace = true
 serde_json.workspace = true
 http.workspace = true
 zerocopy.workspace = true
 serde_urlencoded.workspace = true
 chrono.workspace = true
 argon2.workspace = true
+config.workspace = true
 password-hash.workspace = true
+secrecy.workspace = true
 
 gulfi-query = { path = "../gulfi-query/"}
 gulfi-sqlite= { path = "../gulfi-sqlite/"}
 gulfi-common = { path = "../gulfi-common/"}
 gulfi-openai = { path = "../gulfi-openai/"}
+tracing-log = "0.2.0"
 
-webbrowser = "1.0.3"
-include_dir = "0.7.4"
-termcolor = "1.4.1"
-rand = "0.9.1"
-moka = { version = "0.12.10", features = ["future", "logging"] }

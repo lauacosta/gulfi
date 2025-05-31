@@ -18,7 +18,7 @@ use csv::ReaderBuilder;
 use eyre::{Result, eyre};
 use futures::StreamExt;
 use gulfi_common::{DataSources, Document, clean_html, normalize, parse_sources};
-use gulfi_openai::embed_vec_with_progress;
+use gulfi_openai::OpenAIClient;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rusqlite::{
     Connection,
@@ -38,6 +38,7 @@ pub async fn sync_vec_data(
     doc: &Document,
     base_delay: u64,
     chunk_size: usize,
+    client: &OpenAIClient,
 ) -> Result<(usize, f32)> {
     let doc_name = doc.name.clone();
     validate_sql_identifier(&doc_name).expect("Should be a safe identifier");
@@ -66,7 +67,7 @@ pub async fn sync_vec_data(
 
     let chunks = v_inputs.chunks(chunk_size).count();
 
-    let client = reqwest::ClientBuilder::new()
+    let http_client = reqwest::ClientBuilder::new()
         .deflate(true)
         .gzip(true)
         .build()?;
@@ -116,7 +117,7 @@ pub async fn sync_vec_data(
                 status_pb.finish();
             });
 
-            embed_vec_with_progress(indices, v_inputs, &client, proc_id, base_delay, tx)
+            client.embed_vec_with_progress(indices, v_inputs, &http_client, proc_id, base_delay, tx)
         });
 
     let futures_stream = futures::stream::iter(futures_iterator);
@@ -246,7 +247,7 @@ pub fn sync_fts_data(conn: &Connection, doc: &Document) -> usize {
     inserted
 }
 
-pub fn spawn_vec_connection(db_path: &str) -> Result<Connection, rusqlite::Error> {
+pub fn spawn_vec_connection<P: AsRef<Path>>(db_path: P) -> Result<Connection, rusqlite::Error> {
     unsafe {
         sqlite3_auto_extension(Some(std::mem::transmute::<
             *const (),

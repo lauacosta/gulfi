@@ -1,55 +1,24 @@
+pub mod configuration;
 pub mod extractors;
 pub mod into_http;
 pub mod routes;
 pub mod search;
 pub mod startup;
+pub mod telemetry;
 pub mod views;
 
 use include_dir::{Dir, include_dir};
-use rusqlite::types::FromSql;
-use rusqlite::types::FromSqlError;
-use rusqlite::types::FromSqlResult;
-use rusqlite::types::ValueRef;
-use rusqlite::{ToSql, types::ToSqlOutput};
+use rusqlite::{
+    ToSql,
+    types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, ValueRef},
+};
 use search::SearchStrategy;
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt::{Display, Formatter};
-use std::net::IpAddr;
 use views::HistorialView;
 
 pub static ASSETS: Dir = include_dir!("$CARGO_MANIFEST_DIR/ui/dist");
-
-#[derive(Debug, Clone)]
-pub struct ApplicationSettings {
-    pub name: String,
-    pub version: String,
-    pub port: u16,
-    pub host: IpAddr,
-    pub open: bool,
-    pub pool_size: usize,
-}
-
-impl ApplicationSettings {
-    #[must_use]
-    pub fn new(
-        name: String,
-        version: String,
-        port: u16,
-        host: IpAddr,
-        open: bool,
-        pool_size: usize,
-    ) -> Self {
-        Self {
-            name,
-            version,
-            port,
-            host,
-            open,
-            pool_size,
-        }
-    }
-}
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
 pub enum Sexo {

@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use color_eyre::owo_colors::OwoColorize;
 use eyre::eyre;
 use gulfi_common::{Document, MEMORY_DB_PATH};
@@ -5,13 +7,14 @@ use gulfi_sqlite::{insert_base_data, setup_sqlite, spawn_vec_connection};
 
 use crate::CliError;
 
-pub fn handle(
-    db_path: &str,
+pub fn handle<P: AsRef<Path>>(
+    db_path: P,
     docs: &[Document],
     doc: &str,
     force: bool,
 ) -> Result<Document, CliError> {
-    if db_path.trim() == MEMORY_DB_PATH {
+    let db_path_str = db_path.as_ref().to_string_lossy();
+    if db_path_str.trim() == MEMORY_DB_PATH {
         eprintln!(
             "You are running '{}' in a {}.",
             "Sync".cyan().bold(),

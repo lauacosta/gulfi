@@ -5,7 +5,6 @@ use crate::{
 };
 use axum::Json;
 use eyre::Report;
-use gulfi_openai::embed_single;
 use gulfi_query::{
     Constraint::{self, Exact, GreaterThan, LesserThan},
     Query,
@@ -109,15 +108,18 @@ impl SearchStrategy {
                 } else {
                     let embedding_span = info_span!("embedding.request");
                     let _guard = embedding_span.enter();
-                    let embedding =
-                        Arc::new(embed_single(query.query.clone(), client).await.map_err(
-                            |err| {
+                    let embedding = Arc::new(
+                        state
+                            .embeddings_provider
+                            .embed_single(query.query.clone(), client)
+                            .await
+                            .map_err(|err| {
                                 tracing::error!("{err}");
                                 HttpError::Internal {
                                     err: "Failed to create query embedding".to_string(),
                                 }
-                            },
-                        )?);
+                            })?,
+                    );
 
                     state
                         .embeddings_cache

@@ -3,12 +3,15 @@ use axum::{
     routing::get, serve::Serve,
 };
 use color_eyre::owo_colors::OwoColorize;
-use eyre::{Result, eyre};
+use eyre::Result;
 use gulfi_common::Document;
+use gulfi_openai::OpenAIClient;
 use gulfi_sqlite::{pooling::AsyncConnectionPool, spawn_vec_connection};
 use http::{Method, StatusCode};
 use moka::future::Cache;
 use rusqlite::{Connection, params};
+use secrecy::ExposeSecret;
+use std::path::Path;
 use std::{fmt, io};
 use std::{
     net::IpAddr,
@@ -29,17 +32,19 @@ use tower::ServiceBuilder;
 use tower_request_id::{RequestId, RequestIdLayer};
 use tracing::{Level, debug_span, error, info, info_span, instrument};
 
-use crate::ApplicationSettings;
+use crate::configuration::Settings;
 use crate::routes::{
     add_favoritos, auth, delete_favoritos, delete_historial, documents, favoritos, health_check,
     historial_detailed, historial_summary, search, serve_ui,
 };
+
 use crate::search::SearchStrategy;
 
 #[derive(Debug, Clone)]
 pub struct ServerState {
     pub documents: Vec<Document>,
     pub writer: UnboundedSender<WriteJob>,
+    pub embeddings_provider: OpenAIClient,
     pub pool: AsyncConnectionPool,
     pub embeddings_cache: Cache<String, Arc<Vec<f32>>>,
 }
@@ -58,17 +63,33 @@ impl Application {
     /// # Panics
     /// It panics if it's not able to get a port for the given address.
     ///
-    pub async fn build(
-        configuration: &ApplicationSettings,
-        documents: Vec<Document>,
-    ) -> Result<Self> {
-        let address = format!("{}:{}", configuration.host, configuration.port);
+    pub async fn build(configuration: &Settings, documents: Vec<Document>) -> Result<Self> {
+        let pool_size = configuration.db_settings.pool_size;
+        let db_path = configuration.db_settings.db_path.clone();
+        let pool = AsyncConnectionPool::new(pool_size, || spawn_vec_connection(&db_path))?;
 
+        // TODO: A more generic Client for embeddings
+        let embeddings_provider = OpenAIClient::new(
+            configuration
+                .embedding_provider
+                .auth_token
+                .clone()
+                .expose_secret()
+                .to_string(),
+            configuration.embedding_provider.endpoint_url.clone(),
+        );
+
+        let address = format!(
+            "{}:{}",
+            configuration.app_settings.host, configuration.app_settings.port
+        );
+
+        let host = configuration.app_settings.host;
         let listener = match TcpListener::bind(&address).await {
             Ok(listener) => listener,
             Err(err) => {
                 error!("{err}. Trying with another port...");
-                match TcpListener::bind(format!("{}:0", configuration.host)).await {
+                match TcpListener::bind(format!("{host}:0")).await {
                     Ok(listener) => listener,
                     Err(err) => {
                         error!("There aren't available ports, closing application...");
@@ -83,23 +104,12 @@ impl Application {
             .expect("It should be able to find the locall address")
             .port();
 
-        let host = configuration.host;
-
-        let db_path = std::env::var("DATABASE_URL").map_err(|err| {
-            eyre!(
-                "Environment variable `DATABASE_URL` is not set. Err: {}",
-                err
-            )
-        })?;
-
-        let pool =
-            AsyncConnectionPool::new(configuration.pool_size, || spawn_vec_connection(&db_path))?;
-
         let writer = spawn_writer_task(&db_path)?;
 
         let state = ServerState {
             documents,
             writer,
+            embeddings_provider,
             pool,
             embeddings_cache: Cache::builder()
                 // TTL
@@ -109,9 +119,11 @@ impl Application {
                 .build(),
         };
 
-        let server = build_server(listener, state)?;
-
-        Ok(Self { port, host, server })
+        Ok(Self {
+            port,
+            host,
+            server: build_server(listener, state)?,
+        })
     }
 
     pub fn port(&self) -> u16 {
@@ -243,18 +255,21 @@ pub fn build_server(listener: TcpListener, state: ServerState) -> Result<Serve<R
 }
 
 pub async fn run_server(
-    configuration: ApplicationSettings,
+    configuration: Settings,
     start: Instant,
     documents: Vec<Document>,
+    open: bool,
 ) -> Result<()> {
     match Application::build(&configuration, documents).await {
         Ok(app) => {
             let url = format!("http://{}:{}", app.host(), app.port());
+            let name = configuration.app_settings.name;
+            let version = env!("CARGO_PKG_VERSION");
 
             eprintln!(
                 "\n\n  {} {} ready in {} ms\n",
-                configuration.name.to_uppercase().bold().bright_green(),
-                format!("v{}", configuration.version).green(),
+                name.to_uppercase().bold().bright_green(),
+                format!("v{}", version).green(),
                 start.elapsed().as_millis().bold().bright_white(),
             );
 
@@ -265,9 +280,7 @@ pub async fn run_server(
                 url.bright_cyan().underline()
             );
 
-            if configuration.open
-                && webbrowser::open_browser(webbrowser::Browser::Default, &url).is_ok()
-            {
+            if open && webbrowser::open_browser(webbrowser::Browser::Default, &url).is_ok() {
                 info!("Se abrirá la aplicación en el navegador predeterminado.");
             }
 
@@ -430,7 +443,7 @@ pub enum WriteJob {
 }
 
 #[instrument(name = "bg_task", fields(db_path, job))]
-fn spawn_writer_task(db_path: &str) -> eyre::Result<mpsc::UnboundedSender<WriteJob>> {
+fn spawn_writer_task<P: AsRef<Path>>(db_path: P) -> eyre::Result<mpsc::UnboundedSender<WriteJob>> {
     let conn = Connection::open(db_path)?;
     let (tx, mut rx) = mpsc::unbounded_channel();
 

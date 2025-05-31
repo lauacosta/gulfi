@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use argon2::{Argon2, PasswordHasher};
 use color_eyre::owo_colors::OwoColorize;
 use gulfi_sqlite::spawn_vec_connection;
@@ -6,7 +8,11 @@ use rusqlite::params;
 
 use crate::CliError;
 
-pub fn create_user(db_path: &str, username: &str, password: &str) -> Result<(), CliError> {
+pub fn create_user<P: AsRef<Path>>(
+    db_path: P,
+    username: &str,
+    password: &str,
+) -> Result<(), CliError> {
     let conn = spawn_vec_connection(db_path)?;
 
     conn.execute_batch(

@@ -1,3 +1,4 @@
+pub mod configuration;
 pub mod documents;
 pub mod list;
 pub mod server;

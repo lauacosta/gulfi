@@ -8,6 +8,8 @@ pub enum CliError {
     MetaOpenError(#[from] std::io::Error),
     #[error("SQLite error: {0}")]
     SqliteError(#[from] rusqlite::Error),
+    #[error("Config error: {0}")]
+    ConfigError(#[from] config::ConfigError),
     #[error("Other: {0}")]
     Other(#[from] eyre::Report),
     #[error("Password hashing failed: {0}")]
@@ -290,6 +292,9 @@ impl CliError {
                     }
                 }
             }
+            CliError::ConfigError(error) => {
+                eprintln!("WIP :): {error}")
+            }
             CliError::Other(error) => {
                 eprintln!("💡 Unexpected error occurred:");
                 eprintln!("   • Error details: {error}");
@@ -306,7 +311,9 @@ impl CliError {
 
     pub fn exit_code(&self) -> i32 {
         match self {
-            CliError::MetaParseError(_) | CliError::HashingError(_) => 10,
+            CliError::MetaParseError(_) | CliError::HashingError(_) | CliError::ConfigError(_) => {
+                10
+            }
             CliError::MetaOpenError(_) => 11,
             CliError::SqliteError(_) => 12,
             CliError::Other(_) => 99,

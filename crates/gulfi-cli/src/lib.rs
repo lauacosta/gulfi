@@ -3,9 +3,10 @@ pub mod commands;
 pub mod helper;
 
 pub use clierror::*;
+pub use gulfi_server::configuration::get_configuration;
 
 use clap::{Parser, Subcommand, ValueEnum, command, crate_version};
-use std::net::IpAddr;
+use std::{net::IpAddr, path::PathBuf};
 
 #[derive(Parser)]
 #[command(version, about,  long_about = None, before_help = format!(r"
@@ -24,8 +25,12 @@ pub struct Cli {
     pub loglevel: String,
 
     /// Path to the sqlite database
-    #[arg(long = "database-path", default_value = "./gulfi.db")]
-    pub db: String,
+    #[arg(long = "database-path")]
+    pub db: Option<PathBuf>,
+
+    /// Path to the metadata file for documents
+    #[arg(long = "meta-file", default_value = "./meta.json")]
+    pub meta_file_path: PathBuf,
 
     #[command(subcommand)]
     command: Option<Command>,
@@ -45,19 +50,20 @@ pub enum Command {
     /// Starts the HTTP server.
     Serve {
         #[cfg(debug_assertions)]
-        #[arg(value_enum)]
+        #[clap(value_enum, long)]
         mode: Mode,
+
         /// Sets the IP address.
-        #[clap(short = 'I', long, default_value = "127.0.0.1")]
-        interface: IpAddr,
+        #[clap(short = 'I', long)]
+        interface: Option<IpAddr>,
 
         /// Sets the port.
-        #[clap(short = 'P', long, default_value_t = 3000)]
-        port: u16,
+        #[clap(short = 'P', long)]
+        port: Option<u16>,
 
         /// Number of sqlite connections in the pool.
-        #[clap(long, default_value_t = 10)]
-        pool_size: usize,
+        #[clap(long)]
+        pool_size: Option<usize>,
 
         /// Opens the web interface.
         #[arg(long, default_value = "false")]
@@ -94,13 +100,16 @@ pub enum Command {
     Delete { document: String },
     /// Creates a new user in the database.
     CreateUser { username: String, password: String },
+
+    /// Creates a config template
+    Init,
 }
 
 #[cfg(debug_assertions)]
 #[derive(Debug, Clone, ValueEnum)]
 pub enum Mode {
-    Prod,
     Dev,
+    Prod,
 }
 
 #[derive(Debug, Clone, ValueEnum)]
