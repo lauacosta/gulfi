@@ -49,13 +49,14 @@ fn run_cli(cli: &Cli) -> Result<(), CliError> {
             interface,
             port,
             open,
+            pool_size,
             #[cfg(debug_assertions)]
             mode,
         } => {
             #[cfg(debug_assertions)]
-            commands::server::start_server(interface, port, open, documents, &mode)?;
+            commands::server::start_server(interface, port, open, pool_size, documents, &mode)?;
             #[cfg(not(debug_assertions))]
-            commands::server::start_server(interface, port, open, documents)?;
+            commands::server::start_server(interface, port, open, pool_size, documents)?;
         }
         Command::Sync {
             sync_strat,

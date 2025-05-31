@@ -1,30 +1,33 @@
-use axum::error_handling::HandleErrorLayer;
-use axum::{BoxError, Extension};
+use axum::{
+    BoxError, Extension, Router, body::Body, error_handling::HandleErrorLayer, http::Request,
+    routing::get, serve::Serve,
+};
 use color_eyre::owo_colors::OwoColorize;
 use eyre::{Result, eyre};
 use gulfi_common::Document;
-use gulfi_sqlite::pooling::AsyncConnectionPool;
-use gulfi_sqlite::spawn_vec_connection;
+use gulfi_sqlite::{pooling::AsyncConnectionPool, spawn_vec_connection};
 use http::{Method, StatusCode};
 use moka::future::Cache;
 use rusqlite::{Connection, params};
-use std::net::IpAddr;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
 use std::{fmt, io};
+use std::{
+    net::IpAddr,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 use tokio::sync::mpsc::{self, UnboundedSender};
 use tower::buffer::BufferLayer;
-// use tower::limit::RateLimitLayer;
-use tower_http::LatencyUnit;
-use tower_http::cors::Any;
-use tower_http::{compression::CompressionLayer, cors::CorsLayer};
+use tower_http::{
+    LatencyUnit,
+    compression::CompressionLayer,
+    cors::{Any, CorsLayer},
+    trace::{OnResponse, TraceLayer},
+};
 
-use axum::{Router, body::Body, http::Request, routing::get, serve::Serve};
 use tokio::{net::TcpListener, signal};
 use tower::ServiceBuilder;
-use tower_http::trace::{OnResponse, TraceLayer};
 use tower_request_id::{RequestId, RequestIdLayer};
-use tracing::{Level, debug_span, error, info};
+use tracing::{Level, debug_span, error, info, info_span, instrument};
 
 use crate::ApplicationSettings;
 use crate::routes::{
@@ -89,7 +92,8 @@ impl Application {
             )
         })?;
 
-        let pool = AsyncConnectionPool::new(10, || spawn_vec_connection(&db_path))?;
+        let pool =
+            AsyncConnectionPool::new(configuration.pool_size, || spawn_vec_connection(&db_path))?;
 
         let writer = spawn_writer_task(&db_path)?;
 
@@ -410,7 +414,7 @@ impl<B> OnResponse<B> for ColoredOnResponse {
 
 #[derive(Debug)]
 pub enum WriteJob {
-    Historial {
+    History {
         query: String,
         doc: String,
         strategy: SearchStrategy,
@@ -425,35 +429,54 @@ pub enum WriteJob {
     },
 }
 
+#[instrument(name = "bg_task", fields(db_path, job))]
 fn spawn_writer_task(db_path: &str) -> eyre::Result<mpsc::UnboundedSender<WriteJob>> {
     let conn = Connection::open(db_path)?;
     let (tx, mut rx) = mpsc::unbounded_channel();
 
-    tokio::spawn(async move {
-        while let Some(job) = rx.recv().await {
-            let res = match job {
-                WriteJob::Historial {
-                    query,
-                    doc,
-                    strategy,
-                    peso_fts,
-                    peso_semantic,
-                    k_neighbors,
-                } => {
-                    conn.execute(
-                        "insert or replace into historial(query, strategy, doc, peso_fts, peso_semantic, neighbors) values (?,?,?,?,?,?)",
-                        params![query, strategy, doc, peso_fts, peso_semantic, k_neighbors],
-                    )
-                }
-                WriteJob::Cache {
-                    query: _,
-                    result_json: _,
-                    expires_at: _,
-                } => todo!(),
-            };
+    let conn = Arc::new(Mutex::new(conn));
 
-            if let Err(e) = res {
-                eprintln!("[writer task] Write failed: {e:?}");
+    tokio::spawn({
+        async move {
+            while let Some(job) = rx.recv().await {
+                let conn = conn.clone();
+
+                let res = tokio::task::spawn_blocking(move || {
+                    let conn = conn.lock().expect("Lock should be obtainable");
+                    match job {
+                        WriteJob::History {
+                            query,
+                            doc,
+                            strategy,
+                            peso_fts,
+                            peso_semantic,
+                            k_neighbors,
+                        } => {
+                            let insert_span = info_span!("bg_task.history");
+                            let _guard = insert_span.enter();
+                            let mut stmt = conn.prepare_cached(
+                                "insert or replace into historial(query, strategy, doc, peso_fts, peso_semantic, neighbors) values (?,?,?,?,?,?)")?;
+
+                            stmt.execute(params![
+                                query,
+                                strategy,
+                                doc,
+                                peso_fts,
+                                peso_semantic,
+                                k_neighbors
+                            ])
+                        }
+                        WriteJob::Cache {
+                            query: _,
+                            result_json: _,
+                            expires_at: _,
+                        } => todo!(),
+                    }
+                }).await;
+
+                if let Err(e) = res {
+                    eprintln!("[writer task] Write failed: {e:?}");
+                }
             }
         }
     });
