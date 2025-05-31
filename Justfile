@@ -61,7 +61,7 @@ sonar:
     cargo sonar --audit --clippy --deny --udeps
 
 coverage:
-    cargo llvm-cov report --locked --lcov --output-path lcov.info
+    cargo llvm-cov --locked --lcov --output-path lcov.info
 
 ci: fmt check hack test udeps audit deny build-ui
 
