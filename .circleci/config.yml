@@ -85,7 +85,7 @@ jobs:
             - run: |
                 just test
             - run: |
-                mv /root/project/target/nextest/junit.xml /root/project/junit.xml
+                mv /root/project/target/nextest/ci/junit.xml .
 
             - persist_to_workspace:
                 root: /root/project
