@@ -2,6 +2,7 @@ use axum::{
     BoxError, Extension, Router, body::Body, error_handling::HandleErrorLayer, http::Request,
     routing::get, serve::Serve,
 };
+
 use color_eyre::owo_colors::OwoColorize;
 use eyre::Result;
 use gulfi_common::Document;
@@ -9,19 +10,16 @@ use gulfi_openai::OpenAIClient;
 use gulfi_sqlite::{pooling::AsyncConnectionPool, spawn_vec_connection};
 use http::{Method, StatusCode};
 use moka::future::Cache;
-use rusqlite::{Connection, params};
 use secrecy::ExposeSecret;
-use std::path::Path;
 use std::{fmt, io};
 use std::{
     net::IpAddr,
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::sync::mpsc::{self, UnboundedSender};
+use tokio::sync::mpsc::UnboundedSender;
 use tower::buffer::BufferLayer;
 use tower_http::{
-    LatencyUnit,
     compression::CompressionLayer,
     cors::{Any, CorsLayer},
     trace::{OnResponse, TraceLayer},
@@ -30,15 +28,14 @@ use tower_http::{
 use tokio::{net::TcpListener, signal};
 use tower::ServiceBuilder;
 use tower_request_id::{RequestId, RequestIdLayer};
-use tracing::{Level, debug_span, error, info, info_span, instrument};
+use tracing::{Instrument, Level, debug_span, error, info, info_span};
 
+use crate::bg_tasks::{WriteJob, spawn_writer_task};
 use crate::configuration::Settings;
 use crate::routes::{
     add_favoritos, auth, delete_favoritos, delete_historial, documents, favoritos, health_check,
     historial_detailed, historial_summary, search, serve_ui,
 };
-
-use crate::search::SearchStrategy;
 
 #[derive(Debug, Clone)]
 pub struct ServerState {
@@ -142,32 +139,38 @@ impl Application {
     pub async fn run_until_stopped(self) -> io::Result<()> {
         self.server
             // https://github.com/tokio-rs/axum/blob/main/examples/graceful-shutdown/src/main.rs
-            .with_graceful_shutdown(async move {
-                let ctrl_c = async {
-                    signal::ctrl_c()
-                        .await
-                        .expect("Fallo en instalar el handler para Ctrl+C");
-                };
-                #[cfg(unix)]
-                let terminate = async {
-                    signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-                        .expect("Fallo en instalar el handler para las señales")
-                        .recv()
-                        .await;
-                };
+            .with_graceful_shutdown(
+                async move {
+                    let ctrl_c = async {
+                        signal::ctrl_c()
+                            .await
+                            .expect("failed to install handler for ctrl+c")
+                    };
 
-                #[cfg(not(unix))]
-                let terminate = std::future::pending::<()>();
+                    #[cfg(unix)]
+                    let terminate = async {
+                        signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                            .expect("failed to install handler for ctrl+c")
+                            .recv()
+                            .await;
+                    };
 
-                tokio::select! {
-                    () = ctrl_c => {
-                        info!("ctrl+c detectado.");
-                    },
-                    () = terminate => {
-                        info!("ctrl+c detectado.");
-                    },
+                    #[cfg(not(unix))]
+                    let terminate = std::future::pending::<()>();
+
+                    tokio::select! {
+                        () = ctrl_c => {
+                            info!("Received SIGINT");
+                            info!("Exiting immediately");
+                        },
+                        () = terminate => {
+                            info!("Received SIGINT");
+                            info!("Exiting immediately");
+                        },
+                    }
                 }
-            })
+                .instrument(info_span!("graceful-shutdown")),
+            )
             .await
     }
 }
@@ -243,7 +246,6 @@ pub fn build_server(listener: TcpListener, state: ServerState) -> Result<Serve<R
                         .on_response(
                             ColoredOnResponse::new()
                                 .include_headers(true)
-                                .latency_unit(LatencyUnit::Millis)
                                 .level(Level::INFO),
                         ),
                 )
@@ -300,7 +302,6 @@ pub async fn run_server(
 #[derive(Clone)]
 struct ColoredOnResponse {
     level: Level,
-    latency_unit: LatencyUnit,
     include_headers: bool,
 }
 
@@ -308,18 +309,12 @@ impl ColoredOnResponse {
     fn new() -> Self {
         Self {
             level: Level::INFO,
-            latency_unit: LatencyUnit::Millis,
             include_headers: false,
         }
     }
 
     fn level(mut self, level: Level) -> Self {
         self.level = level;
-        self
-    }
-
-    pub fn latency_unit(mut self, latency_unit: LatencyUnit) -> Self {
-        self.latency_unit = latency_unit;
         self
     }
 
@@ -330,18 +325,39 @@ impl ColoredOnResponse {
 }
 
 struct Latency {
-    unit: LatencyUnit,
     duration: Duration,
+}
+
+impl Latency {
+    fn new(duration: Duration) -> Self {
+        Self { duration }
+    }
+
+    fn best_unit_and_value(&self) -> (f64, &'static str) {
+        let nanos = self.duration.as_nanos();
+
+        if nanos >= 1_000_000_000 {
+            (self.duration.as_secs_f64(), "s")
+        } else if nanos >= 1_000_000 {
+            (self.duration.as_millis() as f64, "ms")
+        } else if nanos >= 1_000 {
+            (self.duration.as_micros() as f64, "μs")
+        } else {
+            (nanos as f64, "ns")
+        }
+    }
 }
 
 impl fmt::Display for Latency {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.unit {
-            LatencyUnit::Seconds => write!(f, "{} s", self.duration.as_secs_f64()),
-            LatencyUnit::Millis => write!(f, "{} ms", self.duration.as_millis()),
-            LatencyUnit::Micros => write!(f, "{} μs", self.duration.as_micros()),
-            LatencyUnit::Nanos => write!(f, "{} ns", self.duration.as_nanos()),
-            _ => write!(f, "unknown unitdesconocida."),
+        let (value, unit) = self.best_unit_and_value();
+
+        match unit {
+            "s" => write!(f, "{:.3} {}", value, unit),
+            "ms" => write!(f, "{:.0} {}", value, unit),
+            "μs" => write!(f, "{:.0} {}", value, unit),
+            "ns" => write!(f, "{:.0} {}", value, unit),
+            _ => write!(f, "{:.2} {}", value, unit),
         }
     }
 }
@@ -395,10 +411,7 @@ macro_rules! event_dynamic_lvl {
 
 impl<B> OnResponse<B> for ColoredOnResponse {
     fn on_response(self, response: &http::Response<B>, latency: Duration, _: &tracing::Span) {
-        let latency = Latency {
-            unit: self.latency_unit,
-            duration: latency,
-        };
+        let latency = Latency::new(latency);
 
         let response_headers = self
             .include_headers
@@ -423,76 +436,4 @@ impl<B> OnResponse<B> for ColoredOnResponse {
             "request procesado"
         );
     }
-}
-
-#[derive(Debug)]
-pub enum WriteJob {
-    History {
-        query: String,
-        doc: String,
-        strategy: SearchStrategy,
-        peso_fts: f32,
-        peso_semantic: f32,
-        k_neighbors: u64,
-    },
-    Cache {
-        query: String,
-        result_json: String,
-        expires_at: i64,
-    },
-}
-
-#[instrument(name = "bg_task", fields(db_path, job))]
-fn spawn_writer_task<P: AsRef<Path>>(db_path: P) -> eyre::Result<mpsc::UnboundedSender<WriteJob>> {
-    let conn = Connection::open(db_path)?;
-    let (tx, mut rx) = mpsc::unbounded_channel();
-
-    let conn = Arc::new(Mutex::new(conn));
-
-    tokio::spawn({
-        async move {
-            while let Some(job) = rx.recv().await {
-                let conn = conn.clone();
-
-                let res = tokio::task::spawn_blocking(move || {
-                    let conn = conn.lock().expect("Lock should be obtainable");
-                    match job {
-                        WriteJob::History {
-                            query,
-                            doc,
-                            strategy,
-                            peso_fts,
-                            peso_semantic,
-                            k_neighbors,
-                        } => {
-                            let insert_span = info_span!("bg_task.history");
-                            let _guard = insert_span.enter();
-                            let mut stmt = conn.prepare_cached(
-                                "insert or replace into historial(query, strategy, doc, peso_fts, peso_semantic, neighbors) values (?,?,?,?,?,?)")?;
-
-                            stmt.execute(params![
-                                query,
-                                strategy,
-                                doc,
-                                peso_fts,
-                                peso_semantic,
-                                k_neighbors
-                            ])
-                        }
-                        WriteJob::Cache {
-                            query: _,
-                            result_json: _,
-                            expires_at: _,
-                        } => todo!(),
-                    }
-                }).await;
-
-                if let Err(e) = res {
-                    eprintln!("[writer task] Write failed: {e:?}");
-                }
-            }
-        }
-    });
-
-    Ok(tx)
 }

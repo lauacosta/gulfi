@@ -50,8 +50,7 @@ pub enum Command {
     /// Starts the HTTP server.
     Serve {
         #[cfg(debug_assertions)]
-        #[clap(value_enum, long)]
-        mode: Mode,
+        mode: Profile,
 
         /// Sets the IP address.
         #[clap(short = 'I', long)]
@@ -107,7 +106,7 @@ pub enum Command {
 
 #[cfg(debug_assertions)]
 #[derive(Debug, Clone, ValueEnum)]
-pub enum Mode {
+pub enum Profile {
     Dev,
     Prod,
 }

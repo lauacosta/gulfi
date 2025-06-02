@@ -12,7 +12,7 @@ use crate::CliError;
 use eyre::Report;
 
 #[cfg(debug_assertions)]
-use crate::Mode;
+use crate::Profile;
 
 #[cfg(debug_assertions)]
 use tokio::{process::Command as TokioCommand, try_join};
@@ -58,7 +58,7 @@ pub fn start_server(
     overrides: ServerOverrides,
     open: bool,
     documents: Vec<Document>,
-    #[cfg(debug_assertions)] mode: &Mode,
+    #[cfg(debug_assertions)] mode: &Profile,
 ) -> Result<(), CliError> {
     let start = Instant::now();
 
@@ -71,7 +71,7 @@ pub fn start_server(
 
     #[cfg(debug_assertions)]
     match mode {
-        Mode::Dev => {
+        Profile::Dev => {
             let frontend_future = async {
                 TokioCommand::new("pnpm")
                     .arg("run")
@@ -95,7 +95,7 @@ pub fn start_server(
                 )
             })?;
         }
-        Mode::Prod => rt.block_on(run_server(configuration, start, documents, open))?,
+        Profile::Prod => rt.block_on(run_server(configuration, start, documents, open))?,
     }
 
     #[cfg(not(debug_assertions))]

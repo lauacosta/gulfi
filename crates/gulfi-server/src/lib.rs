@@ -1,3 +1,4 @@
+pub mod bg_tasks;
 pub mod configuration;
 pub mod extractors;
 pub mod into_http;

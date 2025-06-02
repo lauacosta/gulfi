@@ -1,7 +1,7 @@
 #![allow(clippy::too_many_lines)]
 use crate::{
+    bg_tasks::WriteJob,
     into_http::{HttpError, IntoHttp, SearchResult},
-    startup::WriteJob,
 };
 use axum::Json;
 use eyre::Report;

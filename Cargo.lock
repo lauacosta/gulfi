@@ -1012,7 +1012,7 @@ checksum = "07e28edb80900c19c28f1072f2e8aeca7fa06b23cd4169cefe1af5aa3260783f"
 
 [[package]]
 name = "gulfi"
-version = "1.2.0"
+version = "0.6.0"
 dependencies = [
  "axum",
  "chrono",
@@ -1029,7 +1029,7 @@ dependencies = [
 
 [[package]]
 name = "gulfi-cli"
-version = "1.2.0"
+version = "0.6.0"
 dependencies = [
  "argon2",
  "clap",
@@ -1051,7 +1051,7 @@ dependencies = [
 
 [[package]]
 name = "gulfi-common"
-version = "1.2.0"
+version = "0.6.0"
 dependencies = [
  "ammonia",
  "camino",
@@ -1064,7 +1064,7 @@ dependencies = [
 
 [[package]]
 name = "gulfi-openai"
-version = "1.2.0"
+version = "0.6.0"
 dependencies = [
  "bytes",
  "color-eyre",
@@ -1081,7 +1081,7 @@ dependencies = [
 
 [[package]]
 name = "gulfi-query"
-version = "1.2.0"
+version = "0.6.0"
 dependencies = [
  "ammonia",
  "pretty_assertions",
@@ -1091,7 +1091,7 @@ dependencies = [
 
 [[package]]
 name = "gulfi-server"
-version = "1.2.0"
+version = "0.6.0"
 dependencies = [
  "argon2",
  "axum",
@@ -1132,7 +1132,7 @@ dependencies = [
 
 [[package]]
 name = "gulfi-sqlite"
-version = "1.2.0"
+version = "0.6.0"
 dependencies = [
  "color-eyre",
  "crossbeam",
