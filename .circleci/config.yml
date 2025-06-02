@@ -75,7 +75,7 @@ jobs:
                 mv /root/project/target/nextest/ci/junit.xml .
 
             - store_test_results:
-              path: junit.xml
+                path: junit.xml
 
             - persist_to_workspace:
                 root: /root/project
