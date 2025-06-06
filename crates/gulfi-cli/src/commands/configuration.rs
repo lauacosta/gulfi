@@ -14,6 +14,7 @@ app_settings:
   name: "MyApp"
   port: "3000"
   host: "127.0.0.1"
+  meta_file_path: "./meta.json"
 embedding_provider:
   endpoint_url: "https://api.openai.com/v1/embeddings"
   auth_token: "your-secret-token-here"

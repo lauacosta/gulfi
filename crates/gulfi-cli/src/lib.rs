@@ -6,6 +6,7 @@ pub use clierror::*;
 pub use gulfi_server::configuration::get_configuration;
 
 use clap::{Parser, Subcommand, ValueEnum, command, crate_version};
+use gulfi_server::configuration::Settings;
 use std::{net::IpAddr, path::PathBuf};
 
 #[derive(Parser)]
@@ -42,6 +43,15 @@ impl Cli {
         self.command.clone().unwrap_or(Command::List {
             format: Format::Pretty,
         })
+    }
+
+    pub fn merge_with_config(&mut self, config: &Settings) {
+        self.db = self.db.clone().or(Some(config.db_settings.db_path.clone()));
+
+        self.meta_file_path = self
+            .meta_file_path
+            .clone()
+            .or(Some(config.app_settings.meta_file_path.clone()));
     }
 }
 

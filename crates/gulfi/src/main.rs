@@ -8,12 +8,12 @@ use gulfi_cli::commands::server::ServerOverrides;
 use gulfi_cli::{Cli, CliError, Command, ExitOnError, helper::initialize_meta_file};
 use gulfi_cli::{commands, get_configuration};
 use gulfi_common::Document;
-use gulfi_common::{META_JSON_FILE, MILLISECONDS_MULTIPLIER};
-use tracing::debug;
+use gulfi_common::MILLISECONDS_MULTIPLIER;
 
 fn main() -> eyre::Result<()> {
     color_eyre::install()?;
-    let cli = Cli::parse();
+    let mut cli = Cli::parse();
+    cli.merge_with_config(&get_configuration()?);
 
     if let Err(e) = run_cli(&cli) {
         e.exit_with_tips();
@@ -36,11 +36,11 @@ fn run_cli(cli: &Cli) -> Result<(), CliError> {
 
     let documents: Vec<Document> = serde_json::from_reader(file)?;
 
-    debug!(?documents);
+    dbg!("{:#?}", &documents);
 
     match cli.command() {
         Command::List { format } => {
-            commands::list::handle(&documents, META_JSON_FILE, &format).or_exit();
+            commands::list::handle(&documents, meta_file, &format).or_exit();
         }
 
         Command::Add => commands::documents::add_document().or_exit(),
@@ -54,9 +54,9 @@ fn run_cli(cli: &Cli) -> Result<(), CliError> {
             mode,
         } => {
             let db_path = cli.db.clone();
+            let overrides = ServerOverrides::new(interface, port, db_path, pool_size);
 
             #[cfg(debug_assertions)]
-            let overrides = ServerOverrides::new(interface, port, db_path, pool_size);
             commands::server::start_server(overrides, open, documents, &mode)?;
 
             #[cfg(not(debug_assertions))]
@@ -69,11 +69,7 @@ fn run_cli(cli: &Cli) -> Result<(), CliError> {
             document,
             chunk_size,
         } => {
-            let configuration = get_configuration()?;
-            let db_path = cli
-                .db
-                .as_ref()
-                .unwrap_or(&configuration.db_settings.db_path);
+            let db_path = cli.db.as_ref().expect("db file missing");
 
             let base_delay = base_delay * MILLISECONDS_MULTIPLIER;
 
@@ -88,11 +84,7 @@ fn run_cli(cli: &Cli) -> Result<(), CliError> {
             );
         }
         Command::CreateUser { username, password } => {
-            let configuration = get_configuration()?;
-            let db_path = cli
-                .db
-                .as_ref()
-                .unwrap_or(&configuration.db_settings.db_path);
+            let db_path = cli.db.as_ref().expect("db file missing");
 
             commands::users::create_user(db_path, &username, &password).or_exit();
         }

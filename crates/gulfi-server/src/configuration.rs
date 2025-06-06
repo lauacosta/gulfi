@@ -29,12 +29,18 @@ pub struct ApplicationSettings {
     #[serde(deserialize_with = "deserialize_number_from_string")]
     pub port: u16,
     pub host: IpAddr,
+    pub meta_file_path: PathBuf,
 }
 
 impl ApplicationSettings {
     #[must_use]
-    pub fn new(name: String, port: u16, host: IpAddr) -> Self {
-        Self { name, port, host }
+    pub fn new(name: String, port: u16, host: IpAddr, meta_file_path: PathBuf) -> Self {
+        Self {
+            name,
+            port,
+            host,
+            meta_file_path,
+        }
     }
 }
 

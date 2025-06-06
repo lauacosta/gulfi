@@ -2,9 +2,9 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum CliError {
-    #[error("Could not parse `meta.json`: {0}")]
+    #[error("Could not parse metadata file: {0}")]
     MetaParseError(#[from] serde_json::Error),
-    #[error("Failed to open `meta.json`: {0}")]
+    #[error("Failed to open metadata file: {0}")]
     MetaOpenError(#[from] std::io::Error),
     #[error("SQLite error: {0}")]
     SqliteError(#[from] rusqlite::Error),
@@ -20,7 +20,7 @@ impl CliError {
     pub fn print_tip(&self) {
         match self {
             CliError::MetaParseError(error) => {
-                eprintln!("💡 Failed to parse meta.json:");
+                eprintln!("💡 Failed to parse metadata file:");
                 match error {
                     serde_json::Error { .. } if error.is_syntax() => {
                         eprintln!(
@@ -41,7 +41,7 @@ impl CliError {
                     }
                     serde_json::Error { .. } if error.is_eof() => {
                         eprintln!("   • Unexpected end of file");
-                        eprintln!("   • meta.json appears to be incomplete");
+                        eprintln!("   • metadata file appears to be incomplete");
                         eprintln!("   • Check if the file was truncated during save");
                         eprintln!("   • Ensure all brackets and braces are properly closed");
                     }
@@ -52,23 +52,23 @@ impl CliError {
                     }
                     _ => {
                         eprintln!("   • JSON parsing error: {error}");
-                        eprintln!("   • Check if meta.json contains valid JSON syntax");
-                        eprintln!("   • You may need to recreate meta.json if it's corrupted");
+                        eprintln!("   • Check if metadata file contains valid JSON syntax");
+                        eprintln!("   • You may need to recreate metadata file if it's corrupted");
                     }
                 }
             }
             CliError::MetaOpenError(error) => {
-                eprintln!("💡 Cannot open meta.json file:");
+                eprintln!("💡 Cannot open metadata file file:");
                 match error.kind() {
                     std::io::ErrorKind::NotFound => {
-                        eprintln!("   • meta.json file not found");
+                        eprintln!("   • metadata file file not found");
                         eprintln!("   • Make sure you're in the correct directory");
-                        eprintln!("   • Create meta.json if it doesn't exist");
+                        eprintln!("   • Create metadata file if it doesn't exist");
                         eprintln!("   • Check if the file name is spelled correctly");
                     }
                     std::io::ErrorKind::PermissionDenied => {
                         eprintln!("   • Permission denied - check file permissions");
-                        eprintln!("   • Try: chmod 644 meta.json");
+                        eprintln!("   • Try: chmod 644 metadata file");
                         eprintln!("   • Ensure you have read access to the file");
                         eprintln!("   • Check if the file is owned by another user");
                     }
@@ -89,7 +89,7 @@ impl CliError {
                     std::io::ErrorKind::InvalidData => {
                         eprintln!("   • File contains invalid data");
                         eprintln!("   • The file might be corrupted");
-                        eprintln!("   • Try recreating meta.json");
+                        eprintln!("   • Try recreating metadata file");
                     }
                     std::io::ErrorKind::TimedOut => {
                         eprintln!("   • File operation timed out");

@@ -32,6 +32,7 @@
     </label>
 </div>
 
+<!-- svelte-ignore slot_element_deprecated -->
 <div class="content-wrapper">
     <slot />
 </div>

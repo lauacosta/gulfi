@@ -100,7 +100,7 @@ pub fn start_server(
 
     #[cfg(not(debug_assertions))]
     {
-        rt.block_on(run_server(configuration, start, documents))?;
+        rt.block_on(run_server(configuration, start, documents, open))?;
     }
     Ok(())
 }
