@@ -1,5 +1,6 @@
 #![allow(clippy::too_many_lines)]
 
+use std::io::{Error, ErrorKind};
 use std::{fs::File, time::Instant};
 
 use clap::Parser;
@@ -22,7 +23,10 @@ fn main() -> eyre::Result<()> {
 }
 
 fn run_cli(cli: &Cli) -> Result<(), CliError> {
-    let meta_file = cli.meta_file_path.clone();
+    let meta_file = cli.meta_file_path.clone().ok_or_else(|| {
+        CliError::MetaOpenError(Error::new(ErrorKind::NotFound, "meta file not found"))
+    })?;
+
     let file = if let Ok(file) = File::open(&meta_file) {
         Ok(file)
     } else {
@@ -54,6 +58,7 @@ fn run_cli(cli: &Cli) -> Result<(), CliError> {
             #[cfg(debug_assertions)]
             let overrides = ServerOverrides::new(interface, port, db_path, pool_size);
             commands::server::start_server(overrides, open, documents, &mode)?;
+
             #[cfg(not(debug_assertions))]
             commands::server::start_server(overrides, open, documents)?;
         }

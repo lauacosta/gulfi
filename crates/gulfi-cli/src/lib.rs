@@ -29,8 +29,8 @@ pub struct Cli {
     pub db: Option<PathBuf>,
 
     /// Path to the metadata file for documents
-    #[arg(long = "meta-file", default_value = "./meta.json")]
-    pub meta_file_path: PathBuf,
+    #[arg(long = "meta-file-path")]
+    pub meta_file_path: Option<PathBuf>,
 
     #[command(subcommand)]
     command: Option<Command>,

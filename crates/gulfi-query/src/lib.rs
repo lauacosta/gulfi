@@ -11,7 +11,7 @@ pub enum Constraint {
 impl Display for Constraint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Constraint::Exact(str) => write!(f, ": str {str}"),
+            Constraint::Exact(str) => write!(f, ": {str}"),
             Constraint::GreaterThan(str) => write!(f, "> {str}"),
             Constraint::LesserThan(str) => write!(f, "< {str}"),
         }
