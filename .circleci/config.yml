@@ -70,7 +70,7 @@ jobs:
             - run: |
                 just test
             - run: |
-                mv /root/project/target/nextest/ci/junit.xml .
+                mv /root/project/target/nextest/ci/junit.xml /root/project
 
             - store_test_results:
                 path: junit.xml
