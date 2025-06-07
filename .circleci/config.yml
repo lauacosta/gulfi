@@ -5,7 +5,6 @@ orbs:
   node: circleci/node@7.1.0
   slack: circleci/slack@5.1.1
   sonarcloud: sonarsource/sonarcloud@3.0
-  codecov: codecov/codecov@5.4.3
 
 workflows:
   version: 2
@@ -19,9 +18,7 @@ workflows:
           context: [aws, slack]
 
       - coverage_report:
-          context: [aws, slack, codecov]
-          requires:
-            - test
+          context: [aws, slack]
 
       - dependency_analysis:
           context: [aws, slack]
@@ -37,6 +34,7 @@ workflows:
             - dependency_analysis
             - check
             - coverage_report
+            - test
 
       - update_taiga:
           context: [aws, taiga, slack]
@@ -72,7 +70,7 @@ jobs:
             - run: |
                 just test
             - run: |
-                mv /root/project/target/nextest/ci/junit.xml .
+                mv /root/project/target/nextest/ci/junit.xml /root/project/
 
             - store_test_results:
                 path: junit.xml
@@ -94,8 +92,6 @@ jobs:
           steps:
             - run: |
                 just coverage
-
-            - codecov/upload
 
             - persist_to_workspace:
                 root: /root/project
@@ -131,6 +127,10 @@ jobs:
                 root: /root/project
                 paths:
                   - sonar-issues.json
+                  - udeps.json
+                  - clippy.json
+                  - audit.json
+                  - deny.json
                 
       - slack/notify:
           event: fail
@@ -163,6 +163,8 @@ jobs:
       - checkout
       - attach_workspace:
           at: /root/project
+      - run: |
+          ls
       - sonarcloud/scan
       - slack/notify:
           event: fail
