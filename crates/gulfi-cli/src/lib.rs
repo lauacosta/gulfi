@@ -45,17 +45,22 @@ impl Cli {
         })
     }
 
-    pub fn merge_with_config(&mut self, config: &Settings) {
-        self.db = self.db.clone().or(Some(config.db_settings.db_path.clone()));
-
-        self.meta_file_path = self
+    pub fn merge_with_config(cli: Cli, config: &Settings) -> Cli {
+        let db = cli.db.clone().or(Some(config.db_settings.db_path.clone()));
+        let meta_file_path = cli
             .meta_file_path
             .clone()
             .or(Some(config.app_settings.meta_file_path.clone()));
+
+        Cli {
+            db,
+            meta_file_path,
+            ..cli
+        }
     }
 }
 
-#[derive(Subcommand, Clone, Debug)]
+#[derive(Subcommand, Clone, Debug, PartialEq, Eq)]
 pub enum Command {
     /// Starts the HTTP server.
     Serve {
@@ -115,19 +120,19 @@ pub enum Command {
 }
 
 #[cfg(debug_assertions)]
-#[derive(Debug, Clone, ValueEnum)]
+#[derive(Debug, Clone, ValueEnum, PartialEq, Eq)]
 pub enum Profile {
     Dev,
     Prod,
 }
 
-#[derive(Debug, Clone, ValueEnum)]
+#[derive(Debug, Clone, ValueEnum, PartialEq, Eq)]
 pub enum Format {
     Json,
     Pretty,
 }
 
-#[derive(Debug, Clone, ValueEnum)]
+#[derive(Debug, Clone, ValueEnum, PartialEq, Eq)]
 pub enum SyncStrategy {
     Fts,
     Vector,

@@ -1071,6 +1071,7 @@ dependencies = [
  "eyre",
  "rand 0.9.1",
  "reqwest",
+ "secrecy",
  "serde",
  "serde_json",
  "simd-json",

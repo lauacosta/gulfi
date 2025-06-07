@@ -5,13 +5,13 @@ import Home from "./routes/Home.svelte";
 import Fallback from "./routes/Fallback.svelte";
 import Layout from "./lib/Layout.svelte";
 import Sidebar from "./lib/Sidebar.svelte";
-import Favoritos from "./routes/Favoritos.svelte";
-import Historial from "./routes/Historial.svelte";
+import Favorites from "./routes/Favorites.svelte";
+import History from "./routes/History.svelte";
 
 const RouteName = {
 	Home: "home",
-	Favoritos: "favoritos",
-	Historial: "historial",
+	Favorites: "favorites",
+	History: "history",
 	Fallback: "fallback",
 } as const;
 
@@ -25,15 +25,15 @@ export const routes: Readonly<Route<RouteNames>[]> = [
 	},
 
 	{
-		name: RouteName.Favoritos,
-		path: "/favoritos",
-		component: Favoritos,
+		name: RouteName.Favorites,
+		path: "/favorites",
+		component: Favorites,
 	},
 
 	{
-		name: RouteName.Historial,
-		path: "/historial",
-		component: Historial,
+		name: RouteName.History,
+		path: "/history",
+		component: History,
 	},
 
 	{

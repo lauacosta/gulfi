@@ -293,7 +293,17 @@ impl CliError {
                 }
             }
             CliError::ConfigError(error) => {
-                eprintln!("WIP :): {error}")
+                eprintln!("⚙️  Configuration error occurred:");
+                eprintln!("   • Error details: {error}");
+                eprintln!("   • Check if your config.yml file exists and is valid");
+                eprintln!("   • Verify all required configuration fields are present");
+                eprintln!("   • Ensure YAML syntax is correct (proper indentation, no tabs)");
+                eprintln!("   • Check file permissions for configuration directory");
+                eprintln!("   • Try regenerating the config file if corrupted");
+                eprintln!("   • Common fixes:");
+                eprintln!("     - Run `gulfi init` to create a new config");
+                eprintln!("     - Validate YAML syntax online or with a YAML linter");
+                eprintln!("     - Check for missing quotes around string values");
             }
             CliError::Other(error) => {
                 eprintln!("💡 Unexpected error occurred:");

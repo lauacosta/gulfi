@@ -1,6 +1,7 @@
 #![allow(clippy::too_many_lines)]
 
 use std::io::{Error, ErrorKind};
+use std::path::PathBuf;
 use std::{fs::File, time::Instant};
 
 use clap::Parser;
@@ -12,33 +13,34 @@ use gulfi_common::MILLISECONDS_MULTIPLIER;
 
 fn main() -> eyre::Result<()> {
     color_eyre::install()?;
-    let mut cli = Cli::parse();
-    cli.merge_with_config(&get_configuration()?);
+    let cli = Cli::parse();
 
-    if let Err(e) = run_cli(&cli) {
+    if let Err(e) = run_cli(cli) {
         e.exit_with_tips();
     }
 
     Ok(())
 }
 
-fn run_cli(cli: &Cli) -> Result<(), CliError> {
-    let meta_file = cli.meta_file_path.clone().ok_or_else(|| {
-        CliError::MetaOpenError(Error::new(ErrorKind::NotFound, "meta file not found"))
-    })?;
+fn run_cli(cli: Cli) -> Result<(), CliError> {
+    match cli.command() {
+        Command::Init => unreachable!("Init is a standalone cmd"),
+        Command::Serve { .. }
+        | Command::Sync { .. }
+        | Command::List { .. }
+        | Command::Add
+        | Command::Delete { .. }
+        | Command::CreateUser { .. } => run_with_config(cli),
+    }
+}
 
-    let file = if let Ok(file) = File::open(&meta_file) {
-        Ok(file)
-    } else {
-        initialize_meta_file()?;
-        File::open(&meta_file)
-    }?;
+fn run_with_config(cli: Cli) -> Result<(), CliError> {
+    let cli = Cli::merge_with_config(cli, &get_configuration()?);
 
-    let documents: Vec<Document> = serde_json::from_reader(file)?;
-
-    dbg!("{:#?}", &documents);
+    let (meta_file, documents) = load_meta_docs(&cli)?;
 
     match cli.command() {
+        Command::Init => unreachable!("Init is handled elsewhere"),
         Command::List { format } => {
             commands::list::handle(&documents, meta_file, &format).or_exit();
         }
@@ -88,10 +90,25 @@ fn run_cli(cli: &Cli) -> Result<(), CliError> {
 
             commands::users::create_user(db_path, &username, &password).or_exit();
         }
-        Command::Init => {
-            commands::configuration::create_config_template().or_exit();
-        }
     }
 
     Ok(())
+}
+
+fn load_meta_docs(cli: &Cli) -> Result<(PathBuf, Vec<Document>), CliError> {
+    let meta_file = cli.meta_file_path.clone().ok_or_else(|| {
+        CliError::MetaOpenError(Error::new(ErrorKind::NotFound, "meta file not found"))
+    })?;
+
+    let file = if let Ok(file) = File::open(&meta_file) {
+        Ok(file)
+    } else {
+        initialize_meta_file()?;
+        File::open(&meta_file)
+    }?;
+
+    Ok((
+        meta_file,
+        serde_json::from_reader::<_, Vec<Document>>(file)?,
+    ))
 }

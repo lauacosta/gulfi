@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import Table from "../lib/Table.svelte";
-    import HistorialFloating from "../lib/HistorialFloating.svelte";
+    import HistoryFloating from "../lib/HistoryFloating.svelte";
     import type { ServerError, TableContent } from "../lib/types";
     import type { favoritesResponse } from "../lib/types";
     import type { SearchStrategy } from "../lib/types";
@@ -42,7 +42,7 @@
     let showBalanceSlider = $state(false);
 
     onMount(async () => {
-        // await updateHistorial();
+        // await updateHistory();
         checkUrlParams();
         hideElements();
         initKeyboard();
@@ -158,7 +158,7 @@
             requestAnimationFrame(() => {
                 initPagination();
                 guardarResultados();
-                // updateHistorial();
+                // updateHistory();
             });
         } catch (error) {
             console.error("Error en la búsqueda:", error);
@@ -342,7 +342,7 @@
 
             try {
                 const response = await fetch(
-                    `${apiUrl}/api/${$selectedDocument}/favoritos`,
+                    `${apiUrl}/api/${$selectedDocument}/favorites`,
                     {
                         method: "POST",
                         headers: {
@@ -387,7 +387,7 @@
 </script>
 
 <main class="main-content">
-    <HistorialFloating />
+    <HistoryFloating />
     <div class="legend">
         <div class="legend-title">Atajos</div>
         <div class="legend-item">
@@ -396,7 +396,7 @@
         </div>
         <div class="legend-item">
             <span class="kbssample">Ctrl+h</span>
-            <span class="legend-text">Abrir Historial</span>
+            <span class="legend-text">Abrir History</span>
         </div>
         <div class="legend-item">
             <span class="kbssample">Ctrl+Shift+s</span>
@@ -405,7 +405,7 @@
 
         <div class="legend-item">
             <span class="kbssample">Ctrl+Shift+f</span>
-            <span class="legend-text">Añadir a Favoritos</span>
+            <span class="legend-text">Añadir a Favorites</span>
         </div>
     </div>
 
@@ -588,8 +588,8 @@
                     >
                 </button>
                 <button
-                    aria-label="Agregar búsqueda a favoritos"
-                    title="Agregar búsqueda a favoritos"
+                    aria-label="Agregar búsqueda a favorites"
+                    title="Agregar búsqueda a favorites"
                     id="saveBtn"
                     class="btn btn-icon"
                     disabled={downloadBtnDisabled}

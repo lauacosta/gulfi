@@ -1,3 +1,4 @@
+use secrecy::{ExposeSecret, SecretBox, SecretString};
 use std::time::{Duration, Instant};
 
 use bytes::BufMut;
@@ -13,14 +14,14 @@ const MAX_RETRIES: u32 = 5;
 
 #[derive(Debug, Clone)]
 pub struct OpenAIClient {
-    pub auth_token: String,
+    pub auth_token: SecretString,
     pub endpoint_url: String,
 }
 
 impl OpenAIClient {
     pub fn new(auth_token: String, endpoint_url: String) -> Self {
         Self {
-            auth_token,
+            auth_token: SecretString::new(auth_token.into()),
             endpoint_url,
         }
     }
@@ -144,7 +145,7 @@ impl OpenAIClient {
         Ok((embedding, total_elapsed))
     }
 
-    #[instrument(name = "embed.request", skip(input, client))]
+    #[instrument(name = "embed.request", skip(self, input, client) ,  fields(url = %self.endpoint_url, input_len = input.len()))]
     pub async fn embed_single(&self, input: String, client: &Client) -> Result<Vec<f32>> {
         let global_start = Instant::now();
 
@@ -171,7 +172,7 @@ impl OpenAIClient {
         let response = client
             .post(endpoint_url)
             // .post("https://api.openai.com/v1/embeddings")
-            .bearer_auth(open_ai_key)
+            .bearer_auth(open_ai_key.expose_secret())
             .json(&request)
             .send()
             .await?;
@@ -204,7 +205,7 @@ impl OpenAIClient {
 
 struct EmbeddingRequest<'a> {
     client: &'a Client,
-    token: &'a str,
+    token: &'a SecretBox<str>,
     request: &'a RequestBody,
     endpoint_url: &'a str,
 }
@@ -251,7 +252,7 @@ async fn request_embeddings(call: EmbeddingCall<'_>) -> Result<reqwest::Response
 
     let response = client
         .post(endpoint_url)
-        .bearer_auth(token)
+        .bearer_auth(token.expose_secret())
         .json(body)
         .send()
         .await?;

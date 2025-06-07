@@ -178,10 +178,10 @@ impl Application {
 pub fn build_server(listener: TcpListener, state: ServerState) -> Result<Serve<Router, Router>> {
     let historial_routes = Router::new()
         .route(
-            "/:doc/historial",
+            "/:doc/history",
             get(historial_summary).delete(delete_historial),
         )
-        .route("/:doc/historial-full", get(historial_detailed));
+        .route("/:doc/history-full", get(historial_detailed));
 
     let search_routes = Router::new().route("/search", get(search)).layer(
         ServiceBuilder::new()
@@ -204,7 +204,7 @@ pub fn build_server(listener: TcpListener, state: ServerState) -> Result<Serve<R
         .route("/api/auth", get(auth))
         .route("/api/health_check", get(health_check))
         .route(
-            "/api/:doc/favoritos",
+            "/api/:doc/favorites",
             get(favoritos).post(add_favoritos).delete(delete_favoritos),
         )
         .route("/api/documents", get(documents));
@@ -271,7 +271,7 @@ pub async fn run_server(
             eprintln!(
                 "\n\n  {} {} ready in {} ms\n",
                 name.to_uppercase().bold().bright_green(),
-                format!("v{}", version).green(),
+                format!("v{version}").green(),
                 start.elapsed().as_millis().bold().bright_white(),
             );
 
@@ -283,16 +283,16 @@ pub async fn run_server(
             );
 
             if open && webbrowser::open_browser(webbrowser::Browser::Default, &url).is_ok() {
-                info!("Se abrirá la aplicación en el navegador predeterminado.");
+                info!("App will open on default browser if enabled");
             }
 
             if let Err(e) = app.run_until_stopped().await {
-                error!("Error ejecutando el servidor HTTP: {:?}", e);
+                error!("Error executing HTTP server: {:?}", e);
                 return Err(e.into());
             }
         }
         Err(e) => {
-            error!("Fallo al iniciar el servidor: {:?}", e);
+            error!("Fail at starting server: {:?}", e);
             return Err(e);
         }
     }
@@ -352,13 +352,7 @@ impl fmt::Display for Latency {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (value, unit) = self.best_unit_and_value();
 
-        match unit {
-            "s" => write!(f, "{:.3} {}", value, unit),
-            "ms" => write!(f, "{:.0} {}", value, unit),
-            "μs" => write!(f, "{:.0} {}", value, unit),
-            "ns" => write!(f, "{:.0} {}", value, unit),
-            _ => write!(f, "{:.2} {}", value, unit),
-        }
+        write!(f, "{value:.3} {unit}")
     }
 }
 

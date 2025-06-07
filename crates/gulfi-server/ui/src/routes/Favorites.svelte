@@ -13,13 +13,13 @@
         busquedas: [string, string][];
     };
 
-    type Favoritos = {
-        favoritos: Resultados[];
+    type Favorites = {
+        favorites: Resultados[];
     };
 
-    export let favoritos: Favoritos = { favoritos: [] };
+    export let favorites: Favorites = { favorites: [] };
 
-    const descargarCSVFavoritos = (data: string, nombre: string) => {
+    const descargarCSVFavorites = (data: string, nombre: string) => {
         data = data.trim();
         data = data.replace(/^(\[)+|(\])+/g, "");
         const items = data.split(",").map((item) => item.trim());
@@ -37,14 +37,14 @@
     const borrarFavorito = async (nombre: string) => {
         try {
             const response = await fetch(
-                `${apiUrl}/api/${$selectedDocument}/favoritos?nombre=${encodeURIComponent(nombre)}`,
+                `${apiUrl}/api/${$selectedDocument}/favorites?nombre=${encodeURIComponent(nombre)}`,
                 {
                     method: "DELETE",
                 },
             );
 
             if (response.ok) {
-                favoritos.favoritos = favoritos.favoritos.filter(
+                favorites.favorites = favorites.favorites.filter(
                     (fav) => fav.nombre !== nombre,
                 );
             } else {
@@ -55,34 +55,34 @@
         }
     };
 
-    const fetchFavoritos = async () => {
+    const fetchFavorites = async () => {
         try {
             const response = await fetch(
-                `${apiUrl}/api/${$selectedDocument}/favoritos`,
+                `${apiUrl}/api/${$selectedDocument}/favorites`,
             );
 
             if (response.ok) {
-                const data: Favoritos = await response.json();
-                favoritos = data;
+                const data: Favorites = await response.json();
+                favorites = data;
                 console.log(data);
             } else {
                 console.error(
-                    "Fallo al hacer fetch en favoritos:",
+                    "Fallo al hacer fetch en favorites:",
                     response.statusText,
                 );
             }
         } catch (error) {
-            console.error("Error al hacer fetch en favoritos:", error);
+            console.error("Error al hacer fetch en favorites:", error);
         }
     };
 
     onMount(() => {
-        fetchFavoritos();
+        fetchFavorites();
     });
 </script>
 
 <main>
-    {#if favoritos.favoritos.length > 0}
+    {#if favorites.favorites.length > 0}
         <div class="legend">
             <div class="legend-title">Referencia</div>
             <div class="legend-item">
@@ -101,10 +101,10 @@
         </div>
 
         <div class="list-header">
-            <h2 class="list-title">Favoritos</h2>
+            <h2 class="list-title">Favorites</h2>
         </div>
         <div class="card-container">
-            {#each favoritos.favoritos as fav (fav.id)}
+            {#each favorites.favorites as fav (fav.id)}
                 <div class="card" id="card-{fav.nombre}">
                     <h3 class="card-title">{fav.nombre}</h3>
                     <div class="card-date">{fav.fecha}</div>
@@ -123,15 +123,15 @@
                     <button
                         onclick={() => borrarFavorito(fav.nombre)}
                         class="btn delete-button"
-                        aria-label="Borrar de favoritos"
-                        title="Borrar de favoritos"
+                        aria-label="Borrar de favorites"
+                        title="Borrar de favorites"
                     >
                         Borrar
                     </button>
                     <button
                         class="btn search-button"
                         onclick={() =>
-                            descargarCSVFavoritos(fav.data, fav.nombre)}
+                            descargarCSVFavorites(fav.data, fav.nombre)}
                         aria-label="Descargar"
                         title="Descargar"
                     >
