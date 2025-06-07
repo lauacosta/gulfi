@@ -1,9 +1,14 @@
+use std::{fmt::Debug, path::Path};
+
 use gulfi_common::Document;
 
 use crate::{CliError, Format};
 
-pub fn handle(documents: &[Document], meta_path: &str, format: &Format) -> Result<(), CliError> {
-    println!("Document definitions in `{meta_path}`:");
+pub fn handle<P>(documents: &[Document], meta_path: P, format: &Format) -> Result<(), CliError>
+where
+    P: AsRef<Path> + Debug,
+{
+    println!("Document definitions in `{meta_path:#?}`:");
     match format {
         Format::Pretty => {
             for doc in documents {

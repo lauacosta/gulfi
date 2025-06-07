@@ -2,35 +2,35 @@
     import { onMount, onDestroy } from "svelte";
     import { selectedDocument } from "../stores";
 
-    type HistorialResponse = {
+    type HistoryResponse = {
         id: number;
         query: string;
     };
 
     const apiUrl = import.meta.env.VITE_API_URL;
 
-    let historialItems: HistorialResponse[] = $state([]);
+    let historyItems: HistoryResponse[] = $state([]);
     let visible = $state(false);
 
-    async function fetchHistorial() {
+    async function fetchHistory() {
         try {
-            let endpoint = `${apiUrl}/api/${$selectedDocument}/historial`;
+            let endpoint = `${apiUrl}/api/${$selectedDocument}/history`;
             const response = await fetch(endpoint);
 
             if (response.ok) {
-                historialItems = await response.json();
+                historyItems = await response.json();
             } else {
-                console.error("Failed to fetch historial");
+                console.error("Failed to fetch history");
             }
         } catch (error) {
-            console.error("Error fetching historial:", error);
+            console.error("Error fetching history:", error);
         }
     }
 
-    async function deleteHistorialItem(id: number, queryText: string) {
+    async function deleteHistoryItem(id: number, queryText: string) {
         try {
             let delete_url = 
-                `${apiUrl}/api/${$selectedDocument}/historial?query=${encodeURIComponent(queryText)}`;
+                `${apiUrl}/api/${$selectedDocument}/history?query=${encodeURIComponent(queryText)}`;
 
             const deleteResponse = await fetch(
                 delete_url,
@@ -40,7 +40,7 @@
             );
 
             if (deleteResponse.ok) {
-                historialItems = historialItems.filter(
+                historyItems = historyItems.filter(
                     (item) => item.id !== id,
                 );
             } else {
@@ -57,7 +57,7 @@
         if (event.ctrlKey && event.key === "h") {
             event.preventDefault();
             visible = true;
-            fetchHistorial();
+            fetchHistory();
         }
 
         if (event.key === "Escape" && visible) {
@@ -87,22 +87,22 @@
 
 {#if visible}
     <div
-        class="historial-overlay"
+        class="history-overlay"
         role="button"
         tabindex="0"
         onclick={() => (visible = false)}
         onkeydown={(e) => e.key === "Enter" && (visible = false)}
         aria-label="Close overlay"
     >
-        <div class="historial-window">
-            <div class="historial-header">
-                <h2 class="historial-title">Historial de búsquedas</h2>
+        <div class="history-window">
+            <div class="history-header">
+                <h2 class="history-title">History de búsquedas</h2>
             </div>
-            <div class="historial-body">
-                {#if historialItems.length > 0}
-                    <ul class="historial-list">
-                        {#each historialItems as item (item.id)}
-                            <li class="historial-item">
+            <div class="history-body">
+                {#if historyItems.length > 0}
+                    <ul class="history-list">
+                        {#each historyItems as item (item.id)}
+                            <li class="history-item">
                                 <span
                                     class="query-text"
                                     onclick={() => handleItemClick(item.query)}
@@ -114,12 +114,12 @@
                                     class="delete-btn"
                                     onclick={(e) => {
                                         e.stopPropagation();
-                                        deleteHistorialItem(
+                                        deleteHistoryItem(
                                             item.id,
                                             item.query,
                                         );
                                     }}
-                                    title="Eliminar de historial"
+                                    title="Eliminar de history"
                                 >
                                     <svg
                                         width="20"
@@ -140,8 +140,8 @@
                         {/each}
                     </ul>
                 {:else}
-                    <div class="empty-historial">
-                        No hay búsquedas en el historial
+                    <div class="empty-history">
+                        No hay búsquedas en el history
                     </div>
                 {/if}
             </div>

@@ -1,11 +1,10 @@
 #![allow(clippy::too_many_lines)]
 use crate::{
+    bg_tasks::WriteJob,
     into_http::{HttpError, IntoHttp, SearchResult},
-    startup::WriteJob,
 };
 use axum::Json;
 use eyre::Report;
-use gulfi_openai::embed_single;
 use gulfi_query::{
     Constraint::{self, Exact, GreaterThan, LesserThan},
     Query,
@@ -109,15 +108,18 @@ impl SearchStrategy {
                 } else {
                     let embedding_span = info_span!("embedding.request");
                     let _guard = embedding_span.enter();
-                    let embedding =
-                        Arc::new(embed_single(query.query.clone(), client).await.map_err(
-                            |err| {
+                    let embedding = Arc::new(
+                        state
+                            .embeddings_provider
+                            .embed_single(query.query.clone(), client)
+                            .await
+                            .map_err(|err| {
                                 tracing::error!("{err}");
                                 HttpError::Internal {
                                     err: "Failed to create query embedding".to_string(),
                                 }
-                            },
-                        )?);
+                            })?,
+                    );
 
                     state
                         .embeddings_cache
@@ -131,7 +133,7 @@ impl SearchStrategy {
             SearchStrategy::Fts => {
                 span.record("source", "dynamic");
             }
-        };
+        }
 
         debug!(?query);
 
@@ -409,7 +411,7 @@ impl SearchStrategy {
             query.query, total_query_count,
         );
 
-        if let Err(e) = state.writer.send(WriteJob::Historial {
+        if let Err(e) = state.writer.send(WriteJob::History {
             query: params.search_str,
             doc: params.document,
             strategy: params.strategy,

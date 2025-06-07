@@ -15,42 +15,35 @@ workflows:
       - check:
           context: [aws, slack]
 
-      - test_and_coverage: 
+      - test:
+          context: [aws, slack]
+
+      - coverage_report:
           context: [aws, slack, codecov]
+          requires:
+            - test
 
-      - udeps:
-          context: [aws, slack]
-
-      - deny:
-          context: [aws, slack]
-
-      - audit:
-          context: [aws, slack]
-
-      - cargo-sonar:
+      - dependency_analysis:
           context: [aws, slack]
           requires:
             - check
-            - audit
-            - deny
-            - udeps
 
-      - build-ui:
+      - build_ui:
           context: [slack]
           
       - sonarcloud:
           context: [aws, slack, sonarqube]
           requires:
-            - cargo-sonar
+            - dependency_analysis
+            - check
+            - coverage_report
 
       - update_taiga:
           context: [aws, taiga, slack]
           requires:
             - check
-            - test_and_coverage
-            - audit
-            - deny
-            - udeps
+            - test
+            - dependency_analysis
 
 jobs:
   check:
@@ -70,20 +63,30 @@ jobs:
           event: fail
           template: basic_fail_1
 
-  # test:
-  #   executor: shadesmar/rust
-  #   steps:
-  #     - checkout
-  #     - shadesmar/with_rust:
-  #         steps:
-  #           - run: |
-  #               just test
+  test:
+    executor: shadesmar/rust
+    steps:
+      - checkout
+      - shadesmar/with_rust:
+          steps:
+            - run: |
+                just test
+            - run: |
+                mv /root/project/target/nextest/ci/junit.xml .
 
-  #     - slack/notify:
-  #         event: fail
-  #         template: basic_fail_1
+            - store_test_results:
+                path: junit.xml
 
-  test_and_coverage:
+            - persist_to_workspace:
+                root: /root/project
+                paths:
+                  - junit.xml
+
+      - slack/notify:
+          event: fail
+          template: basic_fail_1
+
+  coverage_report:
     executor: shadesmar/rust
     steps:
       - checkout
@@ -103,61 +106,7 @@ jobs:
           event: fail
           template: basic_fail_1
 
-  udeps:
-    executor: shadesmar/rust
-    steps:
-      - checkout
-      - shadesmar/with_rust:
-          steps:
-            - run: |
-                just udeps_report
-
-            - persist_to_workspace:
-                root: /root/project
-                paths:
-                  - udeps.json
-                
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
-          
-  deny:
-    executor: shadesmar/rust
-    steps:
-      - checkout
-      - shadesmar/with_rust:
-          steps:
-            - run: |
-                just deny_report
-
-            - persist_to_workspace:
-                root: /root/project
-                paths:
-                  - deny.json
-                
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
-
-  audit:
-    executor: shadesmar/rust
-    steps:
-      - checkout
-      - shadesmar/with_rust:
-          steps:
-            - run: |
-                just audit_report
-
-            - persist_to_workspace:
-                root: /root/project
-                paths:
-                  - audit.json
-                
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
-
-  cargo-sonar:
+  dependency_analysis:
     executor: shadesmar/rust
     steps:
       - checkout
@@ -166,7 +115,17 @@ jobs:
       - shadesmar/with_rust:
           steps:
             - run: |
-                just sonar
+                  echo "Running unused dependencies check..."
+                  just udeps_report
+                  
+                  echo "Running license and dependency denial check..."
+                  just deny_report
+                  
+                  echo "Running security audit..."
+                  just audit_report
+
+                  echo "Preparing sonar analysis..."
+                  just sonar
 
             - persist_to_workspace:
                 root: /root/project
@@ -176,8 +135,8 @@ jobs:
       - slack/notify:
           event: fail
           template: basic_fail_1
-
-  build-ui:
+          
+  build_ui:
     docker:
       - image: cimg/base:stable
     steps:

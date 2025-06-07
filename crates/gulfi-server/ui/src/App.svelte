@@ -1,53 +1,49 @@
 <script lang="ts">
-    import { RouterView } from "@dvcol/svelte-simple-router/components";
-    import type {
-        Route,
-        RouterOptions,
-    } from "@dvcol/svelte-simple-router/models";
-    import Home from "./routes/Home.svelte";
-    import Fallback from "./routes/Fallback.svelte";
-    import Layout from "./lib/Layout.svelte";
-    import Sidebar from "./lib/Sidebar.svelte";
-    import Favoritos from "./routes/Favoritos.svelte";
-    import Historial from "./routes/Historial.svelte";
+import { RouterView } from "@dvcol/svelte-simple-router/components";
+import type { Route, RouterOptions } from "@dvcol/svelte-simple-router/models";
+import Home from "./routes/Home.svelte";
+import Fallback from "./routes/Fallback.svelte";
+import Layout from "./lib/Layout.svelte";
+import Sidebar from "./lib/Sidebar.svelte";
+import Favorites from "./routes/Favorites.svelte";
+import History from "./routes/History.svelte";
 
-    const RouteName = {
-        Home: "home",
-        Favoritos: "favoritos",
-        Historial: "historial",
-        Fallback: "fallback",
-    } as const;
+const RouteName = {
+	Home: "home",
+	Favorites: "favorites",
+	History: "history",
+	Fallback: "fallback",
+} as const;
 
-    type RouteNames = (typeof RouteName)[keyof typeof RouteName];
+type RouteNames = (typeof RouteName)[keyof typeof RouteName];
 
-    export const routes: Readonly<Route<RouteNames>[]> = [
-        {
-            name: RouteName.Home,
-            path: "/",
-            component: Home,
-        },
+export const routes: Readonly<Route<RouteNames>[]> = [
+	{
+		name: RouteName.Home,
+		path: "/",
+		component: Home,
+	},
 
-        {
-            name: RouteName.Favoritos,
-            path: "/favoritos",
-            component: Favoritos,
-        },
+	{
+		name: RouteName.Favorites,
+		path: "/favorites",
+		component: Favorites,
+	},
 
-        {
-            name: RouteName.Historial,
-            path: "/historial",
-            component: Historial,
-        },
+	{
+		name: RouteName.History,
+		path: "/history",
+		component: History,
+	},
 
-        {
-            name: RouteName.Fallback,
-            path: "*",
-            component: Fallback,
-        },
-    ] as const;
+	{
+		name: RouteName.Fallback,
+		path: "*",
+		component: Fallback,
+	},
+] as const;
 
-    export const options: RouterOptions<RouteNames> = { routes } as const;
-
+export const options: RouterOptions<RouteNames> = { routes } as const;
 </script>
 
 <Layout>

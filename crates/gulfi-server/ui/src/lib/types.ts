@@ -12,7 +12,7 @@ export type favoritesResponse = {
 };
 
 
-export type Historial = {
+export type History = {
     id: number;
     query: string;
     filters?: string;

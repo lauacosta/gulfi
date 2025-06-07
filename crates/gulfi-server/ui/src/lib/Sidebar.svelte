@@ -77,8 +77,8 @@
                     {/if}
                 </a>
             </li>
-            <li class={isActive("/favoritos") ? "active" : ""}>
-                <a href="/favoritos" title="Favoritos">
+            <li class={isActive("/favorites") ? "active" : ""}>
+                <a href="/favorites" title="Favorites">
                     <span class="icon"
                         ><svg
                             xmlns="http://www.w3.org/2000/svg"
@@ -97,13 +97,13 @@
                         ></span
                     >
                     {#if isExpanded}
-                        <span class="label">Favoritos</span>
+                        <span class="label">Favorites</span>
                     {/if}
                 </a>
             </li>
 
-            <li class={isActive("/historial") ? "active" : ""}>
-                <a href="/historial" title="Historial">
+            <li class={isActive("/history") ? "active" : ""}>
+                <a href="/history" title="History">
                     <span class="icon"
                         ><svg
                             xmlns="http://www.w3.org/2000/svg"
@@ -122,7 +122,7 @@
                         ></span
                     >
                     {#if isExpanded}
-                        <span class="label">Historial</span>
+                        <span class="label">History</span>
                     {/if}
                 </a>
             </li>

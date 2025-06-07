@@ -3,9 +3,11 @@ pub mod commands;
 pub mod helper;
 
 pub use clierror::*;
+pub use gulfi_server::configuration::get_configuration;
 
 use clap::{Parser, Subcommand, ValueEnum, command, crate_version};
-use std::net::IpAddr;
+use gulfi_server::configuration::Settings;
+use std::{net::IpAddr, path::PathBuf};
 
 #[derive(Parser)]
 #[command(version, about,  long_about = None, before_help = format!(r"
@@ -24,8 +26,12 @@ pub struct Cli {
     pub loglevel: String,
 
     /// Path to the sqlite database
-    #[arg(long = "database-path", default_value = "./gulfi.db")]
-    pub db: String,
+    #[arg(long = "database-path")]
+    pub db: Option<PathBuf>,
+
+    /// Path to the metadata file for documents
+    #[arg(long = "meta-file-path")]
+    pub meta_file_path: Option<PathBuf>,
 
     #[command(subcommand)]
     command: Option<Command>,
@@ -38,22 +44,40 @@ impl Cli {
             format: Format::Pretty,
         })
     }
+
+    pub fn merge_with_config(cli: Cli, config: &Settings) -> Cli {
+        let db = cli.db.clone().or(Some(config.db_settings.db_path.clone()));
+        let meta_file_path = cli
+            .meta_file_path
+            .clone()
+            .or(Some(config.app_settings.meta_file_path.clone()));
+
+        Cli {
+            db,
+            meta_file_path,
+            ..cli
+        }
+    }
 }
 
-#[derive(Subcommand, Clone, Debug)]
+#[derive(Subcommand, Clone, Debug, PartialEq, Eq)]
 pub enum Command {
     /// Starts the HTTP server.
     Serve {
         #[cfg(debug_assertions)]
-        #[arg(value_enum)]
-        mode: Mode,
+        mode: Profile,
+
         /// Sets the IP address.
-        #[clap(short = 'I', long, default_value = "127.0.0.1")]
-        interface: IpAddr,
+        #[clap(short = 'I', long)]
+        interface: Option<IpAddr>,
 
         /// Sets the port.
-        #[clap(short = 'P', long, default_value_t = 3000)]
-        port: u16,
+        #[clap(short = 'P', long)]
+        port: Option<u16>,
+
+        /// Number of sqlite connections in the pool.
+        #[clap(long)]
+        pool_size: Option<usize>,
 
         /// Opens the web interface.
         #[arg(long, default_value = "false")]
@@ -90,22 +114,25 @@ pub enum Command {
     Delete { document: String },
     /// Creates a new user in the database.
     CreateUser { username: String, password: String },
+
+    /// Creates a config template
+    Init,
 }
 
 #[cfg(debug_assertions)]
-#[derive(Debug, Clone, ValueEnum)]
-pub enum Mode {
-    Prod,
+#[derive(Debug, Clone, ValueEnum, PartialEq, Eq)]
+pub enum Profile {
     Dev,
+    Prod,
 }
 
-#[derive(Debug, Clone, ValueEnum)]
+#[derive(Debug, Clone, ValueEnum, PartialEq, Eq)]
 pub enum Format {
     Json,
     Pretty,
 }
 
-#[derive(Debug, Clone, ValueEnum)]
+#[derive(Debug, Clone, ValueEnum, PartialEq, Eq)]
 pub enum SyncStrategy {
     Fts,
     Vector,

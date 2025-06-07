@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::{
     fmt::{Debug, Display, Formatter},
     fs::{DirBuilder, metadata},
@@ -87,7 +88,7 @@ impl Document {
         let mut result = String::from("'  '");
         for i in &self.fields {
             if i.vec_input {
-                result.push_str(&format!(" || {} || '  '", i.name));
+                let _ = write!(result, " || {} || '  '", i.name);
             }
         }
 

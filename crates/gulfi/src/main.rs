@@ -1,46 +1,48 @@
 #![allow(clippy::too_many_lines)]
 
+use std::io::{Error, ErrorKind};
+use std::path::PathBuf;
 use std::{fs::File, time::Instant};
 
 use clap::Parser;
-use color_eyre::owo_colors::OwoColorize;
-use eyre::eyre;
-use gulfi::GulfiTimer;
-use gulfi_cli::commands;
+use gulfi_cli::commands::server::ServerOverrides;
 use gulfi_cli::{Cli, CliError, Command, ExitOnError, helper::initialize_meta_file};
+use gulfi_cli::{commands, get_configuration};
 use gulfi_common::Document;
-use gulfi_common::{META_JSON_FILE, MILLISECONDS_MULTIPLIER};
-use tracing::{Level, debug, level_filters::LevelFilter};
-use tracing_error::ErrorLayer;
-use tracing_subscriber::fmt;
-use tracing_subscriber::{Registry, fmt::Layer, layer::SubscriberExt};
+use gulfi_common::MILLISECONDS_MULTIPLIER;
 
 fn main() -> eyre::Result<()> {
+    color_eyre::install()?;
     let cli = Cli::parse();
-    setup_configuration(&cli.loglevel)?;
 
-    if let Err(e) = run_cli(&cli) {
+    if let Err(e) = run_cli(cli) {
         e.exit_with_tips();
     }
 
     Ok(())
 }
 
-fn run_cli(cli: &Cli) -> Result<(), CliError> {
-    let file = if let Ok(file) = File::open(META_JSON_FILE) {
-        Ok(file)
-    } else {
-        initialize_meta_file()?;
-        File::open(META_JSON_FILE)
-    }?;
+fn run_cli(cli: Cli) -> Result<(), CliError> {
+    match cli.command() {
+        Command::Init => unreachable!("Init is a standalone cmd"),
+        Command::Serve { .. }
+        | Command::Sync { .. }
+        | Command::List { .. }
+        | Command::Add
+        | Command::Delete { .. }
+        | Command::CreateUser { .. } => run_with_config(cli),
+    }
+}
 
-    let documents: Vec<Document> = serde_json::from_reader(file)?;
+fn run_with_config(cli: Cli) -> Result<(), CliError> {
+    let cli = Cli::merge_with_config(cli, &get_configuration()?);
 
-    debug!(?documents);
+    let (meta_file, documents) = load_meta_docs(&cli)?;
 
     match cli.command() {
+        Command::Init => unreachable!("Init is handled elsewhere"),
         Command::List { format } => {
-            commands::list::handle(&documents, META_JSON_FILE, &format).or_exit();
+            commands::list::handle(&documents, meta_file, &format).or_exit();
         }
 
         Command::Add => commands::documents::add_document().or_exit(),
@@ -49,13 +51,18 @@ fn run_cli(cli: &Cli) -> Result<(), CliError> {
             interface,
             port,
             open,
+            pool_size,
             #[cfg(debug_assertions)]
             mode,
         } => {
+            let db_path = cli.db.clone();
+            let overrides = ServerOverrides::new(interface, port, db_path, pool_size);
+
             #[cfg(debug_assertions)]
-            commands::server::start_server(interface, port, open, documents, &mode)?;
+            commands::server::start_server(overrides, open, documents, &mode)?;
+
             #[cfg(not(debug_assertions))]
-            commands::server::start_server(interface, port, open, documents)?;
+            commands::server::start_server(overrides, open, documents)?;
         }
         Command::Sync {
             sync_strat,
@@ -64,13 +71,14 @@ fn run_cli(cli: &Cli) -> Result<(), CliError> {
             document,
             chunk_size,
         } => {
+            let db_path = cli.db.as_ref().expect("db file missing");
+
             let base_delay = base_delay * MILLISECONDS_MULTIPLIER;
-            let db_path = cli.db.clone();
 
             let start = Instant::now();
-            let doc = commands::setup_db::handle(&db_path, &documents, &document, force)?;
+            let doc = commands::setup_db::handle(db_path, &documents, &document, force)?;
 
-            commands::sync::handle_update(&db_path, &doc, &sync_strat, base_delay, chunk_size)?;
+            commands::sync::handle_update(db_path, &doc, &sync_strat, base_delay, chunk_size)?;
 
             eprintln!(
                 "\n🎉 Synchronization finished! took {} ms.\n",
@@ -78,41 +86,29 @@ fn run_cli(cli: &Cli) -> Result<(), CliError> {
             );
         }
         Command::CreateUser { username, password } => {
-            commands::users::create_user(&cli.db, &username, &password).or_exit();
+            let db_path = cli.db.as_ref().expect("db file missing");
+
+            commands::users::create_user(db_path, &username, &password).or_exit();
         }
     }
 
     Ok(())
 }
 
-fn setup_configuration(loglevel: &str) -> eyre::Result<()> {
-    color_eyre::install()?;
+fn load_meta_docs(cli: &Cli) -> Result<(PathBuf, Vec<Document>), CliError> {
+    let meta_file = cli.meta_file_path.clone().ok_or_else(|| {
+        CliError::MetaOpenError(Error::new(ErrorKind::NotFound, "meta file not found"))
+    })?;
 
-    if dotenvy::dotenv().is_err() {
-        eprintln!("{} was not found.", "\'env\'".green().bold());
-    }
+    let file = if let Ok(file) = File::open(&meta_file) {
+        Ok(file)
+    } else {
+        initialize_meta_file()?;
+        File::open(&meta_file)
+    }?;
 
-    let level = match loglevel.to_lowercase().trim() {
-        "trace" => Level::TRACE,
-        "debug" => Level::DEBUG,
-        "info" => Level::INFO,
-        _ => {
-            return Err(eyre!("unknown log level, use `INFO`, `DEBUG` or `TRACE`."));
-        }
-    };
-
-    let subscriber = Registry::default()
-        .with(LevelFilter::from_level(level))
-        .with(
-            Layer::new()
-                .compact()
-                .with_ansi(true)
-                .with_timer(GulfiTimer::new())
-                .with_span_events(fmt::format::FmtSpan::FULL),
-        )
-        .with(ErrorLayer::default());
-
-    tracing::subscriber::set_global_default(subscriber)?;
-
-    Ok(())
+    Ok((
+        meta_file,
+        serde_json::from_reader::<_, Vec<Document>>(file)?,
+    ))
 }

@@ -9,11 +9,6 @@ version.workspace = true
 path= "./src/lib.rs"
 
 [dependencies]
-dotenvy = "0.15.7"
-tower-request-id = "0.3.0"
-tracing-error = "0.2.0"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json", "time"] }
-
 eyre.workspace = true
 tracing.workspace = true
 color-eyre.workspace = true

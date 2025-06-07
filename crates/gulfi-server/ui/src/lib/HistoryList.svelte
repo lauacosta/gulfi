@@ -1,7 +1,7 @@
 <script lang="ts">
 import { getBgColor } from "../lib/utils";
-import type { Historial } from "../lib/types";
-export let items: Historial[];
+import type { History } from "../lib/types";
+export let items: History[];
 import Empty from "../lib/Empty.svelte";
 import { selectedDocument } from "../stores";
 
@@ -13,13 +13,13 @@ const strategyLabels = {
 	ReciprocalRankFusion: "ReciprocalRankFusion",
 };
 
-async function deleteHistorialItem(id: number, queryText: string) {
+async function deleteHistoryItem(id: number, queryText: string) {
 	try {
 		if (!$selectedDocument) {
 			console.error("No document selected");
 			return;
 		}
-		const delete_url = `${apiUrl}/api/${$selectedDocument}/historial?query=${encodeURIComponent(queryText)}`;
+		const delete_url = `${apiUrl}/api/${$selectedDocument}/history?query=${encodeURIComponent(queryText)}`;
 
 		console.log(delete_url);
 
@@ -37,7 +37,7 @@ async function deleteHistorialItem(id: number, queryText: string) {
 	}
 }
 
-function buildQueryString(item: Historial) {
+function buildQueryString(item: History) {
 	const params = new URLSearchParams();
 	params.append("query", `${item.query}, ${item.filters}`);
 	params.append("strategy", item.strategy);
@@ -53,14 +53,14 @@ function buildQueryString(item: Historial) {
 <div>
     {#if items.length > 0}
         <div class="list-header">
-            <h2 class="list-title">Historial de búsquedas</h2>
+            <h2 class="list-title">History de búsquedas</h2>
         </div>
     {/if}
 
-    <div class="historial-card-container">
+    <div class="history-card-container">
         {#if items.length > 0}
             {#each items as item (item.id)}
-                <div class="historial-card">
+                <div class="history-card">
                     <div class="card-header">
                         <div>
                             <h3 class="query">{item.query}</h3>
@@ -110,7 +110,7 @@ function buildQueryString(item: Historial) {
                     <div class="card-footer">
                         <button
                             onclick={() =>
-                                deleteHistorialItem(item.id, item.query)}
+                                deleteHistoryItem(item.id, item.query)}
                             class="btn delete-button"
                             >Borrar
                         </button>
@@ -123,7 +123,7 @@ function buildQueryString(item: Historial) {
             {/each}
         {:else}
             <Empty
-                titulo="Tienes el historial vacío"
+                titulo="Tienes el history vacío"
                 motivo="Parece que todavia no has realizado ninguna búsqueda."
                 solucion="Empieza explorando y realiza una búsquedan"
             />

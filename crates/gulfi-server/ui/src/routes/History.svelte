@@ -1,37 +1,37 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import type { Historial } from "../lib/types";
-    import HistorialList from "../lib/HistorialList.svelte";
+    import type { History } from "../lib/types";
+    import HistoryList from "../lib/HistoryList.svelte";
     import { selectedDocument } from "../stores";
 
     const apiUrl = import.meta.env.VITE_API_URL;
 
-    let historial: Historial[] = $state([]);
+    let history: History[] = $state([]);
 
     // WARN: Siempre se va a ver unicamente el query con su ultimo metodo de busqueda
-    const fetchHistorial = async () => {
+    const fetchHistory = async () => {
         try {
-            let fetchstr = `${apiUrl}/api/${$selectedDocument}/historial-full`;
+            let fetchstr = `${apiUrl}/api/${$selectedDocument}/history-full`;
             console.log(fetchstr);
             const response = await fetch(fetchstr);
 
             if (response.ok) {
-                const data: Historial[] = await response.json();
-                historial = data;
+                const data: History[] = await response.json();
+                history = data;
             } else {
                 console.error(
-                    "Fallo al traer el historial:",
+                    "Fallo al traer el history:",
                     response.statusText,
                 );
             }
         } catch (error) {
-            console.error("Fallo al traer el historial:", error);
+            console.error("Fallo al traer el history:", error);
         }
     };
 
     onMount(() => {
-        fetchHistorial();
+        fetchHistory();
     });
 </script>
 
-<HistorialList items={historial} />
+<HistoryList items={history} />

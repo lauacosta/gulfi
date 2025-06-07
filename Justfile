@@ -10,6 +10,7 @@ fmt:
 watch: 
     watchexec -r -e rs -- cargo run -- serve dev
 
+
 # Searches for unused dependencies
 udeps:
     RUSTC_BOOTSTRAP=1 cargo udeps --all-targets --backend depinfo
@@ -32,8 +33,9 @@ check_report:
     cargo deduplicate-warnings < clippy_raw.json > clippy.json
 
 # Runs the test suite
+
 test:
-    cargo test --locked --all-features --all-targets
+    cargo nextest r --locked --all-features --all-targets --profile ci
 
 # Builds the UI
 build-ui:
@@ -59,7 +61,7 @@ sonar:
     cargo sonar --audit --clippy --deny --udeps
 
 coverage:
-    cargo llvm-cov --locked --all-features --lcov --output-path lcov.info
+    cargo llvm-cov --locked --lcov --output-path lcov.info
 
 ci: fmt check hack test udeps audit deny build-ui
 

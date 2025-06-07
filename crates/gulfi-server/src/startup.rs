@@ -1,42 +1,47 @@
-use axum::error_handling::HandleErrorLayer;
-use axum::{BoxError, Extension};
+use axum::{
+    BoxError, Extension, Router, body::Body, error_handling::HandleErrorLayer, http::Request,
+    routing::get, serve::Serve,
+};
+
 use color_eyre::owo_colors::OwoColorize;
-use eyre::{Result, eyre};
+use eyre::Result;
 use gulfi_common::Document;
-use gulfi_sqlite::pooling::AsyncConnectionPool;
-use gulfi_sqlite::spawn_vec_connection;
+use gulfi_openai::OpenAIClient;
+use gulfi_sqlite::{pooling::AsyncConnectionPool, spawn_vec_connection};
 use http::{Method, StatusCode};
 use moka::future::Cache;
-use rusqlite::{Connection, params};
-use std::net::IpAddr;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use secrecy::ExposeSecret;
 use std::{fmt, io};
-use tokio::sync::mpsc::{self, UnboundedSender};
+use std::{
+    net::IpAddr,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+use tokio::sync::mpsc::UnboundedSender;
 use tower::buffer::BufferLayer;
-// use tower::limit::RateLimitLayer;
-use tower_http::LatencyUnit;
-use tower_http::cors::Any;
-use tower_http::{compression::CompressionLayer, cors::CorsLayer};
+use tower_http::{
+    compression::CompressionLayer,
+    cors::{Any, CorsLayer},
+    trace::{OnResponse, TraceLayer},
+};
 
-use axum::{Router, body::Body, http::Request, routing::get, serve::Serve};
 use tokio::{net::TcpListener, signal};
 use tower::ServiceBuilder;
-use tower_http::trace::{OnResponse, TraceLayer};
 use tower_request_id::{RequestId, RequestIdLayer};
-use tracing::{Level, debug_span, error, info};
+use tracing::{Instrument, Level, debug_span, error, info, info_span};
 
-use crate::ApplicationSettings;
+use crate::bg_tasks::{WriteJob, spawn_writer_task};
+use crate::configuration::Settings;
 use crate::routes::{
     add_favoritos, auth, delete_favoritos, delete_historial, documents, favoritos, health_check,
     historial_detailed, historial_summary, search, serve_ui,
 };
-use crate::search::SearchStrategy;
 
 #[derive(Debug, Clone)]
 pub struct ServerState {
     pub documents: Vec<Document>,
     pub writer: UnboundedSender<WriteJob>,
+    pub embeddings_provider: OpenAIClient,
     pub pool: AsyncConnectionPool,
     pub embeddings_cache: Cache<String, Arc<Vec<f32>>>,
 }
@@ -55,17 +60,33 @@ impl Application {
     /// # Panics
     /// It panics if it's not able to get a port for the given address.
     ///
-    pub async fn build(
-        configuration: &ApplicationSettings,
-        documents: Vec<Document>,
-    ) -> Result<Self> {
-        let address = format!("{}:{}", configuration.host, configuration.port);
+    pub async fn build(configuration: &Settings, documents: Vec<Document>) -> Result<Self> {
+        let pool_size = configuration.db_settings.pool_size;
+        let db_path = configuration.db_settings.db_path.clone();
+        let pool = AsyncConnectionPool::new(pool_size, || spawn_vec_connection(&db_path))?;
 
+        // TODO: A more generic Client for embeddings
+        let embeddings_provider = OpenAIClient::new(
+            configuration
+                .embedding_provider
+                .auth_token
+                .clone()
+                .expose_secret()
+                .to_string(),
+            configuration.embedding_provider.endpoint_url.clone(),
+        );
+
+        let address = format!(
+            "{}:{}",
+            configuration.app_settings.host, configuration.app_settings.port
+        );
+
+        let host = configuration.app_settings.host;
         let listener = match TcpListener::bind(&address).await {
             Ok(listener) => listener,
             Err(err) => {
                 error!("{err}. Trying with another port...");
-                match TcpListener::bind(format!("{}:0", configuration.host)).await {
+                match TcpListener::bind(format!("{host}:0")).await {
                     Ok(listener) => listener,
                     Err(err) => {
                         error!("There aren't available ports, closing application...");
@@ -80,22 +101,12 @@ impl Application {
             .expect("It should be able to find the locall address")
             .port();
 
-        let host = configuration.host;
-
-        let db_path = std::env::var("DATABASE_URL").map_err(|err| {
-            eyre!(
-                "Environment variable `DATABASE_URL` is not set. Err: {}",
-                err
-            )
-        })?;
-
-        let pool = AsyncConnectionPool::new(10, || spawn_vec_connection(&db_path))?;
-
         let writer = spawn_writer_task(&db_path)?;
 
         let state = ServerState {
             documents,
             writer,
+            embeddings_provider,
             pool,
             embeddings_cache: Cache::builder()
                 // TTL
@@ -105,9 +116,11 @@ impl Application {
                 .build(),
         };
 
-        let server = build_server(listener, state)?;
-
-        Ok(Self { port, host, server })
+        Ok(Self {
+            port,
+            host,
+            server: build_server(listener, state)?,
+        })
     }
 
     pub fn port(&self) -> u16 {
@@ -126,32 +139,38 @@ impl Application {
     pub async fn run_until_stopped(self) -> io::Result<()> {
         self.server
             // https://github.com/tokio-rs/axum/blob/main/examples/graceful-shutdown/src/main.rs
-            .with_graceful_shutdown(async move {
-                let ctrl_c = async {
-                    signal::ctrl_c()
-                        .await
-                        .expect("Fallo en instalar el handler para Ctrl+C");
-                };
-                #[cfg(unix)]
-                let terminate = async {
-                    signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-                        .expect("Fallo en instalar el handler para las señales")
-                        .recv()
-                        .await;
-                };
+            .with_graceful_shutdown(
+                async move {
+                    let ctrl_c = async {
+                        signal::ctrl_c()
+                            .await
+                            .expect("failed to install handler for ctrl+c")
+                    };
 
-                #[cfg(not(unix))]
-                let terminate = std::future::pending::<()>();
+                    #[cfg(unix)]
+                    let terminate = async {
+                        signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                            .expect("failed to install handler for ctrl+c")
+                            .recv()
+                            .await;
+                    };
 
-                tokio::select! {
-                    () = ctrl_c => {
-                        info!("ctrl+c detectado.");
-                    },
-                    () = terminate => {
-                        info!("ctrl+c detectado.");
-                    },
+                    #[cfg(not(unix))]
+                    let terminate = std::future::pending::<()>();
+
+                    tokio::select! {
+                        () = ctrl_c => {
+                            info!("Received SIGINT");
+                            info!("Exiting immediately");
+                        },
+                        () = terminate => {
+                            info!("Received SIGINT");
+                            info!("Exiting immediately");
+                        },
+                    }
                 }
-            })
+                .instrument(info_span!("graceful-shutdown")),
+            )
             .await
     }
 }
@@ -159,10 +178,10 @@ impl Application {
 pub fn build_server(listener: TcpListener, state: ServerState) -> Result<Serve<Router, Router>> {
     let historial_routes = Router::new()
         .route(
-            "/:doc/historial",
+            "/:doc/history",
             get(historial_summary).delete(delete_historial),
         )
-        .route("/:doc/historial-full", get(historial_detailed));
+        .route("/:doc/history-full", get(historial_detailed));
 
     let search_routes = Router::new().route("/search", get(search)).layer(
         ServiceBuilder::new()
@@ -185,7 +204,7 @@ pub fn build_server(listener: TcpListener, state: ServerState) -> Result<Serve<R
         .route("/api/auth", get(auth))
         .route("/api/health_check", get(health_check))
         .route(
-            "/api/:doc/favoritos",
+            "/api/:doc/favorites",
             get(favoritos).post(add_favoritos).delete(delete_favoritos),
         )
         .route("/api/documents", get(documents));
@@ -227,7 +246,6 @@ pub fn build_server(listener: TcpListener, state: ServerState) -> Result<Serve<R
                         .on_response(
                             ColoredOnResponse::new()
                                 .include_headers(true)
-                                .latency_unit(LatencyUnit::Millis)
                                 .level(Level::INFO),
                         ),
                 )
@@ -239,18 +257,21 @@ pub fn build_server(listener: TcpListener, state: ServerState) -> Result<Serve<R
 }
 
 pub async fn run_server(
-    configuration: ApplicationSettings,
+    configuration: Settings,
     start: Instant,
     documents: Vec<Document>,
+    open: bool,
 ) -> Result<()> {
     match Application::build(&configuration, documents).await {
         Ok(app) => {
             let url = format!("http://{}:{}", app.host(), app.port());
+            let name = configuration.app_settings.name;
+            let version = env!("CARGO_PKG_VERSION");
 
             eprintln!(
                 "\n\n  {} {} ready in {} ms\n",
-                configuration.name.to_uppercase().bold().bright_green(),
-                format!("v{}", configuration.version).green(),
+                name.to_uppercase().bold().bright_green(),
+                format!("v{version}").green(),
                 start.elapsed().as_millis().bold().bright_white(),
             );
 
@@ -261,19 +282,17 @@ pub async fn run_server(
                 url.bright_cyan().underline()
             );
 
-            if configuration.open
-                && webbrowser::open_browser(webbrowser::Browser::Default, &url).is_ok()
-            {
-                info!("Se abrirá la aplicación en el navegador predeterminado.");
+            if open && webbrowser::open_browser(webbrowser::Browser::Default, &url).is_ok() {
+                info!("App will open on default browser if enabled");
             }
 
             if let Err(e) = app.run_until_stopped().await {
-                error!("Error ejecutando el servidor HTTP: {:?}", e);
+                error!("Error executing HTTP server: {:?}", e);
                 return Err(e.into());
             }
         }
         Err(e) => {
-            error!("Fallo al iniciar el servidor: {:?}", e);
+            error!("Fail at starting server: {:?}", e);
             return Err(e);
         }
     }
@@ -283,7 +302,6 @@ pub async fn run_server(
 #[derive(Clone)]
 struct ColoredOnResponse {
     level: Level,
-    latency_unit: LatencyUnit,
     include_headers: bool,
 }
 
@@ -291,18 +309,12 @@ impl ColoredOnResponse {
     fn new() -> Self {
         Self {
             level: Level::INFO,
-            latency_unit: LatencyUnit::Millis,
             include_headers: false,
         }
     }
 
     fn level(mut self, level: Level) -> Self {
         self.level = level;
-        self
-    }
-
-    pub fn latency_unit(mut self, latency_unit: LatencyUnit) -> Self {
-        self.latency_unit = latency_unit;
         self
     }
 
@@ -313,19 +325,34 @@ impl ColoredOnResponse {
 }
 
 struct Latency {
-    unit: LatencyUnit,
     duration: Duration,
+}
+
+impl Latency {
+    fn new(duration: Duration) -> Self {
+        Self { duration }
+    }
+
+    fn best_unit_and_value(&self) -> (f64, &'static str) {
+        let nanos = self.duration.as_nanos();
+
+        if nanos >= 1_000_000_000 {
+            (self.duration.as_secs_f64(), "s")
+        } else if nanos >= 1_000_000 {
+            (self.duration.as_millis() as f64, "ms")
+        } else if nanos >= 1_000 {
+            (self.duration.as_micros() as f64, "μs")
+        } else {
+            (nanos as f64, "ns")
+        }
+    }
 }
 
 impl fmt::Display for Latency {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.unit {
-            LatencyUnit::Seconds => write!(f, "{} s", self.duration.as_secs_f64()),
-            LatencyUnit::Millis => write!(f, "{} ms", self.duration.as_millis()),
-            LatencyUnit::Micros => write!(f, "{} μs", self.duration.as_micros()),
-            LatencyUnit::Nanos => write!(f, "{} ns", self.duration.as_nanos()),
-            _ => write!(f, "unknown unitdesconocida."),
-        }
+        let (value, unit) = self.best_unit_and_value();
+
+        write!(f, "{value:.3} {unit}")
     }
 }
 
@@ -378,10 +405,7 @@ macro_rules! event_dynamic_lvl {
 
 impl<B> OnResponse<B> for ColoredOnResponse {
     fn on_response(self, response: &http::Response<B>, latency: Duration, _: &tracing::Span) {
-        let latency = Latency {
-            unit: self.latency_unit,
-            duration: latency,
-        };
+        let latency = Latency::new(latency);
 
         let response_headers = self
             .include_headers
@@ -406,57 +430,4 @@ impl<B> OnResponse<B> for ColoredOnResponse {
             "request procesado"
         );
     }
-}
-
-#[derive(Debug)]
-pub enum WriteJob {
-    Historial {
-        query: String,
-        doc: String,
-        strategy: SearchStrategy,
-        peso_fts: f32,
-        peso_semantic: f32,
-        k_neighbors: u64,
-    },
-    Cache {
-        query: String,
-        result_json: String,
-        expires_at: i64,
-    },
-}
-
-fn spawn_writer_task(db_path: &str) -> eyre::Result<mpsc::UnboundedSender<WriteJob>> {
-    let conn = Connection::open(db_path)?;
-    let (tx, mut rx) = mpsc::unbounded_channel();
-
-    tokio::spawn(async move {
-        while let Some(job) = rx.recv().await {
-            let res = match job {
-                WriteJob::Historial {
-                    query,
-                    doc,
-                    strategy,
-                    peso_fts,
-                    peso_semantic,
-                    k_neighbors,
-                } => {
-                    conn.execute(
-                        "insert or replace into historial(query, strategy, doc, peso_fts, peso_semantic, neighbors) values (?,?,?,?,?,?)",
-                        params![query, strategy, doc, peso_fts, peso_semantic, k_neighbors],
-                    )
-                }
-                WriteJob::Cache {
-                    query: _,
-                    result_json: _,
-                    expires_at: _,
-                } => todo!(),
-            };
-
-            if let Err(e) = res {
-                eprintln!("[writer task] Write failed: {e:?}");
-            }
-        }
-    });
-
-    Ok(tx)
 }

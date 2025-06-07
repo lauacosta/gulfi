@@ -15,8 +15,11 @@ rusqlite.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 argon2.workspace = true
+config.workspace = true
 password-hash.workspace = true
+secrecy.workspace = true
 
 gulfi-common = { path = "../gulfi-common/"}
 gulfi-server = { path = "../gulfi-server/"}
 gulfi-sqlite= { path = "../gulfi-sqlite/"}
+gulfi-openai = { path = "../gulfi-openai/" }
