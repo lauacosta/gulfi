@@ -448,7 +448,7 @@
                                 id="vecinos"
                                 name="k"
                                 min="1"
-                                max="10000"
+                                max="4096"
                                 bind:value={k}
                             />
                         </div>

@@ -70,6 +70,7 @@ impl SearchStrategy {
 
         let string = format!("query: {}", params.search_str);
         let query = Query::parse(&string).map_err(HttpError::from)?;
+        dbg!("{:#?}", &query);
 
         let (valid_fields, invalid_fields) = {
             let mut invalid = Vec::new();
@@ -133,7 +134,7 @@ impl SearchStrategy {
             SearchStrategy::Fts => {
                 span.record("source", "dynamic");
             }
-        }
+        };
 
         debug!(?query);
 

@@ -181,3 +181,31 @@ jobs:
           event: fail
           template: basic_fail_1
 
+  deploy:
+    executor: shadesmar/rust
+    steps:
+      - checkout
+      - add_ssh_keys:
+          fingerprints:
+            - "SHA256:-"
+
+      - run:
+          name: Add server to known hosts
+          command: |
+            mkdir -p ~/.ssh
+            echo "$SERVER_HOST_KEY" >> ~/.ssh/known_hosts
+
+      - shadesmar/with_rust:
+          steps:
+            - run:
+                name: Deploy
+                command: ./deploy.sh
+                no_output_timeout: 10m
+
+      - slack/notify:
+          event: fail
+          template: basic_fail_1
+
+      - slack/notify:
+          event: pass
+          template: success_tagged_deploy_1

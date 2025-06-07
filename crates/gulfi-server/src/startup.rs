@@ -236,11 +236,18 @@ pub fn build_server(listener: TcpListener, state: ServerState) -> Result<Serve<R
                                 .get::<RequestId>()
                                 .map_or_else(|| "unknown".into(), ToString::to_string);
 
+                            let user_agent = request
+                                .headers()
+                                .get("user-agent")
+                                .and_then(|h| h.to_str().ok())
+                                .unwrap_or("unkown");
+
                             debug_span!(
                                 "request",
                                 id = %request_id,
                                 method = %request.method().blue().bold(),
                                 uri = %request.uri(),
+                                user_agent= %user_agent
                             )
                         })
                         .on_response(
