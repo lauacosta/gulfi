@@ -188,13 +188,12 @@ jobs:
       - checkout
       - attach_workspace:
           at: .  
-          steps:
-            - run: |
-                cargo build --release
-            - persist_to_workspace:
-                root: /root/project
-                paths:
-                  - target/release/gulfi
+      - run: |
+          cargo build --release
+      - persist_to_workspace:
+          root: /root/project
+          paths:
+            - target/release/gulfi
 
       - slack/notify:
           event: fail
