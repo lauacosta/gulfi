@@ -167,8 +167,8 @@ export function renderSearchError(error: ServerError): string {
 
     if ('type' in error && error.type === 'invalid_fields') {
         const e = error as BadRequestError;
-        return `${e.err} Campos invalidos: [${e.invalid_fields.join(', ')}]. Los campos validos son [${e.valid_fields.join(', ')}]`;
+        return `${e.err} Invalid fields: [${e.invalid_fields.join(', ')}]. Valid fields are: [${e.valid_fields.join(', ')}]`;
     }
 
-    return 'Ocurrió un error interno. Por favor intentá de nuevo.';
+    return 'Internal Server Error. Please, try again later.';
 }
