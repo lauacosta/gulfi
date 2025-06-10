@@ -1,5 +1,4 @@
 /target
-/scripts
 *.sqlite3
 .env
 gulfi.db
@@ -11,7 +10,6 @@ datasources
 meta.json
 /release
 /backups
-/scripts
 .idea
 gulfi_release.zip
 gulfi_release

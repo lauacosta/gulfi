@@ -24,7 +24,7 @@ fn main() -> eyre::Result<()> {
 
 fn run_cli(cli: Cli) -> Result<(), CliError> {
     match cli.command() {
-        Command::Init => unreachable!("Init is a standalone cmd"),
+        Command::Init => commands::configuration::create_config_template(),
         Command::Serve { .. }
         | Command::Sync { .. }
         | Command::List { .. }
