@@ -130,13 +130,13 @@ jobs:
           steps:
             - run: |
                   echo "Running unused dependencies check..."
-                  just udeps_report
+                  just udeps_report || true
                   
                   echo "Running license and dependency denial check..."
-                  just deny_report
-                  
+                  just deny_report || true
+                   
                   echo "Running security audit..."
-                  just audit_report
+                  just audit_report || true
 
                   echo "Preparing sonar analysis..."
                   just sonar

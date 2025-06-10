@@ -157,17 +157,17 @@ impl SearchStrategy {
                 SearchStrategy::Fts => {
                     let search = {
                         let start = "select rank as score,";
-                        let mut rest = String::new();
+                        let mut fields = String::new();
 
                         for field in &document.fields {
                             if !field.vec_input {
-                                let _ = write!(rest, "{},", field.name);
+                                let _ = write!(fields, "{},", field.name);
                             }
                         }
 
                         let doc_name = document.name.clone();
                         format!(
-                            "{start}{rest}  highlight(fts_{doc_name}, 0, '<b style=\"color: green;\">', '</b>') as input, 'fts' as match_type from fts_{doc_name}",
+                            "{start}{fields}  highlight(fts_{doc_name}, 0, '<b style=\"color: green;\">', '</b>') as input, 'fts' as match_type from fts_{doc_name}",
                         )
                     };
 
@@ -215,23 +215,22 @@ impl SearchStrategy {
                     tokio::task::spawn_blocking( move || -> QueryResult  {
                     let result = match search_strategy {
                         SearchStrategy::Semantic => {
-                            // TODO: Should add caching for the same embedding.
                             let embedding = query_emb.ok_or_else(|| HttpError::Internal { err: "failed to create embedding".to_owned()})?;
                             let embedding = embedding.as_bytes();
 
                             let search = {
                                 let start = format!("select vec_{}.distance,", document.name);
-                                let mut rest = String::new();
+                                let mut fields = String::new();
 
                                 for field in &document.fields {
                                     if !field.vec_input {
-                                        let _ = write!(rest, "{}.{}", document.name, field.name);
+                                        let _ = write!(fields, " {}.{},", document.name, field.name);
                                     }
                                 }
 
                                 let doc_name = document.name.clone();
                                 format!(
-                                    "{start} {rest} {doc_name}.vec_input as input, 'vec' as match_type from vec_{doc_name} left join {doc_name} on {doc_name}.id = vec_{doc_name}.row_id"
+                                    "{start} {fields} {doc_name}.vec_input as input, 'vec' as match_type from vec_{doc_name} left join {doc_name} on {doc_name}.id = vec_{doc_name}.row_id"
                                 )
                             };
 

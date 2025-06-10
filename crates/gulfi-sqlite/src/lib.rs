@@ -202,7 +202,7 @@ pub fn sync_fts_data(conn: &Connection, doc: &Document) -> usize {
 
     pb.set_style(style);
     pb.enable_steady_tick(Duration::from_millis(100));
-    pb.set_message(format!("Syncing FTS tables in {doc_name}..."));
+    pb.set_message(format!(" Syncing FTS tables in {doc_name}..."));
 
     for field in &doc.fields {
         validate_sql_identifier(&field.name).expect("Should be a safe identifier");
