@@ -121,8 +121,6 @@ impl OpenAIClient {
             payload.put(chunk);
         }
 
-        // let bytes = response.bytes().await?;
-        // let mut buf = BytesMut::from(bytes);
         let response: ResponseBody = simd_json::serde::from_slice(&mut payload)?;
 
         let elapsed = start.elapsed().as_millis();
