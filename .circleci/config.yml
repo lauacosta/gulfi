@@ -172,8 +172,8 @@ jobs:
           name: building-ui
           command: cd crates/gulfi-server/ui/ && pnpm install && pnpm build
 
-      - persist_to_workspace:
-          root: /root/project
+      - persist_to_workspace:     
+          root: .
           paths:
             - crates/gulfi-server/ui/dist
 
