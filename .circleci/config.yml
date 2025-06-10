@@ -60,7 +60,7 @@ workflows:
               only: main
 
       - deploy_to_vps:
-          context: [aquiles, slack]
+          context: [aquiles, slack, aws]
           requires:
             - hold_for_approval
           filters:
@@ -228,6 +228,10 @@ jobs:
     executor: shadesmar/rust
     steps:
       - checkout
+
+      - attach_workspace:
+          at: .
+
       - run:
           name: Setup SSH
           command: |
