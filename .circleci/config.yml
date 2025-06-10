@@ -229,24 +229,24 @@ jobs:
     steps:
       - checkout
       - run:
-            name: Setup SSH
-            command: |
-              mkdir -p ~/.ssh
-              echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
-              chmod 600 ~/.ssh/id_ed25519
-              ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts
-  
+          name: Setup SSH
+          command: |
+            mkdir -p ~/.ssh
+            echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+            chmod 600 ~/.ssh/id_ed25519
+            ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts
+
       - run:
           name: Prepare deploy script
           command: |
             chmod +x deploy.sh
 
       - shadesmar/with_rust:
-        steps:
-          - run:
-              name: Deploy to VPS
-              command: ./deploy.sh
-              no_output_timeout: 10m
+          steps:
+            - run:
+                name: Deploy to VPS
+                command: ./deploy.sh
+                no_output_timeout: 10m
 
       - slack/notify:
           event: fail
