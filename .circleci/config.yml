@@ -175,7 +175,7 @@ jobs:
       - persist_to_workspace:
           root: /root/project
           paths:
-            - /crates/gulfi-server/ui/dist
+            - crates/gulfi-server/ui/dist
 
       - slack/notify:
           event: fail
@@ -193,7 +193,7 @@ jobs:
             - persist_to_workspace:
                 root: /root/project
                 paths:
-                  - /target/release/gulfi
+                  - target/release/gulfi
 
       - slack/notify:
           event: fail
