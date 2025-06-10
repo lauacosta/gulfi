@@ -73,8 +73,6 @@ aside {
     transition: width 0.5s ease-in-out;
     height: auto;
     min-height: 100%;
-    /* min-width: 60px; */
-    /* overflow: hidden; */
 }
 
 nav a {
@@ -435,14 +433,10 @@ button:active {
     background-color: rgba(0, 0, 0, 0.02);
 }
 
-
-
-
 .search-group {
     position: relative;
     flex-direction: column;
     padding-top: 15px;
-    /* margin-bottom: 15px; */
 }
 
 label {
@@ -469,10 +463,6 @@ select {
     gap: 15px;
 }
 
-.radio-group label {
-    font-weight: normal;
-}
-
 .radio-group input[type="radio"] {
     display: none;
 
@@ -480,6 +470,7 @@ select {
 
 .radio-group label {
     position: relative;
+    font-weight: normal;
     padding-left: 25px;
     cursor: pointer;
     font-size: 16px;
@@ -575,13 +566,6 @@ select {
 .help-icon:hover .search-tooltip {
     visibility: visible;
     opacity: 1;
-}
-
-.error-message {
-    color: var(--my-red);
-    font-size: 14px;
-    margin-top: 5px;
-    display: none;
 }
 
 .status-container {
@@ -815,11 +799,9 @@ select {
     background-color: var(--my-dark-gray);
     border: 1px solid #ddd;
     border-radius: 5px;
-    /* border-radius: var(--my-border-radius); */
     color: white;
     font-weight: bold;
     padding: 2px 5px;
-    /* font-family: monospace; */
     margin-right: 10px;
     width: 100px;
     min-width: 80px;
@@ -850,7 +832,6 @@ select {
     border-radius: 8px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.20),
         inset 0 0 4px 4px rgba(0, 0, 0, 0.1);
-    /* box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15); */
     width: 500px;
     height: 500px;
     max-width: 90%;
@@ -879,12 +860,6 @@ select {
 .history-body {
     flex: 1;
     overflow-y: auto;
-    padding: 0;
-}
-
-.history-list {
-    list-style-type: none;
-    margin: 0;
     padding: 0;
 }
 
@@ -923,9 +898,9 @@ select {
 }
 
 .empty-state {
-    padding: 20px;
     text-align: center;
-    color: #666;
+    padding: 40px 0;
+    color: #6c757d;
     max-width: 500px;
     margin: auto;
     background: #f9f9f9;
@@ -1009,12 +984,7 @@ select {
     padding: 16px;
     max-width: 900px;
     margin: 0 auto;
-}
-
-.empty-state {
-    text-align: center;
-    padding: 40px 0;
-    color: #6c757d;
+    list-style-type: none;
 }
 
 .empty-icon {
