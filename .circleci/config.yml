@@ -29,7 +29,7 @@ workflows:
           context: [slack]
 
       - compile_app:
-          context: [slack]
+          context: [slack, aws]
           requires:
             - build_ui
             - check
@@ -186,7 +186,8 @@ jobs:
     executor: shadesmar/rust
     steps:
       - checkout
-      - shadesmar/with_rust:
+      - attach_workspace:
+          at: .  
           steps:
             - run: |
                 cargo build --release
