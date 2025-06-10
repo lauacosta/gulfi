@@ -7,18 +7,32 @@ REMOTE_HOST="${SERVER_HOST:-}"
 REMOTE_DIR="/home/$REMOTE_USER/$APP_NAME"
 SYSTEMD_SERVICE="$APP_NAME.service"
 
-echo "[2/5] Stripping binary..."
+echo "[1/6] Setting up SSH configuration..."
+if [[ -n "${KNOWN_HOSTS:-}" ]]; then
+  echo "$KNOWN_HOSTS" >> ~/.ssh/known_hosts
+  chmod 644 ~/.ssh/known_hosts
+  echo "✅ Added pre-verified host keys"
+else
+  echo "❌ SSH_KNOWN_HOSTS environment variable not set!"
+  echo "To get your host keys, run: ssh-keyscan -H $REMOTE_HOST"
+  exit 1
+fi
+
+chmod 600 ~/.ssh/id_ed25519
+
+echo "[2/6] Stripping binary..."
 strip target/release/$APP_NAME
 
-echo "[3/5] Compressing binary..."
+echo "[3/6] Compressing binary..."
 tar czf $APP_NAME.tar.gz -C target/release $APP_NAME
 
 BACKUP_DIR="backup_$(date +%F_%T)"
-echo "[4/5] Uploading with rsync..."
+
+echo "[4/6] Uploading with rsync..."
 rsync -az --progress --partial --backup --backup-dir=$BACKUP_DIR \
   $APP_NAME.tar.gz "$REMOTE_USER@$REMOTE_HOST:$REMOTE_DIR/"
 
-echo "[5/5] Extracting and restarting on server..."
+echo "[5/6] Extracting and restarting on server..."
 ssh "$REMOTE_USER@$REMOTE_HOST" bash <<EOF
   set -e
   cd "$REMOTE_DIR"
@@ -32,7 +46,6 @@ ssh "$REMOTE_USER@$REMOTE_HOST" bash <<EOF
       echo "Restarting service with previous version..."
       sudo systemctl restart $SYSTEMD_SERVICE || true
       echo "Rollback complete - service running with previous version"
-
       echo "Error logs from failed deployment:"
       journalctl -u $SYSTEMD_SERVICE -n 10 --no-pager
     else
@@ -60,9 +73,7 @@ ssh "$REMOTE_USER@$REMOTE_HOST" bash <<EOF
   
   if sudo systemctl is-active --quiet $SYSTEMD_SERVICE; then
     echo "✅ Service started successfully!"
-
     rm -rf "$BACKUP_DIR"
-
     echo "Recent logs:"
     journalctl -u $SYSTEMD_SERVICE -n 5 --no-pager
   else
