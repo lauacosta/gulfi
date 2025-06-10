@@ -2,8 +2,7 @@
 set -euo pipefail
 
 APP_NAME="gulfi"
-# REMOTE_USER="${SERVER_USER:-}"
-REMOTE_USER="root"
+REMOTE_USER="${SERVER_USER:-}"
 REMOTE_HOST="${SERVER_HOST:-}"
 REMOTE_DIR="/home/$REMOTE_USER/$APP_NAME"
 SYSTEMD_SERVICE="$APP_NAME.service"
@@ -37,11 +36,11 @@ tar czf $APP_NAME.tar.gz -C target/release $APP_NAME
 BACKUP_DIR="backup_$(date +%F_%T)"
 
 echo "[4/6] Uploading with rsync..."
-rsync -az --progress --partial --backup --backup-dir=$BACKUP_DIR \
+rsync -az --progress --partial --backup --backup-dir="$BACKUP_DIR" \
   $APP_NAME.tar.gz "$REMOTE_USER@$REMOTE_HOST:$REMOTE_DIR/"
 
 echo "[5/6] Extracting and restarting on server..."
-ssh "$REMOTE_USER@$REMOTE_HOST" bash <<EOF
+ssh "$REMOTE_USER@$REMOTE_HOST" bash << 'EOF'
   set -e
   cd "$REMOTE_DIR"
   
