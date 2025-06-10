@@ -2,7 +2,8 @@
 set -euo pipefail
 
 APP_NAME="gulfi"
-REMOTE_USER="${SERVER_USER:-}"
+# REMOTE_USER="${SERVER_USER:-}"
+REMOTE_USER="root"
 REMOTE_HOST="${SERVER_HOST:-}"
 REMOTE_DIR="/home/$REMOTE_USER/$APP_NAME"
 SYSTEMD_SERVICE="$APP_NAME.service"
@@ -26,6 +27,7 @@ fi
 if [[ -f ~/.ssh/id_ed25519 ]]; then
   chmod 600 ~/.ssh/id_ed25519
 fi
+
 echo "[2/6] Stripping binary..."
 strip target/release/$APP_NAME
 
@@ -45,22 +47,38 @@ ssh "$REMOTE_USER@$REMOTE_HOST" bash <<EOF
   
   rollback() {
     echo "❌ Deployment failed! Rolling back..."
-    if [[ -d "$BACKUP_DIR" && -f "$BACKUP_DIR/$APP_NAME.tar.gz" ]]; then
+    
+    if [[ -d "$BACKUP_DIR" && -f "$BACKUP_DIR/$APP_NAME" ]]; then
       echo "Restoring from rsync backup..."
-      tar xzf "$BACKUP_DIR/$APP_NAME.tar.gz"
+      cp "$BACKUP_DIR/$APP_NAME" "$APP_NAME"
       chmod +x "$APP_NAME"
       echo "Restarting service with previous version..."
       sudo systemctl restart $SYSTEMD_SERVICE || true
       echo "Rollback complete - service running with previous version"
-      echo "Error logs from failed deployment:"
-      journalctl -u $SYSTEMD_SERVICE -n 10 --no-pager
+
+    elif [[ -f "$APP_NAME.backup" ]]; then
+      echo "Restoring from manual backup..."
+      cp "$APP_NAME.backup" "$APP_NAME"
+      chmod +x "$APP_NAME"
+      echo "Restarting service with previous version..."
+      sudo systemctl restart $SYSTEMD_SERVICE || true
+      echo "Rollback complete - service running with previous version"
     else
-      echo "No rsync backup found to rollback to"
+      echo "No backup found to rollback to (this might be first deployment)"
+      echo "Service will remain stopped"
     fi
+    
+    echo "Error logs from failed deployment:"
+    journalctl -u $SYSTEMD_SERVICE -n 10 --no-pager || true
     exit 1
   }
   
   trap rollback ERR
+  
+  if [[ -f "$APP_NAME" ]]; then
+    echo "Creating backup of current binary..."
+    cp "$APP_NAME" "$APP_NAME.backup"
+  fi
   
   echo "Stopping service..."
   sudo systemctl stop $SYSTEMD_SERVICE || true
@@ -69,7 +87,6 @@ ssh "$REMOTE_USER@$REMOTE_HOST" bash <<EOF
   tar xzf $APP_NAME.tar.gz
   rm $APP_NAME.tar.gz
   
-  # Make binary executable
   chmod +x $APP_NAME
   
   echo "Testing service restart..."
@@ -79,7 +96,7 @@ ssh "$REMOTE_USER@$REMOTE_HOST" bash <<EOF
   
   if sudo systemctl is-active --quiet $SYSTEMD_SERVICE; then
     echo "✅ Service started successfully!"
-    rm -rf "$BACKUP_DIR"
+    rm -rf "$BACKUP_DIR" "$APP_NAME.backup" 2>/dev/null || true
     echo "Recent logs:"
     journalctl -u $SYSTEMD_SERVICE -n 5 --no-pager
   else
