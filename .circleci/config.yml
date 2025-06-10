@@ -28,12 +28,6 @@ workflows:
       - build_ui:
           context: [slack]
 
-      - compile_app:
-          context: [slack, aws]
-          requires:
-            - build_ui
-            - check
-          
       - sonarcloud:
           context: [aws, slack, sonarqube]
           requires:
@@ -54,7 +48,7 @@ workflows:
           requires:
             - sonarcloud
             - update_taiga
-            - compile_app
+            - build_ui
           filters:
             branches:
               only: main
@@ -182,23 +176,6 @@ jobs:
           template: basic_fail_1
 
           
-  compile_app:
-    executor: shadesmar/rust
-    steps:
-      - checkout
-      - attach_workspace:
-          at: .  
-      - run: |
-          cargo build --release
-      - persist_to_workspace:
-          root: /root/project
-          paths:
-            - target/release/gulfi
-
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
-
   sonarcloud:
     docker:
       - image: node:latest
@@ -233,15 +210,20 @@ jobs:
           at: .
 
       - run:
+          name: Build Gulfi
+          command : |
+            cargo build --release
+
+      - run:
           name: Prepare deploy script
           command: |
-            chmod +x deploy.sh
+            chmod +x scripts/deploy.sh
 
       - shadesmar/with_rust:
           steps:
             - run:
                 name: Deploy to VPS
-                command: ./deploy.sh
+                command: ./scripts/deploy.sh
                 no_output_timeout: 10m
 
       - slack/notify:
