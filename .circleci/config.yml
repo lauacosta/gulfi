@@ -27,6 +27,12 @@ workflows:
 
       - build_ui:
           context: [slack]
+
+      - compile_app:
+          context: [slack]
+          requires:
+            - build_ui
+            - check
           
       - sonarcloud:
           context: [aws, slack, sonarqube]
@@ -42,6 +48,24 @@ workflows:
             - check
             - test
             - dependency_analysis
+  
+      - hold_for_approval:
+          type: approval
+          requires:
+            - sonarcloud
+            - update_taiga
+            - compile_app
+          filters:
+            branches:
+              only: main
+
+      - deploy_to_vps:
+          context: [aquiles, slack]
+          requires:
+            - hold_for_approval
+          filters:
+            branches:
+              only: main
 
 jobs:
   check:
@@ -145,12 +169,31 @@ jobs:
           install-pnpm: true
 
       - run:
-          name: generando .lockfile
-          command: cd crates/gulfi-server/ui/ && pnpm install
+          name: building-ui
+          command: cd crates/gulfi-server/ui/ && pnpm install && pnpm build
 
-      - run:
-          name: build
-          command: cd crates/gulfi-server/ui/ && pnpm build
+      - persist_to_workspace:
+          root: /root/project
+          paths:
+            - /gulfi/crates/gulfi-server/ui/dist
+
+      - slack/notify:
+          event: fail
+          template: basic_fail_1
+
+          
+  compile_app:
+    executor: shadesmar/rust
+    steps:
+      - checkout
+      - shadesmar/with_rust:
+          steps:
+            - run: |
+                cargo build --release
+            - persist_to_workspace:
+                root: /root/project
+                paths:
+                  - /target/release/gulfi
 
       - slack/notify:
           event: fail
@@ -181,26 +224,29 @@ jobs:
           event: fail
           template: basic_fail_1
 
-  deploy:
+  deploy_to_vps:
     executor: shadesmar/rust
     steps:
       - checkout
-      - add_ssh_keys:
-          fingerprints:
-            - "SHA256:-"
-
       - run:
-          name: Add server to known hosts
+            name: Setup SSH
+            command: |
+              mkdir -p ~/.ssh
+              echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+              chmod 600 ~/.ssh/id_ed25519
+              ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts
+  
+      - run:
+          name: Prepare deploy script
           command: |
-            mkdir -p ~/.ssh
-            echo "$SERVER_HOST_KEY" >> ~/.ssh/known_hosts
+            chmod +x deploy.sh
 
       - shadesmar/with_rust:
-          steps:
-            - run:
-                name: Deploy
-                command: ./deploy.sh
-                no_output_timeout: 10m
+        steps:
+          - run:
+              name: Deploy to VPS
+              command: ./deploy.sh
+              no_output_timeout: 10m
 
       - slack/notify:
           event: fail
