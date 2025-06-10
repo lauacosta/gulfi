@@ -7,7 +7,11 @@ REMOTE_HOST="${SERVER_HOST:-}"
 REMOTE_DIR="/home/$REMOTE_USER/$APP_NAME"
 SYSTEMD_SERVICE="$APP_NAME.service"
 
+
 echo "[1/6] Setting up SSH configuration..."
+mkdir -p ~/.ssh
+chmod 700 ~/.ssh
+
 if [[ -n "${KNOWN_HOSTS:-}" ]]; then
   echo "$KNOWN_HOSTS" >> ~/.ssh/known_hosts
   chmod 644 ~/.ssh/known_hosts
@@ -18,8 +22,10 @@ else
   exit 1
 fi
 
-chmod 600 ~/.ssh/id_ed25519
 
+if [[ -f ~/.ssh/id_ed25519 ]]; then
+  chmod 600 ~/.ssh/id_ed25519
+fi
 echo "[2/6] Stripping binary..."
 strip target/release/$APP_NAME
 
