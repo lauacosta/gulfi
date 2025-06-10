@@ -40,7 +40,7 @@ rsync -az --progress --partial --backup --backup-dir="$BACKUP_DIR" \
   $APP_NAME.tar.gz "$REMOTE_USER@$REMOTE_HOST:$REMOTE_DIR/"
 
 echo "[5/6] Extracting and restarting on server..."
-ssh "$REMOTE_USER@$REMOTE_HOST" bash << 'EOF'
+ssh "$REMOTE_USER@$REMOTE_HOST" bash <<EOF
   set -e
   cd "$REMOTE_DIR"
   
