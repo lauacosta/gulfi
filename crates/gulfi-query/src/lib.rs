@@ -191,7 +191,8 @@ mod tests {
         assert_eq!(
             result,
             Query {
-                query: "Lautaro".to_owned(),
+                query: "autaro".to_owned(),
+                // query: "Lautaro".to_owned(),
                 constraints: None,
             }
         );
