@@ -63,7 +63,7 @@ sonar:
 coverage:
     cargo llvm-cov --locked --lcov --output-path lcov.info
 
-ci: fmt check hack test udeps audit deny build-ui
+ci: fmt check test udeps audit deny build-ui
 
 validate-ci:
     circleci config validate

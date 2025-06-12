@@ -23,10 +23,8 @@ gulfi-common = { path = "../gulfi-common/"}
 gulfi-cli = { path = "../gulfi-cli/"}
 
 # Examples:
-# Triggers cargo-deny
-# sodiumoxide = "0.2"
 # Triggers cargo-udeps
-# seahash = "4.1.0"
+seahash = "4.1.0"
 # Triggers cargo-audit
-# time = "0.1.12"
+time = "0.1.12"
 
