@@ -24,7 +24,7 @@ gulfi-cli = { path = "../gulfi-cli/"}
 
 # Examples:
 # Triggers cargo-udeps
-seahash = "4.1.0"
+# seahash = "4.1.0"
 # Triggers cargo-audit
-time = "0.1.12"
+# time = "0.1.12"
 
