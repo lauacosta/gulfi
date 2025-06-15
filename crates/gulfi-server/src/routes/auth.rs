@@ -10,7 +10,7 @@ use tracing::{info_span, warn};
 use crate::{into_http::HttpError, startup::ServerState};
 
 #[derive(Deserialize, Debug)]
-pub(crate) struct AuthParams {
+pub struct AuthParams {
     username: String,
     password: String,
 }
