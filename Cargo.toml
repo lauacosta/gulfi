@@ -15,6 +15,7 @@ lto = "thin"
 
 [workspace.dependencies]
 thiserror = "2.0.3"
+fs-err = "3.1.1"
 chrono = "0.4.39"
 indicatif = "0.17.11"
 axum = { version = "0.7.5", features = ["macros"] }
@@ -30,7 +31,7 @@ reqwest = { version = "0.12.8", default-features = false, features = ["json", "s
 color-eyre = "0.6.3"
 eyre = "0.6.12"
 serde_urlencoded = "0.7.1"
-camino = "1.1.9"
+camino = { version = "1.1.9", features = ["serde1"]}
 argon2 = "0.5.3"
 password-hash = { version = "0.5.0", features = ["getrandom"] }
 config = "0.15.11"

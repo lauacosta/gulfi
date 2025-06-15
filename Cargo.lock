@@ -328,6 +328,9 @@ name = "camino"
 version = "1.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b96ec4966b5813e2c0507c1f86115c8c5abaadc3980879c3424042a02fd1ad3"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "cc"
@@ -855,6 +858,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fs-err"
+version = "3.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "88d7be93788013f265201256d58f04936a8079ad5dc898743aa20525f503b683"
+dependencies = [
+ "autocfg",
+]
+
+[[package]]
 name = "futf"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1015,10 +1027,12 @@ name = "gulfi"
 version = "0.6.0"
 dependencies = [
  "axum",
+ "camino",
  "chrono",
  "clap",
  "color-eyre",
  "eyre",
+ "fs-err",
  "gulfi-cli",
  "gulfi-common",
  "rusqlite",
@@ -1032,10 +1046,12 @@ name = "gulfi-cli"
 version = "0.6.0"
 dependencies = [
  "argon2",
+ "camino",
  "clap",
  "color-eyre",
  "config",
  "eyre",
+ "fs-err",
  "gulfi-common",
  "gulfi-openai",
  "gulfi-server",
@@ -1057,6 +1073,7 @@ dependencies = [
  "camino",
  "color-eyre",
  "eyre",
+ "fs-err",
  "serde",
  "serde_json",
  "tracing",
@@ -1096,10 +1113,12 @@ version = "0.6.0"
 dependencies = [
  "argon2",
  "axum",
+ "camino",
  "chrono",
  "color-eyre",
  "config",
  "eyre",
+ "fs-err",
  "gulfi-common",
  "gulfi-openai",
  "gulfi-query",
@@ -1135,10 +1154,12 @@ dependencies = [
 name = "gulfi-sqlite"
 version = "0.6.0"
 dependencies = [
+ "camino",
  "color-eyre",
  "crossbeam",
  "csv",
  "eyre",
+ "fs-err",
  "futures",
  "gulfi-common",
  "gulfi-openai",

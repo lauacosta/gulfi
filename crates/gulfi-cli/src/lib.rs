@@ -2,12 +2,13 @@ pub mod clierror;
 pub mod commands;
 pub mod helper;
 
+use camino::Utf8PathBuf;
 pub use clierror::*;
 pub use gulfi_server::configuration::get_configuration;
 
 use clap::{Parser, Subcommand, ValueEnum, command, crate_version};
 use gulfi_server::configuration::Settings;
-use std::{net::IpAddr, path::PathBuf};
+use std::net::IpAddr;
 
 #[derive(Parser)]
 #[command(version, about,  long_about = None, before_help = format!(r"
@@ -27,11 +28,11 @@ pub struct Cli {
 
     /// Path to the sqlite database
     #[arg(long = "database-path")]
-    pub db: Option<PathBuf>,
+    pub db: Option<Utf8PathBuf>,
 
     /// Path to the metadata file for documents
     #[arg(long = "meta-file-path")]
-    pub meta_file_path: Option<PathBuf>,
+    pub meta_file_path: Option<Utf8PathBuf>,
 
     #[command(subcommand)]
     command: Option<Command>,

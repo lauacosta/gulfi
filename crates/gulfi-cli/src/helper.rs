@@ -1,4 +1,5 @@
-use std::fs::OpenOptions;
+use fs_err::OpenOptions;
+use std::fs::DirBuilder;
 use std::io::{self, Seek, Write};
 use std::path::Path;
 
@@ -12,7 +13,7 @@ pub fn delete_document(name: &str) -> Result<()> {
     let path = Path::new("meta.json");
 
     let mut all_docs: Vec<Document> = if path.exists() {
-        let json_str = std::fs::read_to_string(path)?;
+        let json_str = fs_err::read_to_string(path)?;
         serde_json::from_str(&json_str).unwrap_or_default()
     } else {
         return Err(eyre!("No se ha encontrado un archivo `meta.json`."));
@@ -65,7 +66,7 @@ pub fn run_new() -> Result<()> {
     };
 
     let mut all_docs: Vec<Document> = if path.exists() {
-        let json_str = std::fs::read_to_string(path)?;
+        let json_str = fs_err::read_to_string(path)?;
         serde_json::from_str(&json_str).unwrap_or_default()
     } else {
         vec![]
@@ -87,7 +88,7 @@ pub fn run_new() -> Result<()> {
     let path = Path::new(&dir_name);
 
     if !path.exists() || !path.is_dir() {
-        std::fs::DirBuilder::new().recursive(true).create(path)?;
+        DirBuilder::new().recursive(true).create(path)?;
     }
 
     Ok(())

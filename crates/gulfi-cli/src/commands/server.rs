@@ -1,10 +1,11 @@
+use camino::Utf8PathBuf;
 use gulfi_common::Document;
 use gulfi_server::{
     configuration::{Settings, get_configuration},
     startup::run_server,
     telemetry::{get_subscriber, init_subscriber},
 };
-use std::{net::IpAddr, path::PathBuf, time::Instant};
+use std::{net::IpAddr, time::Instant};
 
 use crate::CliError;
 
@@ -20,7 +21,7 @@ use tokio::{process::Command as TokioCommand, try_join};
 pub struct ServerOverrides {
     interface: Option<IpAddr>,
     port: Option<u16>,
-    db_path: Option<PathBuf>,
+    db_path: Option<Utf8PathBuf>,
     pool_size: Option<usize>,
 }
 
@@ -28,7 +29,7 @@ impl ServerOverrides {
     pub fn new(
         interface: Option<IpAddr>,
         port: Option<u16>,
-        db_path: Option<PathBuf>,
+        db_path: Option<Utf8PathBuf>,
         pool_size: Option<usize>,
     ) -> Self {
         Self {

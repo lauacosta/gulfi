@@ -1,5 +1,4 @@
-use std::path::Path;
-
+use camino::Utf8Path;
 use color_eyre::owo_colors::OwoColorize;
 use eyre::eyre;
 use gulfi_common::{Document, MEMORY_DB_PATH};
@@ -7,13 +6,13 @@ use gulfi_sqlite::{insert_base_data, setup_sqlite, spawn_vec_connection};
 
 use crate::CliError;
 
-pub fn handle<P: AsRef<Path>>(
+pub fn handle<P: AsRef<Utf8Path>>(
     db_path: P,
     docs: &[Document],
     doc: &str,
     force: bool,
 ) -> Result<Document, CliError> {
-    let db_path_str = db_path.as_ref().to_string_lossy();
+    let db_path_str = db_path.as_ref().as_str();
     if db_path_str.trim() == MEMORY_DB_PATH {
         eprintln!(
             "You are running '{}' in a {}.",

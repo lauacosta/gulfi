@@ -1,14 +1,11 @@
-use std::fmt::Write as _;
-use std::{
-    fmt::{Debug, Display, Formatter},
-    fs::{DirBuilder, metadata},
-    path::{Path, PathBuf},
-};
-
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use color_eyre::owo_colors::OwoColorize;
 use eyre::eyre;
+use fs_err::metadata;
 use serde::{Deserialize, Deserializer, Serialize};
+use std::fmt::Write as _;
+use std::fmt::{Debug, Display, Formatter};
+use std::fs::DirBuilder;
 
 use tracing::{error, info, warn};
 
@@ -121,19 +118,23 @@ impl DataSources {
     }
 }
 
-pub fn parse_sources<T: AsRef<Path> + Debug>(path: T) -> eyre::Result<Vec<(PathBuf, DataSources)>> {
+pub fn parse_sources<T>(path: T) -> eyre::Result<Vec<(Utf8PathBuf, DataSources)>>
+where
+    T: AsRef<Utf8Path> + Debug,
+{
     let mut datasources = Vec::new();
+    let path_ref = path.as_ref();
 
-    match metadata(&path) {
+    match metadata(path_ref) {
         Err(err) => {
             error!("Directory `{path:?}` doesn't exists!: {err}");
             info!("To fix it, create the directory.");
-            DirBuilder::new().recursive(true).create(&path)?;
+            DirBuilder::new().recursive(true).create(path_ref)?;
         }
         Ok(metadata) => {
             if metadata.is_dir() {
                 let entries =
-                    std::fs::read_dir(&path).expect("Should be able to read the directory");
+                    fs_err::read_dir(path.as_ref()).expect("Should be able to read the directory");
                 if entries.into_iter().count() == 0 {
                     warn!("Directory {path:?}` exists but is empty.");
                 }
@@ -147,14 +148,16 @@ pub fn parse_sources<T: AsRef<Path> + Debug>(path: T) -> eyre::Result<Vec<(PathB
         }
     }
 
-    for entry in std::fs::read_dir(&path)? {
+    for entry in fs_err::read_dir(path.as_ref())? {
         let path = entry?.path();
-        let utf_8_path = Utf8Path::from_path(&path).expect("Should be UTF-8");
+        let utf_8_path = Utf8Path::from_path(&path)
+            .expect("Should be UTF-8")
+            .to_owned();
 
         if utf_8_path.is_file() {
             if let Some(ext) = utf_8_path.extension() {
                 let file = DataSources::from_extension(ext)?;
-                datasources.push((path, file));
+                datasources.push((utf_8_path, file));
             }
         }
     }

@@ -9,6 +9,8 @@ version.workspace = true
 clap = { workspace = true, features = ["cargo"] }
 eyre.workspace = true
 color-eyre.workspace = true
+camino.workspace = true
+fs-err.workspace = true
 serde_json.workspace = true
 serde.workspace = true
 rusqlite.workspace = true

@@ -1,5 +1,6 @@
-use std::{path::Path, time::Instant};
+use std::time::Instant;
 
+use camino::Utf8Path;
 use color_eyre::owo_colors::OwoColorize;
 use gulfi_common::Document;
 use gulfi_openai::OpenAIClient;
@@ -36,7 +37,7 @@ pub fn handle_vector(
     Ok((inserted, average, elapsed))
 }
 
-pub fn handle_update<P: AsRef<Path>>(
+pub fn handle_update<P: AsRef<Utf8Path>>(
     db_path: P,
     doc: &Document,
     strat: &SyncStrategy,
