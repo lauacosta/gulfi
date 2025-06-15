@@ -19,6 +19,7 @@ tracing-error = "0.2.0"
 
 eyre.workspace = true
 thiserror.workspace = true
+fs-err.workspace = true
 tracing.workspace = true
 color-eyre.workspace = true
 axum.workspace = true
@@ -31,6 +32,7 @@ serde_json.workspace = true
 http.workspace = true
 zerocopy.workspace = true
 serde_urlencoded.workspace = true
+camino.workspace = true
 chrono.workspace = true
 argon2.workspace = true
 config.workspace = true

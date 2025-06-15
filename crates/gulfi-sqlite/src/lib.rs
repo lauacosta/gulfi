@@ -1,10 +1,10 @@
 pub mod pooling;
 
+use camino::Utf8Path;
+use fs_err::File;
 use std::{
     fmt::Debug,
-    fs::File,
     io::BufReader,
-    path::Path,
     sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -247,7 +247,7 @@ pub fn sync_fts_data(conn: &Connection, doc: &Document) -> usize {
     inserted
 }
 
-pub fn spawn_vec_connection<P: AsRef<Path>>(db_path: P) -> Result<Connection, rusqlite::Error> {
+pub fn spawn_vec_connection<P: AsRef<Utf8Path>>(db_path: P) -> Result<Connection, rusqlite::Error> {
     unsafe {
         sqlite3_auto_extension(Some(std::mem::transmute::<
             *const (),
@@ -255,14 +255,15 @@ pub fn spawn_vec_connection<P: AsRef<Path>>(db_path: P) -> Result<Connection, ru
         >(sqlite3_vec_init as *const ())));
     }
 
-    let db = Connection::open(db_path)?;
+    let db_path_ref = db_path.as_ref();
+    let conn = Connection::open(db_path_ref)?;
 
-    db.pragma_update(None, "journal_mode", "WAL")?;
+    conn.pragma_update(None, "journal_mode", "WAL")?;
 
-    let mode: String = db.pragma_query_value(None, "journal_mode", |row| row.get(0))?;
+    let mode: String = conn.pragma_query_value(None, "journal_mode", |row| row.get(0))?;
     debug!("Current journal mode: {}", mode);
 
-    Ok(db)
+    Ok(conn)
 }
 
 pub fn setup_sqlite(conn: &rusqlite::Connection, doc: &Document) -> Result<()> {
@@ -504,7 +505,7 @@ fn compare_records(mut records: Vec<String>, mut headers: Vec<String>) -> eyre::
     }
 }
 
-fn parse_and_insert<T: AsRef<Path> + Debug>(
+fn parse_and_insert<T: AsRef<Utf8Path> + Debug>(
     path: T,
     db_path: &str,
     doc: &Document,

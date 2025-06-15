@@ -1,15 +1,15 @@
 #![allow(clippy::too_many_lines)]
 
-use std::io::{Error, ErrorKind};
-use std::path::PathBuf;
-use std::{fs::File, time::Instant};
-
+use camino::Utf8PathBuf;
 use clap::Parser;
+use fs_err::File;
 use gulfi_cli::commands::server::ServerOverrides;
 use gulfi_cli::{Cli, CliError, Command, ExitOnError, helper::initialize_meta_file};
 use gulfi_cli::{commands, get_configuration};
 use gulfi_common::Document;
 use gulfi_common::MILLISECONDS_MULTIPLIER;
+use std::io::{Error, ErrorKind};
+use std::time::Instant;
 
 fn main() -> eyre::Result<()> {
     color_eyre::install()?;
@@ -95,7 +95,7 @@ fn run_with_config(cli: Cli) -> Result<(), CliError> {
     Ok(())
 }
 
-fn load_meta_docs(cli: &Cli) -> Result<(PathBuf, Vec<Document>), CliError> {
+fn load_meta_docs(cli: &Cli) -> Result<(Utf8PathBuf, Vec<Document>), CliError> {
     let meta_file = cli.meta_file_path.clone().ok_or_else(|| {
         CliError::MetaOpenError(Error::new(ErrorKind::NotFound, "meta file not found"))
     })?;

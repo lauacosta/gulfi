@@ -1,7 +1,8 @@
+use camino::Utf8PathBuf;
 use secrecy::SecretString;
 use serde::Deserialize;
 use serde_aux::field_attributes::deserialize_number_from_string;
-use std::{net::IpAddr, path::PathBuf};
+use std::net::IpAddr;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Settings {
@@ -14,7 +15,7 @@ pub struct Settings {
 pub struct DatabaseSettings {
     #[serde(deserialize_with = "deserialize_number_from_string")]
     pub pool_size: usize,
-    pub db_path: PathBuf,
+    pub db_path: Utf8PathBuf,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -29,12 +30,12 @@ pub struct ApplicationSettings {
     #[serde(deserialize_with = "deserialize_number_from_string")]
     pub port: u16,
     pub host: IpAddr,
-    pub meta_file_path: PathBuf,
+    pub meta_file_path: Utf8PathBuf,
 }
 
 impl ApplicationSettings {
     #[must_use]
-    pub fn new(name: String, port: u16, host: IpAddr, meta_file_path: PathBuf) -> Self {
+    pub fn new(name: String, port: u16, host: IpAddr, meta_file_path: Utf8PathBuf) -> Self {
         Self {
             name,
             port,

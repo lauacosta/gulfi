@@ -1,6 +1,5 @@
-use std::path::Path;
-
 use argon2::{Argon2, PasswordHasher};
+use camino::Utf8Path;
 use color_eyre::owo_colors::OwoColorize;
 use gulfi_sqlite::spawn_vec_connection;
 use password_hash::{SaltString, rand_core::OsRng};
@@ -8,7 +7,7 @@ use rusqlite::params;
 
 use crate::CliError;
 
-pub fn create_user<P: AsRef<Path>>(
+pub fn create_user<P: AsRef<Utf8Path>>(
     db_path: P,
     username: &str,
     password: &str,
