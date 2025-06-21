@@ -1154,7 +1154,9 @@ dependencies = [
 name = "gulfi-sqlite"
 version = "0.6.0"
 dependencies = [
+ "blake2",
  "camino",
+ "chrono",
  "color-eyre",
  "crossbeam",
  "csv",

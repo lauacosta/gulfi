@@ -7,25 +7,22 @@ fn main() {
 
     let in_ci = std::env::var("CI").is_ok() || std::env::var("GITHUB_ACTIONS").is_ok();
 
-    let build_frontend = match std::env::var("BUILD_FRONTEND") {
-        Ok(val) => {
-            println!("cargo:warning=BUILD_FRONTEND set to: {}", val);
-            val == "true"
-        }
-        Err(_) => {
-            println!(
-                "cargo:warning=BUILD_FRONTEND not set, defaulting to: {}",
-                !in_ci
-            );
+    let build_frontend = if let Ok(val) = std::env::var("BUILD_FRONTEND") {
+        println!("cargo:warning=BUILD_FRONTEND set to: {val}");
+        val == "true"
+    } else {
+        println!(
+            "cargo:warning=BUILD_FRONTEND not set, defaulting to: {}",
             !in_ci
-        }
+        );
+        !in_ci
     };
 
     let ui_dir = Path::new("ui");
     let output_dir = ui_dir.join("dist");
 
     if let Err(e) = std::fs::create_dir_all(&output_dir) {
-        panic!("Failed to create dist directory: {}", e);
+        panic!("Failed to create dist directory: {e}");
     }
 
     if in_ci && !build_frontend {
@@ -37,7 +34,7 @@ fn main() {
                 if let Err(e) = file.write_all(
                     b"<!DOCTYPE html><html><body><h1>Placeholder for CI</h1></body></html>",
                 ) {
-                    panic!("Failed to write to placeholder file: {}", e);
+                    panic!("Failed to write to placeholder file: {e}");
                 }
                 println!(
                     "cargo:warning=Placeholder created for CI at: {}",
@@ -45,7 +42,7 @@ fn main() {
                 );
             }
             Err(e) => {
-                panic!("Failed to create placeholder file: {}", e);
+                panic!("Failed to create placeholder file: {e}");
             }
         }
         return;
@@ -56,18 +53,16 @@ fn main() {
         Ok(output) => output,
         Err(e) => {
             panic!(
-                "Failed to check pnpm installation: {}. Make sure pnpm is installed and in PATH.",
-                e
+                "Failed to check pnpm installation: {e}. Make sure pnpm is installed and in PATH.",
             );
         }
     };
 
-    if !pnpm_check.status.success() {
-        panic!(
-            "pnpm is not properly installed or accessible. Exit code: {:?}",
-            pnpm_check.status.code()
-        );
-    }
+    assert!(
+        pnpm_check.status.success(),
+        "pnpm is not properly installed or accessible. Exit code: {:?}",
+        pnpm_check.status.code()
+    );
 
     let pnpm_version = String::from_utf8_lossy(&pnpm_check.stdout);
     println!("cargo:warning=pnpm found, version: {}", pnpm_version.trim());
@@ -87,20 +82,21 @@ fn main() {
     {
         Ok(status) => status,
         Err(e) => {
-            panic!("Failed to execute pnpm build command: {}", e);
+            panic!("Failed to execute pnpm build command: {e}");
         }
     };
 
-    if !status.success() {
-        panic!("Svelte build failed with exit code: {:?}", status.code());
-    }
+    assert!(
+        status.success(),
+        "Svelte build failed with exit code: {:?}",
+        status.code()
+    );
 
-    if !output_dir.exists() {
-        panic!(
-            "Build completed successfully, but output directory '{}' was not created!",
-            output_dir.display()
-        );
-    }
+    assert!(
+        output_dir.exists(),
+        "Build completed successfully, but output directory '{}' was not created!",
+        output_dir.display()
+    );
 
     println!(
         "cargo:warning=UI built successfully at: {}",

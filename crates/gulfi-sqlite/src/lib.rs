@@ -1,3 +1,4 @@
+pub mod migrations;
 pub mod pooling;
 
 use camino::Utf8Path;
@@ -247,7 +248,7 @@ pub fn sync_fts_data(conn: &Connection, doc: &Document) -> usize {
     inserted
 }
 
-pub fn spawn_vec_connection<P: AsRef<Utf8Path>>(db_path: P) -> Result<Connection, rusqlite::Error> {
+pub fn get_vec_conn<P: AsRef<Utf8Path>>(db_path: P) -> Result<Connection, rusqlite::Error> {
     unsafe {
         sqlite3_auto_extension(Some(std::mem::transmute::<
             *const (),
@@ -266,150 +267,7 @@ pub fn spawn_vec_connection<P: AsRef<Utf8Path>>(db_path: P) -> Result<Connection
     Ok(conn)
 }
 
-pub fn setup_sqlite(conn: &rusqlite::Connection, doc: &Document) -> Result<()> {
-    let (sqlite_version, vec_version): (String, String) =
-        conn.query_row("select sqlite_version(), vec_version()", [], |row| {
-            Ok((row.get(0)?, row.get(1)?))
-        })?;
-
-    validate_sql_identifier(&doc.name)?;
-
-    debug!("sqlite_version={sqlite_version}, vec_version={vec_version}");
-    let statement = "
-            create table if not exists historial(
-                id integer primary key,
-                query text not null unique,
-                strategy text,
-                doc text,
-                peso_fts real,
-                peso_semantic real,
-                neighbors number,
-                timestamp datetime default current_timestamp
-            );
-
-            create table if not exists favoritos (
-                id integer primary key,
-                nombre text not null unique,
-                data text,
-                doc text,
-                busquedas text,
-                tipos text,
-                timestamp datetime default current_timestamp
-            );
-
-            create virtual table if not exists fts_historial using fts5(
-                query,
-                content='historial', content_rowid='id'
-            );
-
-            create trigger if not exists after_insert_historial
-                after insert on historial
-                begin
-                insert into fts_historial(rowid, query) values (new.id, new.query);
-            end;
-
-            create trigger if not exists after_update_historial
-                after update on historial
-                begin
-                update fts_historial set query = new.query where rowid = old.id;
-            end;
-
-            create trigger if not exists after_delete_historial
-                after delete on historial
-                begin
-                delete from fts_historial where rowid = old.id;
-            end;
-
-            "
-    .to_owned();
-
-    conn.execute_batch(&statement)
-        .map_err(|err| eyre!(err))
-        .expect("Should be a valid SQL sentence");
-
-    let doc_name = doc.name.clone();
-
-    let (raw_fields_str, fields_str, field_names) = {
-        let fields: Vec<String> = doc
-            .fields
-            .iter()
-            .map(|x| {
-                if x.unique {
-                    // WARN: Es una buena idea decidir usar conflict ignore?
-                    format!("{} text unique on conflict ignore", x.name.clone())
-                } else {
-                    format!("{} text", x.name.clone())
-                }
-            })
-            .collect();
-        let raw_fields_str = fields.join(", ");
-
-        let fields: Vec<String> = doc
-            .fields
-            .iter()
-            .filter(|x| !x.vec_input)
-            .map(|x| {
-                if x.unique {
-                    // WARN: Es una buena idea decidir usar conflict ignore?
-                    format!("{} text unique on conflict ignore", x.name.clone())
-                } else {
-                    format!("{} text", x.name.clone())
-                }
-            })
-            .collect();
-
-        let fields_str = fields.join(", ");
-
-        let fields: Vec<String> = doc
-            .fields
-            .iter()
-            .filter(|x| !x.vec_input)
-            .map(|x| x.name.clone())
-            .collect();
-
-        let fields_names = fields.join(", ");
-
-        (raw_fields_str, fields_str, fields_names)
-    };
-
-    let statement = format!(
-        "
-            create table if not exists {doc_name}_raw(
-                id integer primary key,
-                {raw_fields_str}
-            );
-
-            create table if not exists {doc_name}(
-                id integer primary key,
-                {fields_str},
-                vec_input text
-            );
-
-            create virtual table if not exists fts_{doc_name} using fts5(
-                vec_input, {field_names},
-                content='{doc_name}',
-                content_rowid='id', 
-                prefix='2 3 4',
-                tokenize='unicode61 remove_diacritics 1'
-            );
-
-            create virtual table if not exists vec_{doc_name} using vec0(
-                row_id integer primary key,
-                vec_input_embedding float[{DIMENSION}]
-            );
-            ",
-    );
-
-    debug!(?statement);
-
-    conn.execute_batch(&statement)
-        .map_err(|err| eyre!(err))
-        .expect("Should be a valid SQL sentence");
-
-    Ok(())
-}
-
-pub fn insert_base_data(conn: &rusqlite::Connection, doc: &Document) -> Result<()> {
+pub fn insert_new_data(conn: &rusqlite::Connection, doc: &Document) -> Result<()> {
     let doc_name = doc.name.clone();
 
     let num: usize = conn.query_row(&format!("select count(*) from {doc_name}"), [], |row| {
@@ -697,7 +555,6 @@ fn validate_sql_identifier(name: &str) -> Result<()> {
         return Err(eyre!("Identifier contains invalid characters"));
     }
 
-    // Prevent SQL keywords (basic list)
     if KEYWORDS.contains(&name.to_ascii_uppercase().as_str()) {
         return Err(eyre!("Identifier cannot be an SQL keyword"));
     }

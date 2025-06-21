@@ -5,11 +5,12 @@ use std::{
 };
 
 use config::ConfigError;
+use gulfi_sqlite::migrations::MIGRATIONS_PATH;
 
 use crate::CliError;
 
 pub fn create_config_template() -> Result<(), CliError> {
-    let config_content = r#"# Application Configuration
+    let config_content = r#"
 app_settings:
   name: "MyApp"
   port: "3000"
@@ -75,7 +76,10 @@ db_settings:
                 }
 
                 writeln!(gitignore_file, "{config_entry}")?;
-                println!("✅ Added /configuration to existing .gitignore");
+                println!("✅ Added {config_entry} to existing .gitignore");
+
+                writeln!(gitignore_file, "{MIGRATIONS_PATH}")?;
+                println!("✅ Added /{MIGRATIONS_PATH} to existing .gitignore");
             }
         } else {
             let mut gitignore_file = File::create(gitignore_path)?;

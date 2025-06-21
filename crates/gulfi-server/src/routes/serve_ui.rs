@@ -3,6 +3,7 @@ use axum::{
     response::IntoResponse,
 };
 
+use http::header;
 use mime_guess::from_path;
 use tracing::{info, instrument, warn};
 
@@ -21,9 +22,22 @@ pub async fn serve_ui(uri: Uri) -> impl IntoResponse {
     if let Some(file) = ASSETS.get_file(file_path) {
         let mime_type = from_path(file_path).first_or_octet_stream();
         info!("{:?}, MIME: {:?}", file_path, mime_type);
-        ([("Content-Type", mime_type.as_ref())], file.contents()).into_response()
+        let cache_control = if file_path == "index.html" {
+            "no-cache"
+        } else {
+            "public, max-age=31536000, immutable"
+        };
+
+        (
+            [
+                (http::header::CONTENT_TYPE, mime_type.as_ref()),
+                (header::CACHE_CONTROL, cache_control),
+            ],
+            file.contents(),
+        )
+            .into_response()
     } else {
-        warn!("Archivo no encontrado: {:?}", file_path);
-        StatusCode::NOT_FOUND.into_response()
+        warn!("File not found: {:?}", file_path);
+        (StatusCode::NOT_FOUND, "Not Found").into_response()
     }
 }

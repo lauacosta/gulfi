@@ -5,7 +5,7 @@ use color_eyre::owo_colors::OwoColorize;
 use gulfi_common::Document;
 use gulfi_openai::OpenAIClient;
 use gulfi_server::configuration::get_configuration;
-use gulfi_sqlite::{create_indexes, spawn_vec_connection, sync_fts_data, sync_vec_data};
+use gulfi_sqlite::{create_indexes, get_vec_conn, sync_fts_data, sync_vec_data};
 use rusqlite::Connection;
 use secrecy::ExposeSecret;
 
@@ -44,7 +44,7 @@ pub fn handle_update<P: AsRef<Utf8Path>>(
     base_delay: u64,
     chunk_size: usize,
 ) -> Result<(), CliError> {
-    let conn = spawn_vec_connection(db_path)?;
+    let conn = get_vec_conn(db_path)?;
     let configuration = get_configuration()?;
     let client = OpenAIClient::new(
         configuration

@@ -7,7 +7,7 @@ use color_eyre::owo_colors::OwoColorize;
 use eyre::Result;
 use gulfi_common::Document;
 use gulfi_openai::OpenAIClient;
-use gulfi_sqlite::{pooling::AsyncConnectionPool, spawn_vec_connection};
+use gulfi_sqlite::{get_vec_conn, pooling::AsyncConnectionPool};
 use http::{Method, StatusCode};
 use moka::future::Cache;
 use secrecy::ExposeSecret;
@@ -17,16 +17,16 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::sync::mpsc::UnboundedSender;
-use tower::buffer::BufferLayer;
 use tower_http::{
     compression::CompressionLayer,
     cors::{Any, CorsLayer},
     trace::{OnResponse, TraceLayer},
 };
 
+use tokio::sync::mpsc::UnboundedSender;
 use tokio::{net::TcpListener, signal};
 use tower::ServiceBuilder;
+use tower::buffer::BufferLayer;
 use tower_request_id::{RequestId, RequestIdLayer};
 use tracing::{Instrument, Level, debug_span, error, info, info_span};
 
@@ -63,7 +63,7 @@ impl Application {
     pub async fn build(configuration: &Settings, documents: Vec<Document>) -> Result<Self> {
         let pool_size = configuration.db_settings.pool_size;
         let db_path = configuration.db_settings.db_path.clone();
-        let pool = AsyncConnectionPool::new(pool_size, || spawn_vec_connection(&db_path))?;
+        let pool = AsyncConnectionPool::new(pool_size, || get_vec_conn(&db_path))?;
 
         // TODO: A more generic Client for embeddings
         let embeddings_provider = OpenAIClient::new(
@@ -144,7 +144,7 @@ impl Application {
                     let ctrl_c = async {
                         signal::ctrl_c()
                             .await
-                            .expect("failed to install handler for ctrl+c")
+                            .expect("failed to install handler for ctrl+c");
                     };
 
                     #[cfg(unix)]
@@ -176,6 +176,8 @@ impl Application {
 }
 
 pub fn build_server(listener: TcpListener, state: ServerState) -> Result<Serve<Router, Router>> {
+    let use_external_ui = std::env::var("USE_EXTERNAL_UI").is_ok_and(|v| v == "true");
+
     let historial_routes = Router::new()
         .route(
             "/:doc/history",
@@ -209,7 +211,13 @@ pub fn build_server(listener: TcpListener, state: ServerState) -> Result<Serve<R
         )
         .route("/api/documents", get(documents));
 
-    let mut server = api_routes.merge(frontend_routes).with_state(state);
+    let mut server = if use_external_ui {
+        tracing::warn!("Serving without internal frontend routes (expecting external static file server like NGINX)");        api_routes
+    } else {
+        tracing::info!("Serving frontend assets from Rust backend");
+        api_routes.merge(frontend_routes)
+    }
+    .with_state(state);
 
     if cfg!(debug_assertions) {
         let cors = CorsLayer::new()

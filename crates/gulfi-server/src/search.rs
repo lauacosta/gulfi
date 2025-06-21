@@ -134,7 +134,7 @@ impl SearchStrategy {
             SearchStrategy::Fts => {
                 span.record("source", "dynamic");
             }
-        };
+        }
 
         debug!(?query);
 

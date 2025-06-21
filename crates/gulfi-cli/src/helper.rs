@@ -4,37 +4,10 @@ use std::io::{self, Seek, Write};
 use std::path::Path;
 
 use color_eyre::owo_colors::OwoColorize;
-use eyre::{Result, eyre};
+use eyre::Result;
 use gulfi_common::{Document, Field};
 
 pub const WIDTH: usize = 4;
-
-pub fn delete_document(name: &str) -> Result<()> {
-    let path = Path::new("meta.json");
-
-    let mut all_docs: Vec<Document> = if path.exists() {
-        let json_str = fs_err::read_to_string(path)?;
-        serde_json::from_str(&json_str).unwrap_or_default()
-    } else {
-        return Err(eyre!("No se ha encontrado un archivo `meta.json`."));
-    };
-
-    if let Some(pos) = all_docs
-        .iter()
-        .position(|doc| doc.name.to_lowercase() == name.to_lowercase())
-    {
-        all_docs.remove(pos);
-        let file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(path)?;
-
-        Ok(serde_json::to_writer_pretty(file, &all_docs)?)
-    } else {
-        Err(eyre!("No se encuentra ningun documento con nombre {name}."))
-    }
-}
 
 pub fn initialize_meta_file() -> Result<()> {
     run_new()

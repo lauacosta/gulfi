@@ -9,6 +9,8 @@ use std::fs::DirBuilder;
 
 use tracing::{error, info, warn};
 
+pub const DIMENSION: usize = 1536;
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Document {
     #[serde(deserialize_with = "to_lowercase")]
@@ -90,6 +92,83 @@ impl Document {
         }
 
         result
+    }
+
+    pub fn as_sql(&self) -> String {
+        let mut sql_statement = String::new();
+        let doc_name = self.name.clone();
+
+        let (raw_fields_str, fields_str, field_names) = {
+            let fields: Vec<String> = self
+                .fields
+                .iter()
+                .map(|x| {
+                    if x.unique {
+                        format!("{} text unique on conflict ignore", x.name.clone())
+                    } else {
+                        format!("{} text", x.name.clone())
+                    }
+                })
+                .collect();
+            let raw_fields_str = fields.join(", ");
+
+            let fields: Vec<String> = self
+                .fields
+                .iter()
+                .filter(|x| !x.vec_input)
+                .map(|x| {
+                    if x.unique {
+                        format!("{} text unique on conflict ignore", x.name.clone())
+                    } else {
+                        format!("{} text", x.name.clone())
+                    }
+                })
+                .collect();
+
+            let fields_str = fields.join(", ");
+
+            let fields: Vec<String> = self
+                .fields
+                .iter()
+                .filter(|x| !x.vec_input)
+                .map(|x| x.name.clone())
+                .collect();
+
+            let fields_names = fields.join(", ");
+
+            (raw_fields_str, fields_str, fields_names)
+        };
+
+        let _ = write!(
+            sql_statement,
+            "
+create table if not exists {doc_name}_raw(
+    id integer primary key,
+    {raw_fields_str}
+);
+
+create table if not exists {doc_name}(
+    id integer primary key,
+    {fields_str},
+    vec_input text
+);
+
+create virtual table if not exists fts_{doc_name} using fts5(
+    vec_input, {field_names},
+    content='{doc_name}',
+    content_rowid='id', 
+    prefix='2 3 4',
+    tokenize='unicode61 remove_diacritics 1'
+);
+
+create virtual table if not exists vec_{doc_name} using vec0(
+    row_id integer primary key,
+    vec_input_embedding float[{DIMENSION}]
+);
+",
+        );
+
+        sql_statement
     }
 }
 

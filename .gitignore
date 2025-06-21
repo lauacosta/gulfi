@@ -1,17 +1,11 @@
 /target
-*.sqlite3
 .env
 gulfi.db
-/configuration
-/dist
-/sql
-datasources
-/backup
 meta.json
-/release
-/backups
+/configuration
+/migrations
+/dist
+datasources
 .idea
-gulfi_release.zip
-gulfi_release
 /crates/gulfi-ui/ui/dist/*
 

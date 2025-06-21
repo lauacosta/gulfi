@@ -88,10 +88,6 @@ pub enum Command {
     Sync {
         document: String,
 
-        /// Updates from scratch.
-        #[arg(long, default_value = "false")]
-        force: bool,
-
         /// Sets the strategy for updating.
         #[arg(value_enum,  default_value_t = SyncStrategy::Fts)]
         sync_strat: SyncStrategy,
@@ -115,9 +111,34 @@ pub enum Command {
     Delete { document: String },
     /// Creates a new user in the database.
     CreateUser { username: String, password: String },
+    Migration {
+        #[command(subcommand)]
+        command: MigrationCommands,
+    },
+}
 
-    /// Creates a config template
-    Init,
+#[derive(Subcommand, Clone, Debug, PartialEq, Eq)]
+pub enum MigrationCommands {
+    /// Generates migrations files based on the meta file
+    Generate,
+    /// Show status of migrations
+    Status,
+    /// Runs the migrations in chronological order
+    Migrate {
+        /// a
+        #[arg(long = "dry-run", default_value = "false")]
+        dry_run: bool,
+    },
+    /// Drops all tables and re-runs migrations
+    Fresh {
+        #[arg(long = "dry-run", default_value = "false")]
+        dry_run: bool,
+    },
+    /// Creates a new migration file
+    Create {
+        /// Name of the new migration file
+        name: String,
+    },
 }
 
 #[cfg(debug_assertions)]
