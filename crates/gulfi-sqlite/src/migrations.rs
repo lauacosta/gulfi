@@ -9,6 +9,8 @@ use fs_err::OpenOptions;
 use gulfi_common::Document;
 use rusqlite::{Connection, Transaction};
 
+use crate::get_vec_conn;
+
 pub const MIGRATIONS_PATH: &str = "migrations";
 const MIGRATION_TRACKING_TABLE: &str = "schema_migrations";
 
@@ -88,7 +90,7 @@ impl MigrationRunner {
 
     /// Get executed migrations from database
     pub fn get_executed_migrations(&self) -> eyre::Result<Vec<String>> {
-        let conn = Connection::open(&self.db_path)?;
+        let conn = get_vec_conn(&self.db_path)?;
 
         let mut stmt = conn.prepare(&format!(
             "SELECT filename FROM {} ORDER BY executed_at",
@@ -151,8 +153,14 @@ impl MigrationRunner {
     /// Run pending migrations
     pub fn run(&self, dry_run: bool) -> eyre::Result<()> {
         self.init()?;
-
         let pending = self.get_pending_migrations()?;
+
+        let migrations_dir = MIGRATIONS_PATH;
+
+        let existing_migrations: Vec<PathBuf> = fs_err::read_dir(migrations_dir)?
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .collect();
 
         if pending.is_empty() {
             println!("✅ No pending migrations");
@@ -169,9 +177,16 @@ impl MigrationRunner {
 
         println!("🚀 Running {} migrations...", pending.len());
 
-        let mut conn = Connection::open(&self.db_path)?;
+        let mut conn = get_vec_conn(&self.db_path)?;
 
         for migration in pending {
+            if check_for_duplicate(&migration.content, &existing_migrations).is_some() {
+                return Err(eyre::eyre!(
+                    "❌ Duplicate migration detected: {}. Migration with identical content already exists.",
+                    migration.filename
+                ));
+            }
+
             println!("🔄 Running: {}", migration.filename);
 
             let tx = conn.transaction()?;
@@ -197,9 +212,7 @@ impl MigrationRunner {
         Ok(())
     }
 
-    /// Execute a single migration's SQL content
     fn execute_migration_sql(&self, tx: &Transaction, sql_content: &str) -> eyre::Result<()> {
-        // Parse SQL statements properly, handling triggers and other complex statements
         let statements = self.parse_sql_statements(sql_content);
 
         for statement in statements {
@@ -212,7 +225,6 @@ impl MigrationRunner {
         Ok(())
     }
 
-    /// Parse SQL statements, properly handling triggers, procedures, and other complex statements
     fn parse_sql_statements(&self, sql_content: &str) -> Vec<String> {
         let mut statements = Vec::new();
         let mut current_statement = String::new();
@@ -392,26 +404,23 @@ end;
 
 ";
 
-    let timestamp = Utc::now().format("%Y_%m_%d_%H%M%S").to_string();
-    let file_name = format!("{timestamp}_base_tables.sql",);
-    let migration_file = format!("{migrations_dir}/{file_name}");
-
     if check_for_duplicate(base_migrations, &existing_migrations).is_none() {
+        let timestamp = Utc::now().format("%Y_%m_%d_%H%M%S").to_string();
+        let file_name = format!("{timestamp}_base_tables.sql",);
+        let migration_file = format!("{migrations_dir}/{file_name}");
+
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
             .open(&migration_file)?;
 
         file.write_all(base_migrations.as_bytes())?;
+
         eprintln!(
             " - Created migration file {}!",
             file_name.bright_green().bold()
         );
     }
-
-    let timestamp = Utc::now().format("%Y_%m_%d_%H%M%S").to_string();
-    let file_name = format!("{timestamp}_docs_tables.sql",);
-    let migration_file = format!("{migrations_dir}/{file_name}");
 
     let mut sql_statement = String::new();
     for doc in docs {
@@ -419,18 +428,22 @@ end;
     }
 
     if check_for_duplicate(&sql_statement, &existing_migrations).is_none() {
+        let timestamp = Utc::now().format("%Y_%m_%d_%H%M%S").to_string();
+        let file_name = format!("{timestamp}_docs_tables.sql",);
+        let migration_file = format!("{migrations_dir}/{file_name}");
+
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
             .open(&migration_file)?;
 
         file.write_all(sql_statement.as_bytes())?;
+
         eprintln!(
             " - Created migration file {}!",
             file_name.bright_green().bold()
         );
     }
-
     Ok(())
 }
 

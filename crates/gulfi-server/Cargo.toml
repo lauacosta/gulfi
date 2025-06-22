@@ -14,10 +14,12 @@ webbrowser = "1.0.3"
 include_dir = "0.7.4"
 termcolor = "1.4.1"
 rand = "0.9.1"
+tracing-log = "0.2.0"
 moka = { version = "0.12.10", features = ["future", "logging"] }
 tracing-error = "0.2.0"
 
 eyre.workspace = true
+console-subscriber.workspace = true
 thiserror.workspace = true
 fs-err.workspace = true
 tracing.workspace = true
@@ -43,5 +45,4 @@ gulfi-query = { path = "../gulfi-query/"}
 gulfi-sqlite= { path = "../gulfi-sqlite/"}
 gulfi-common = { path = "../gulfi-common/"}
 gulfi-openai = { path = "../gulfi-openai/"}
-tracing-log = "0.2.0"
 

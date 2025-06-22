@@ -14,6 +14,7 @@ use std::time::Instant;
 
 fn main() -> eyre::Result<()> {
     color_eyre::install()?;
+
     let cli = Cli::parse();
 
     if let Err(e) = run_cli(cli) {

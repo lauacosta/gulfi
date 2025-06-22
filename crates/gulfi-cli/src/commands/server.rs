@@ -63,7 +63,8 @@ pub fn start_server(
 ) -> Result<(), CliError> {
     let start = Instant::now();
 
-    let subscriber = get_subscriber("info".into());
+    let subscriber = get_subscriber("info,tokio=trace,runtime=trace".into());
+
     init_subscriber(subscriber);
     let mut configuration = get_configuration()?;
     overrides.apply_to_config(&mut configuration);

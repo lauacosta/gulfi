@@ -3,9 +3,13 @@ use std::fmt;
 use tracing::Subscriber;
 use tracing_error::ErrorLayer;
 use tracing_log::LogTracer;
-use tracing_subscriber::{EnvFilter, Registry, fmt::Layer, layer::SubscriberExt};
+use tracing_subscriber::{
+    EnvFilter, Registry, fmt::Layer, layer::SubscriberExt, registry::LookupSpan,
+};
 
-pub fn get_subscriber(env_filter: String) -> impl Subscriber + Send + Sync {
+pub fn get_subscriber(
+    env_filter: String,
+) -> impl Subscriber + Send + Sync + for<'a> LookupSpan<'a> {
     let env_filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(env_filter));
 
@@ -19,10 +23,15 @@ pub fn get_subscriber(env_filter: String) -> impl Subscriber + Send + Sync {
                 .with_span_events(tracing_subscriber::fmt::format::FmtSpan::FULL),
         )
         .with(ErrorLayer::default())
+        .with(console_subscriber::ConsoleLayer::builder().spawn())
 }
 
-pub fn init_subscriber(subscriber: impl Subscriber + Send + Sync) {
+pub fn init_subscriber<S>(subscriber: S)
+where
+    S: Subscriber + Send + Sync + for<'a> LookupSpan<'a> + 'static,
+{
     LogTracer::init().expect("Failed to set logger");
+
     tracing::subscriber::set_global_default(subscriber).expect("Failed to set subscriber");
 }
 
