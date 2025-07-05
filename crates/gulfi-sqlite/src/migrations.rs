@@ -127,29 +127,32 @@ impl MigrationRunner {
         let executed = self.get_executed_migrations()?;
 
         if all_migrations.is_empty() {
-            println!("📋 No migrations found");
+            println!("No migrations found.");
             return Ok(());
         }
 
-        println!("📋 Migration Status:");
-        println!("┌─────────────────────────────────────────┬────────────┐");
-        println!("│ Migration                               │ Status     │");
-        println!("├─────────────────────────────────────────┼────────────┤");
+        println!();
+        println!("Migration status:");
+        println!();
 
+        // Headers
+        println!("{:<8} {:<10} {}", "Batch", "Status", "Migration");
+        println!("{:-<8} {:-<10} {:-<50}", "", "", "");
+
+        // List migrations
         for migration in all_migrations {
-            let status = if executed.contains(&migration.filename) {
-                "✅ Executed"
+            let (batch, status) = if executed.contains(&migration.filename) {
+                ("1", "Ran") // Laravel shows batch numbers, simplified to "1" here
             } else {
-                "⏳ Pending"
+                ("", "Pending")
             };
 
-            println!("│ {:<39} │ {:<10} │", migration.filename, status);
+            println!("{:<8} {:<10} {}", batch, status, migration.filename);
         }
 
-        println!("└─────────────────────────────────────────┴────────────┘");
+        println!();
         Ok(())
     }
-
     /// Run pending migrations
     pub fn run(&self, dry_run: bool) -> eyre::Result<()> {
         self.init()?;

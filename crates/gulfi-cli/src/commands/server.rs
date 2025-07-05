@@ -63,7 +63,11 @@ pub fn start_server(
 ) -> Result<(), CliError> {
     let start = Instant::now();
 
+    #[cfg(feature = "tokio-console")]
     let subscriber = get_subscriber("info,tokio=trace,runtime=trace".into());
+
+    #[cfg(not(feature = "tokio-console"))]
+    let subscriber = get_subscriber("info".into());
 
     init_subscriber(subscriber);
     let mut configuration = get_configuration()?;

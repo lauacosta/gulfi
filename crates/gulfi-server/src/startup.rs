@@ -11,7 +11,7 @@ use gulfi_sqlite::{get_vec_conn, pooling::AsyncConnectionPool};
 use http::{Method, StatusCode};
 use moka::future::Cache;
 use secrecy::ExposeSecret;
-use std::{fmt, io};
+use std::{fmt, io, process};
 use std::{
     net::IpAddr,
     sync::Arc,
@@ -284,10 +284,11 @@ pub async fn run_server(
             let version = env!("CARGO_PKG_VERSION");
 
             eprintln!(
-                "\n\n  {} {} ready in {} ms\n",
+                "\n\n  {} {} ready in {} ms. PID: {}\n",
                 name.to_uppercase().bold().bright_green(),
                 format!("v{version}").green(),
                 start.elapsed().as_millis().bold().bright_white(),
+                process::id().bright_green().bold(),
             );
 
             eprintln!(

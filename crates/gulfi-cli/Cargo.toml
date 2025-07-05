@@ -4,6 +4,9 @@ edition = "2024"
 license.workspace = true
 version.workspace = true
 
+[features]
+tokio-console = []
+
 
 [dependencies]
 clap = { workspace = true, features = ["cargo"] }
