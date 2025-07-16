@@ -8,7 +8,6 @@ pub fn handle<P>(documents: &[Document], meta_path: P, format: &Format) -> Resul
 where
     P: AsRef<Path> + Debug,
 {
-    println!("Document definitions in `{meta_path:#?}`:");
     match format {
         Format::Pretty => {
             for doc in documents {
