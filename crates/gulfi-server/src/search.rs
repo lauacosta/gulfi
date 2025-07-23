@@ -9,7 +9,7 @@ use gulfi_query::{
     Constraint::{self, Exact, GreaterThan, LesserThan},
     Query,
 };
-use std::{collections::HashMap, fmt::Write, sync::Arc};
+use std::{collections::BTreeMap, fmt::Write, sync::Arc};
 
 use reqwest::Client;
 use rusqlite::{
@@ -480,7 +480,7 @@ enum SearchStrategyError {
 }
 
 fn build_conditions(
-    constraints: Option<&HashMap<String, Vec<Constraint>>>,
+    constraints: Option<&BTreeMap<String, Vec<Constraint>>>,
 ) -> (Vec<String>, Vec<&dyn ToSql>) {
     let mut conditions = Vec::new();
     let mut binding_values: Vec<&dyn ToSql> = Vec::new();

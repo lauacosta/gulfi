@@ -33,9 +33,9 @@ check_report:
     cargo deduplicate-warnings < clippy_raw.json > clippy.json
 
 # Runs the test suite
-
-test:
-    cargo nextest r --locked --all-features --all-targets --profile ci
+test update="":
+  {{ if update == "update" { "UPDATE_EXPECT=1" } else { "" } }}  cargo nextest r --locked --all-features --all-targets --profile ci
+  
 
 # Builds the UI
 build-ui:
