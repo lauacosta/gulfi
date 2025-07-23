@@ -9,9 +9,6 @@ version = "0.6.0"
 license = "GPL-3.0"
 rust-version = "1.85.1"
 
-[profile.release]
-incremental = true
-lto = "thin"
 
 [workspace.dependencies]
 thiserror = "2.0.3"
@@ -26,7 +23,8 @@ http = "1.1.0"
 rusqlite = { version = "0.35.0", features = ["bundled"] }
 zerocopy = "0.8.5"
 clap = { version = "4.5.20", features = ["derive"] }
-reqwest = { version = "0.12.8", default-features = false, features = ["json", "stream", "rustls-tls", "gzip", "deflate"] }
+reqwest = { version = "0.12.22", default-features = false, features = ["json", "stream", "native-tls-vendored", "gzip", "deflate"] }
+# reqwest = { version = "0.12.22", default-features = false, features = ["json", "stream", "native-tls", "gzip", "deflate"] }
 color-eyre = "0.6.3"
 eyre = "0.6.12"
 serde_urlencoded = "0.7.1"
@@ -37,8 +35,16 @@ config = "0.15.11"
 serde-aux = "4.7.0"
 secrecy = { version = "0.10.3", features = ["serde"] }
 
+[profile.release]
+opt-level = "z"         
+lto = "fat"             
+codegen-units = 1       
+strip = "symbols"       
+panic = "abort"         
 
-[profile.profiling]
+[profile.dev-release]
 inherits = "release"
-debug = true
+strip = "debuginfo"
+panic = "unwind"
+
 
