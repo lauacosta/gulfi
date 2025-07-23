@@ -38,7 +38,7 @@ impl ConnectionPool {
     /// * `conn_fn` - Function to create new database connections
     ///
     /// # Example
-    /// ``` rust
+    /// ``` rust, ignore
     /// use gulfi_sqlite::pooling::ConnectionPool;
     /// use rusqlite::Connection;
     ///

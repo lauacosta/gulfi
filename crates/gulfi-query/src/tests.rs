@@ -1,19 +1,24 @@
 use super::*;
 use expect_test::{Expect, expect};
-use pretty_assertions::assert_eq;
 use proptest::prelude::*;
 
 fn check(query: &str, expect: Expect) {
-    let res = Query::parse(query).unwrap();
+    let res = Query::parse(query);
     expect.assert_debug_eq(&res);
 }
 
 #[test]
 fn fails_gracefully_on_control_characters() {
-    let input = "query: Test, ;\0";
-    let result = Query::parse(input);
-
-    assert!(matches!(result, Err(ParsingError::InvalidToken(_))));
+    check(
+        "query: Test,;\0",
+        expect![[r#"
+        Err(
+            InvalidToken(
+                ";",
+            ),
+        )
+    "#]],
+    );
 }
 
 #[test]
@@ -21,11 +26,13 @@ fn only_query() {
     check(
         "query: Lautaro,",
         expect![[r#"
-        Query {
-            query: "Lautaro",
-            constraints: None,
-        }
-    "#]],
+            Ok(
+                Query {
+                    query: "Lautaro",
+                    constraints: None,
+                },
+            )
+        "#]],
     );
 }
 
@@ -34,23 +41,25 @@ fn only_with_filters() {
     check(
         "query: Lautaro, ciudad: Corrientes, provincia: Mendoza",
         expect![[r#"
-            Query {
-                query: "Lautaro",
-                constraints: Some(
-                    {
-                        "ciudad": [
-                            Exact(
-                                "Corrientes",
-                            ),
-                        ],
-                        "provincia": [
-                            Exact(
-                                "Mendoza",
-                            ),
-                        ],
-                    },
-                ),
-            }
+            Ok(
+                Query {
+                    query: "Lautaro",
+                    constraints: Some(
+                        {
+                            "ciudad": [
+                                Exact(
+                                    "Corrientes",
+                                ),
+                            ],
+                            "provincia": [
+                                Exact(
+                                    "Mendoza",
+                                ),
+                            ],
+                        },
+                    ),
+                },
+            )
         "#]],
     );
 }
@@ -60,22 +69,24 @@ fn only_with_restrictions() {
     check(
         "query: lautaro, edad > 30, edad < 60",
         expect![[r#"
-        Query {
-            query: "lautaro",
-            constraints: Some(
-                {
-                    "edad": [
-                        GreaterThan(
-                            "30",
-                        ),
-                        LesserThan(
-                            "60",
-                        ),
-                    ],
+            Ok(
+                Query {
+                    query: "lautaro",
+                    constraints: Some(
+                        {
+                            "edad": [
+                                GreaterThan(
+                                    "30",
+                                ),
+                                LesserThan(
+                                    "60",
+                                ),
+                            ],
+                        },
+                    ),
                 },
-            ),
-        }
-    "#]],
+            )
+        "#]],
     );
 }
 
@@ -84,51 +95,71 @@ fn with_all_constraints() {
     check(
         "query: Lautaro, ciudad: Corrientes, provincia: Mendoza, edad > 30, edad < 60",
         expect![[r#"
-            Query {
-                query: "Lautaro",
-                constraints: Some(
-                    {
-                        "ciudad": [
-                            Exact(
-                                "Corrientes",
-                            ),
-                        ],
-                        "edad": [
-                            GreaterThan(
-                                "30",
-                            ),
-                            LesserThan(
-                                "60",
-                            ),
-                        ],
-                        "provincia": [
-                            Exact(
-                                "Mendoza",
-                            ),
-                        ],
-                    },
-                ),
-            }
+            Ok(
+                Query {
+                    query: "Lautaro",
+                    constraints: Some(
+                        {
+                            "ciudad": [
+                                Exact(
+                                    "Corrientes",
+                                ),
+                            ],
+                            "edad": [
+                                GreaterThan(
+                                    "30",
+                                ),
+                                LesserThan(
+                                    "60",
+                                ),
+                            ],
+                            "provincia": [
+                                Exact(
+                                    "Mendoza",
+                                ),
+                            ],
+                        },
+                    ),
+                },
+            )
         "#]],
     );
 }
 
 #[test]
 fn fails_without_query_prefix() {
-    let result = Query::parse("Lautaro, age > 30");
-    assert!(matches!(result, Err(ParsingError::MissingQuery)));
+    check(
+        "Lautaro, age > 30",
+        expect![[r#"
+        Err(
+            MissingQuery,
+        )
+    "#]],
+    );
 }
 
 #[test]
 fn fails_with_empty_query() {
-    let result = Query::parse("query: , age > 30");
-    assert!(matches!(result, Err(ParsingError::MissingQuery)));
+    check(
+        "query: , age > 30",
+        expect![[r#"
+        Err(
+            MissingQuery,
+        )
+    "#]],
+    );
 }
 
 #[test]
 fn fails_with_no_colon_to_split_query() {
-    let result = Query::parse("query Lautaro, age > 30");
-    assert!(matches!(result, Err(ParsingError::MissingQuery)));
+    check(
+        "query Lautaro, age > 30",
+        expect![[r#"
+        Err(
+            MissingQuery,
+        )
+    "#]],
+    );
 }
 
 #[test]
@@ -145,23 +176,52 @@ fn fails_with_token_missing_value() {
 
 #[test]
 fn fails_with_token_missing_key() {
-    let result = Query::parse("query: Lautaro, :Berlin");
-    assert!(matches!(result, Err(ParsingError::MissingKey(':'))));
+    check(
+        "query: Lautaro, :Berlin",
+        expect![[r#"
+        Err(
+            MissingKey(
+                ':',
+            ),
+        )
+    "#]],
+    );
 
-    let result = Query::parse("query: Lautaro, >30");
-    assert!(matches!(result, Err(ParsingError::MissingKey('>'))));
+    check(
+        "query: Lautaro, >30",
+        expect![[r#"
+        Err(
+            MissingKey(
+                '>',
+            ),
+        )
+    "#]],
+    );
 
-    let result = Query::parse("query: Lautaro, <30");
-    assert!(matches!(result, Err(ParsingError::MissingKey('<'))));
+    check(
+        "query: Lautaro, <30",
+        expect![[r#"
+        Err(
+            MissingKey(
+                '<',
+            ),
+        )
+    "#]],
+    );
 }
 
 #[test]
 fn fails_with_invalid_token() {
-    let result = Query::parse("query: Lautaro, city; Corrientes");
-    match result {
-        Err(ParsingError::InvalidToken(token)) => assert_eq!(token, "city; Corrientes"),
-        _ => panic!("Expected InvalidToken error"),
-    }
+    check(
+        "query: Lautaro, city; Corrientes",
+        expect![[r#"
+        Err(
+            InvalidToken(
+                "city; Corrientes",
+            ),
+        )
+    "#]],
+    );
 }
 
 proptest! {
