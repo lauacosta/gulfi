@@ -7,12 +7,15 @@ use gulfi_sqlite::{insert_base_data, setup_sqlite, spawn_vec_connection};
 
 use crate::CliError;
 
-pub fn handle<P: AsRef<Path>>(
+pub fn handle<P>(
     db_path: P,
     docs: &[Document],
     doc: &str,
     force: bool,
-) -> Result<Document, CliError> {
+) -> Result<Document, CliError>
+where
+    P: AsRef<Path>,
+{
     let db_path_str = db_path.as_ref().to_string_lossy();
     if db_path_str.trim() == MEMORY_DB_PATH {
         eprintln!(
@@ -22,27 +25,22 @@ pub fn handle<P: AsRef<Path>>(
         );
 
         return Err(CliError::Other(eyre!(
-            "You should not sync on a transient database, it will dissapear immediately after"
+            "You should not sync on a transient database"
         )));
     }
 
     let conn = spawn_vec_connection(db_path)?;
 
     let Some(doc) = docs.iter().find(|d| d.name == doc) else {
-        let available_documents = docs
-            .iter()
-            .map(|x| x.name.clone())
-            .collect::<Vec<_>>()
-            .join(", ");
-
+        let available = docs.iter().map(|d| &d.name).collect::<Vec<_>>();
         return Err(CliError::Other(eyre!(
-            "{} is not one of the available documents: [{available_documents}]",
-            doc.bright_red()
+            "{} is not one of the available documents: {:#?}",
+            doc.bright_red(),
+            available
         )));
     };
 
     let doc_name = doc.name.clone();
-
     if force {
         let exists = conn.query_row(
             "select name from sqlite_master where type='table' and name=?",

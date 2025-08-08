@@ -1,12 +1,12 @@
+use std::borrow::Borrow;
 use std::fmt::Write as _;
 use std::{
-    fmt::{Debug, Display, Formatter},
+    fmt::Debug,
     fs::{DirBuilder, metadata},
     path::{Path, PathBuf},
 };
 
 use camino::Utf8Path;
-use color_eyre::owo_colors::OwoColorize;
 use eyre::eyre;
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -17,70 +17,6 @@ pub struct Document {
     #[serde(deserialize_with = "to_lowercase")]
     pub name: String,
     pub fields: Vec<Field>,
-}
-
-impl Display for Document {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        // Header with document name
-        let name = self.name.to_uppercase();
-        writeln!(
-            f,
-            "╭─ {} {}",
-            "📄".bright_yellow(),
-            name.bright_cyan().bold()
-        )?;
-
-        // Field count summary
-        let field_count = self.fields.len();
-        let vec_count = self.fields.iter().filter(|f| f.vec_input).count();
-        let unique_count = self.fields.iter().filter(|f| f.unique).count();
-
-        writeln!(
-            f,
-            "│  {} {} fields • {} vectorized • {} unique",
-            "📊".bright_blue(),
-            field_count.bright_white().bold(),
-            vec_count.bright_blue().bold(),
-            unique_count.bright_magenta().bold()
-        )?;
-
-        writeln!(f, "│")?;
-
-        // Fields
-        for (i, field) in self.fields.iter().enumerate() {
-            let is_last = i == self.fields.len() - 1;
-            let connector = if is_last { "╰─" } else { "├─" };
-
-            // Field name with proper alignment
-            let field_name = format!("{:<20}", field.name);
-
-            // Build badges
-            let mut badges = Vec::new();
-            if field.vec_input {
-                badges.push("🔍 vec".bright_blue().bold().to_string());
-            }
-            if field.unique {
-                badges.push("⭐ único".bright_magenta().bold().to_string());
-            }
-
-            let badge_str = if badges.is_empty() {
-                String::new()
-            } else {
-                format!(" {}", badges.join(" "))
-            };
-
-            writeln!(
-                f,
-                "{} {} {}{}",
-                connector.bright_white(),
-                field_name.bright_green(),
-                "│".bright_white().dimmed(),
-                badge_str
-            )?;
-        }
-
-        Ok(())
-    }
 }
 
 impl Document {
@@ -103,17 +39,29 @@ pub struct Field {
     pub unique: bool,
 }
 
+impl AsRef<str> for Field {
+    fn as_ref(&self) -> &str {
+        &self.name
+    }
+}
+
+impl Borrow<str> for Field {
+    fn borrow(&self) -> &str {
+        &self.name
+    }
+}
+
 #[derive(Debug, PartialEq)]
-pub enum DataSources {
+pub enum Filetype {
     Csv,
     Json,
 }
 
-impl DataSources {
+impl Filetype {
     pub fn from_extension(ext: &str) -> eyre::Result<Self> {
         let file = match ext {
-            "csv" => DataSources::Csv,
-            "json" => DataSources::Json,
+            "csv" => Filetype::Csv,
+            "json" => Filetype::Json,
             _ => return Err(eyre!("unknown file extension: {ext}")),
         };
 
@@ -121,7 +69,7 @@ impl DataSources {
     }
 }
 
-pub fn parse_sources<T: AsRef<Path> + Debug>(path: T) -> eyre::Result<Vec<(PathBuf, DataSources)>> {
+pub fn parse_sources<T: AsRef<Path> + Debug>(path: T) -> eyre::Result<Vec<(PathBuf, Filetype)>> {
     let mut datasources = Vec::new();
 
     match metadata(&path) {
@@ -151,11 +99,11 @@ pub fn parse_sources<T: AsRef<Path> + Debug>(path: T) -> eyre::Result<Vec<(PathB
         let path = entry?.path();
         let utf_8_path = Utf8Path::from_path(&path).expect("Should be UTF-8");
 
-        if utf_8_path.is_file() {
-            if let Some(ext) = utf_8_path.extension() {
-                let file = DataSources::from_extension(ext)?;
-                datasources.push((path, file));
-            }
+        if utf_8_path.is_file()
+            && let Some(ext) = utf_8_path.extension()
+        {
+            let file = Filetype::from_extension(ext)?;
+            datasources.push((path, file));
         }
     }
 

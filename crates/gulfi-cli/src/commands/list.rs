@@ -11,7 +11,8 @@ where
     match format {
         Format::Pretty => {
             for doc in documents {
-                println!("{doc}");
+                todo!()
+                // println!("{doc}");
             }
         }
         Format::Json => println!("{}", serde_json::to_string_pretty(documents)?),

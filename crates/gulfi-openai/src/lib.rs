@@ -1,14 +1,17 @@
+pub mod embedding_message;
+
 use secrecy::{ExposeSecret, SecretBox, SecretString};
 use std::time::{Duration, Instant};
 
 use bytes::BufMut;
-use color_eyre::owo_colors::OwoColorize;
 use eyre::Result;
 use rand::Rng;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, error, info, instrument, warn};
+
+use crate::embedding_message::EmbeddingMessage;
 
 const MAX_RETRIES: u32 = 5;
 
@@ -34,12 +37,12 @@ impl OpenAIClient {
         client: &Client,
         proc_id: usize,
         base_delay: u64,
-        tx: Sender<String>,
+        tx: Sender<EmbeddingMessage>,
     ) -> Result<(Vec<(u64, Vec<f32>)>, u128)> {
         let global_start = Instant::now();
 
         let _ = tx
-            .send(format!("Preparing embeddings for {} entries", input.len()))
+            .send(EmbeddingMessage::Preparing { count: input.len() })
             .await;
 
         let request = RequestBody {
@@ -58,11 +61,10 @@ impl OpenAIClient {
         while current_try <= MAX_RETRIES {
             let req_start = Instant::now();
             let _ = tx
-                .send(format!(
-                    "Sending request. (intento {}/{})",
-                    current_try + 1,
-                    MAX_RETRIES + 1
-                ))
+                .send(EmbeddingMessage::SendingRequest {
+                    attempt: (current_try + 1) as usize,
+                    max_attempts: (MAX_RETRIES + 1) as usize,
+                })
                 .await;
 
             let call = EmbeddingCall {
@@ -83,36 +85,40 @@ impl OpenAIClient {
             match request_embeddings(call).await {
                 Ok(resp) => {
                     let elapsed = req_start.elapsed().as_millis();
-                    let _ = tx.send(format!("Request successful {elapsed} ms")).await;
+                    let _ = tx
+                        .send(EmbeddingMessage::RequestSuccessful {
+                            elapsed_ms: (elapsed),
+                        })
+                        .await;
                     response = Some(resp);
                     break;
                 }
                 Err(EmbeddingError::RateLimit) => {
                     let _ = tx
-                        .send(format!(
-                            "{} Rate limit hit, trying again ({}/{})...",
-                            "⚠️".bright_yellow(),
-                            current_try + 1,
-                            MAX_RETRIES + 1
-                        ))
+                        .send(EmbeddingMessage::RateLimit {
+                            attempt: (current_try + 1) as usize,
+                            max_attempts: (MAX_RETRIES + 1) as usize,
+                        })
                         .await;
                     current_try += 1;
                 }
                 Err(e) => {
-                    let _ = tx.send(format!("{} Error: {}", "❌".bright_red(), e)).await;
+                    let _ = tx
+                        .send(EmbeddingMessage::Error {
+                            message: format!("{e}"),
+                        })
+                        .await;
                     return Err(e.into());
                 }
             }
         }
 
         let Some(mut response) = response else {
-            let _ = tx
-                .send(format!("{} Max retries exceeded", "❌".bright_red()))
-                .await;
+            let _ = tx.send(EmbeddingMessage::MaxRetriesExceeded).await;
             return Err(EmbeddingError::MaxRetriesExceeded.into());
         };
 
-        let _ = tx.send("Parsing response...".to_string()).await;
+        let _ = tx.send(EmbeddingMessage::ParsingResponse).await;
         let start = Instant::now();
 
         let capacity = response.content_length().unwrap_or(0) as usize;
@@ -125,10 +131,12 @@ impl OpenAIClient {
 
         let elapsed = start.elapsed().as_millis();
         let _ = tx
-            .send(format!("Parsing response done in {elapsed} ms"))
+            .send(EmbeddingMessage::ParsingComplete {
+                elapsed_ms: elapsed,
+            })
             .await;
 
-        let _ = tx.send("Processing embeddings...".to_string()).await;
+        let _ = tx.send(EmbeddingMessage::ProcessingEmbeddings).await;
         let embedding: Vec<(u64, Vec<f32>)> = std::iter::zip(
             indices,
             EmbeddingObject::embeddings_iter(response.embeddings),
@@ -137,7 +145,9 @@ impl OpenAIClient {
 
         let total_elapsed = global_start.elapsed().as_millis();
         let _ = tx
-            .send(format!("Embeddings done in ({total_elapsed}) ms"))
+            .send(EmbeddingMessage::Complete {
+                total_elapsed_ms: total_elapsed,
+            })
             .await;
 
         Ok((embedding, total_elapsed))
