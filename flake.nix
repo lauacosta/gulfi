@@ -24,6 +24,8 @@
             mold
             cargo-nextest
             cargo-bloat
+            cargo-deny
+            cargo-audit
             hyperfine
             cargo-udeps
             nodejs

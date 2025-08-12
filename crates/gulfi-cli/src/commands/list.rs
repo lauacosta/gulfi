@@ -1,4 +1,4 @@
-use gulfi_common::Document;
+use gulfi_ingest::Document;
 
 use crate::{CliError, Format};
 

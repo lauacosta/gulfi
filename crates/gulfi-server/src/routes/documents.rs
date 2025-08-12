@@ -1,5 +1,5 @@
 use axum::{Json, extract::State};
-use gulfi_common::Document;
+use gulfi_ingest::Document;
 
 use crate::startup::ServerState;
 

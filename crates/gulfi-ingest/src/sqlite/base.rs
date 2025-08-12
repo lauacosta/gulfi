@@ -1,4 +1,4 @@
-pub mod pooling;
+// pub mod pooling;
 
 use std::{
     fmt::Debug,
@@ -17,7 +17,6 @@ use color_eyre::owo_colors::OwoColorize;
 use csv::ReaderBuilder;
 use eyre::{Result, eyre};
 use futures::StreamExt;
-use gulfi_common::{DataSources, Document, clean_html, normalize, parse_sources};
 use gulfi_openai::OpenAIClient;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rusqlite::{
@@ -29,6 +28,11 @@ use sqlite_vec::sqlite3_vec_init;
 use tokio::sync::Mutex;
 use tracing::{debug, error};
 use zerocopy::IntoBytes;
+
+use crate::{
+    clean_html, normalize,
+    reader::{DataSources, Document, parse_sources},
+};
 
 pub const DIMENSION: usize = 1536;
 const KEYWORDS: &[&str] = &["SELECT", "DROP", "DELETE", "UPDATE", "INSERT", "TABLE"];

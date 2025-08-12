@@ -1042,7 +1042,7 @@ dependencies = [
  "color-eyre",
  "eyre",
  "gulfi-cli",
- "gulfi-common",
+ "gulfi-ingest",
  "rusqlite",
  "serde_json",
  "tokio",
@@ -1058,10 +1058,9 @@ dependencies = [
  "color-eyre",
  "config",
  "eyre",
- "gulfi-common",
+ "gulfi-ingest",
  "gulfi-openai",
  "gulfi-server",
- "gulfi-sqlite",
  "password-hash",
  "rusqlite",
  "secrecy",
@@ -1072,16 +1071,27 @@ dependencies = [
 ]
 
 [[package]]
-name = "gulfi-common"
+name = "gulfi-ingest"
 version = "0.6.0"
 dependencies = [
  "ammonia",
  "camino",
  "color-eyre",
+ "crossbeam",
+ "csv",
  "eyre",
+ "futures",
+ "gulfi-openai",
+ "indicatif",
+ "reqwest",
+ "rusqlite",
  "serde",
  "serde_json",
+ "sqlite-vec",
+ "thiserror 2.0.12",
+ "tokio",
  "tracing",
+ "zerocopy",
 ]
 
 [[package]]
@@ -1122,10 +1132,9 @@ dependencies = [
  "color-eyre",
  "config",
  "eyre",
- "gulfi-common",
+ "gulfi-ingest",
  "gulfi-openai",
  "gulfi-query",
- "gulfi-sqlite",
  "http",
  "include_dir",
  "mime_guess",
@@ -1154,29 +1163,6 @@ dependencies = [
  "tracing-opentelemetry",
  "tracing-subscriber",
  "webbrowser",
- "zerocopy",
-]
-
-[[package]]
-name = "gulfi-sqlite"
-version = "0.6.0"
-dependencies = [
- "color-eyre",
- "crossbeam",
- "csv",
- "eyre",
- "futures",
- "gulfi-common",
- "gulfi-openai",
- "indicatif",
- "reqwest",
- "rusqlite",
- "serde",
- "serde_json",
- "sqlite-vec",
- "thiserror 2.0.12",
- "tokio",
- "tracing",
  "zerocopy",
 ]
 

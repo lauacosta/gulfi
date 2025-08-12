@@ -19,7 +19,7 @@ chrono.workspace = true
 serde_json.workspace = true
 rusqlite.workspace = true
 
-gulfi-common = { path = "../gulfi-common/"}
+gulfi-ingest = { path = "../gulfi-ingest/"}
 gulfi-cli = { path = "../gulfi-cli/"}
 
 # Examples:

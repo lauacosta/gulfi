@@ -1,4 +1,4 @@
-use gulfi_common::Document;
+use gulfi_ingest::Document;
 use gulfi_server::{
     configuration::{Settings, get_configuration},
     startup::run_server,
