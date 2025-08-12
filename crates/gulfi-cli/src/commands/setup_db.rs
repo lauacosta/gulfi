@@ -2,8 +2,9 @@ use std::path::Path;
 
 use color_eyre::owo_colors::OwoColorize;
 use eyre::eyre;
-use gulfi_common::{Document, MEMORY_DB_PATH};
-use gulfi_sqlite::{insert_base_data, setup_sqlite, spawn_vec_connection};
+use gulfi_ingest::{
+    Document, MEMORY_DB_PATH, insert_base_data, setup_sqlite, spawn_vec_connection,
+};
 
 use crate::CliError;
 

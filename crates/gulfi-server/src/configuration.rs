@@ -8,6 +8,7 @@ pub struct Settings {
     pub app_settings: ApplicationSettings,
     pub embedding_provider: EmbeddingProviderSettings,
     pub db_settings: DatabaseSettings,
+    pub tracer_provider: TracingSettings,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -21,6 +22,14 @@ pub struct DatabaseSettings {
 pub struct EmbeddingProviderSettings {
     pub endpoint_url: String,
     pub auth_token: SecretString,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct TracingSettings {
+    pub service_name: String,
+    pub api_key: SecretString,
+    pub endpoint: String,
+    pub protocol: opentelemetry_otlp::Protocol,
 }
 
 #[derive(Deserialize, Debug, Clone)]

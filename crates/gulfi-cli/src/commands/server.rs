@@ -1,4 +1,4 @@
-use gulfi_common::Document;
+use gulfi_ingest::Document;
 use gulfi_server::{
     configuration::{Settings, get_configuration},
     startup::run_server,
@@ -62,11 +62,11 @@ pub fn start_server(
 ) -> Result<(), CliError> {
     let start = Instant::now();
 
-    let subscriber = get_subscriber("info".into());
-    init_subscriber(subscriber);
     let mut configuration = get_configuration()?;
     overrides.apply_to_config(&mut configuration);
 
+    let subscriber = get_subscriber(&configuration, "info".into());
+    init_subscriber(subscriber);
     let rt = tokio::runtime::Runtime::new()?;
 
     #[cfg(debug_assertions)]

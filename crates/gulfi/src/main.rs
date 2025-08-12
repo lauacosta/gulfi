@@ -6,11 +6,12 @@ use clap::Parser;
 use gulfi_cli::commands::server::ServerOverrides;
 use gulfi_cli::{Cli, CliError, Command, ExitOnError, helper::initialize_meta_file};
 use gulfi_cli::{commands, get_configuration};
-use gulfi_common::Document;
-use gulfi_common::MILLISECONDS_MULTIPLIER;
+use gulfi_ingest::Document;
 
 fn main() -> eyre::Result<()> {
     color_eyre::install()?;
+    Cli::check_config()?;
+
     let cli = Cli::parse();
 
     if let Err(e) = run_cli(cli) {
@@ -21,26 +22,13 @@ fn main() -> eyre::Result<()> {
 }
 
 fn run_cli(cli: Cli) -> Result<(), CliError> {
-    match cli.command() {
-        Command::Init => commands::configuration::create_config_template(),
-        Command::Serve { .. }
-        | Command::Sync { .. }
-        | Command::List { .. }
-        | Command::Add
-        | Command::Delete { .. }
-        | Command::CreateUser { .. } => run_with_config(cli),
-    }
-}
-
-fn run_with_config(cli: Cli) -> Result<(), CliError> {
     let cli = Cli::merge_with_config(cli, &get_configuration()?);
 
-    let (meta_file, documents) = load_meta_docs(&cli)?;
+    let (_, documents) = load_meta_docs(&cli)?;
 
-    match cli.command() {
-        Command::Init => unreachable!("Init is handled elsewhere"),
+    match cli.command {
         Command::List { format } => {
-            commands::list::handle(&documents, meta_file, &format).or_exit();
+            commands::list::handle(&documents, &format).or_exit();
         }
 
         Command::Add => commands::documents::add_document().or_exit(),
@@ -71,7 +59,7 @@ fn run_with_config(cli: Cli) -> Result<(), CliError> {
         } => {
             let db_path = cli.db.as_ref().expect("db file missing");
 
-            let base_delay = base_delay * MILLISECONDS_MULTIPLIER;
+            let base_delay = base_delay * 1000;
 
             let start = Instant::now();
             let doc = commands::setup_db::handle(db_path, &documents, &document, force)?;

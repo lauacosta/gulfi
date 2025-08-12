@@ -4,7 +4,7 @@ use std::path::Path;
 
 use color_eyre::owo_colors::OwoColorize;
 use eyre::{Result, eyre};
-use gulfi_common::{Document, Field};
+use gulfi_ingest::{Document, Field};
 
 pub const WIDTH: usize = 4;
 

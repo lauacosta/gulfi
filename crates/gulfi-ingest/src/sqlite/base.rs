@@ -1,36 +1,37 @@
-pub mod pooling;
-use std::fmt::Write;
-
-use std::io::BufReader;
+use std::fmt::Write as _;
 use std::{
     fmt::Debug,
     fs::File,
+    io::BufReader,
     path::Path,
     sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
     },
+    time::Duration,
 };
 
 use color_eyre::owo_colors::OwoColorize;
 use csv::ReaderBuilder;
 use eyre::{Result, eyre};
 use futures::StreamExt;
-use gulfi_common::{Document, parse_sources};
-use gulfi_openai::OpenAIClient;
-use gulfi_openai::embedding_message::EmbeddingMessage;
-use rusqlite::params_from_iter;
+use gulfi_openai::{OpenAIClient, embedding_message::EmbeddingMessage};
+use indicatif::{ProgressBar, ProgressStyle};
 use rusqlite::{
     Connection,
     ffi::{sqlite3, sqlite3_api_routines, sqlite3_auto_extension},
+    params_from_iter,
 };
 use sqlite_vec::sqlite3_vec_init;
 use tracing::{debug, error};
 use zerocopy::IntoBytes;
 
+use crate::Filetype;
+use crate::reader::{Document, parse_sources};
+
+const BATCH_SIZE: usize = 1000;
 pub const DIMENSION: usize = 1536;
 const KEYWORDS: &[&str] = &["SELECT", "DROP", "DELETE", "UPDATE", "INSERT", "TABLE"];
-const BATCH_SIZE: usize = 1000;
 
 pub async fn sync_vec_data(
     conn: &Connection,
@@ -156,27 +157,44 @@ pub async fn sync_vec_data(
     Ok((total, media))
 }
 
+pub fn create_indexes(conn: &Connection, doc: &Document) -> Result<()> {
+    let doc_name = doc.name.clone();
+    let queries = vec![format!(
+        "CREATE INDEX IF NOT EXISTS idx_{doc_name}_vec_input ON {doc_name}(vec_input) WHERE length(vec_input) > 0"
+    )];
+
+    for query in queries {
+        conn.execute(&query, [])?;
+    }
+    Ok(())
+}
+
 pub fn sync_fts_data(conn: &Connection, doc: &Document) -> usize {
     let doc_name = doc.name.clone();
     validate_sql_identifier(&doc_name).expect("Should be a safe identifier");
 
-    eprintln!(" Syncing FTS tables in {doc_name}...");
+    let pb = ProgressBar::new_spinner();
+    let style = ProgressStyle::with_template("{spinner:.green}{wide_msg}")
+        .expect("Should be a valid template")
+        .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ ");
+
+    pb.set_style(style);
+    pb.enable_steady_tick(Duration::from_millis(100));
+    pb.set_message(format!(" Syncing FTS tables in {doc_name}..."));
 
     for field in &doc.fields {
         validate_sql_identifier(&field.name).expect("Should be a safe identifier");
     }
 
     let field_names = {
-        let mut result = String::new();
-        let mut first = true;
-        for field in doc.fields.iter().filter(|x| !x.vec_input) {
-            if !first {
-                result.push_str(", ");
-            }
-            result.push_str(&field.name);
-            first = false;
-        }
-        result
+        let fields: Vec<String> = doc
+            .fields
+            .iter()
+            .filter(|x| !x.vec_input)
+            .map(|x| x.name.clone())
+            .collect();
+
+        fields.join(", ")
     };
 
     let inserted = conn
@@ -192,13 +210,17 @@ pub fn sync_fts_data(conn: &Connection, doc: &Document) -> usize {
         .map_err(|err| eyre!(err))
         .expect("Should be a valid SQL sentence");
 
-    for statement in [
+    let statements = vec![
         format!("insert into fts_{doc_name}(fts_{doc_name}) values('rebuild')"),
         format!("insert into fts_{doc_name}(fts_{doc_name}) values('optimize')"),
-    ] {
+    ];
+
+    for statement in statements {
         conn.execute(&statement, [])
             .expect("Should be a valid SQL sentence");
     }
+
+    pb.finish();
 
     inserted
 }
@@ -211,17 +233,16 @@ pub fn spawn_vec_connection<P: AsRef<Path>>(db_path: P) -> Result<Connection, ru
         >(sqlite3_vec_init as *const ())));
     }
 
-    let conn = Connection::open(db_path)?;
+    let db = Connection::open(db_path)?;
 
-    conn.pragma_update(None, "journal_mode", "WAL")?;
+    db.pragma_update(None, "journal_mode", "WAL")?;
 
-    let mode: String = conn.pragma_query_value(None, "journal_mode", |row| row.get(0))?;
+    let mode: String = db.pragma_query_value(None, "journal_mode", |row| row.get(0))?;
     debug!("Current journal mode: {}", mode);
 
-    Ok(conn)
+    Ok(db)
 }
 
-// TODO: Replace from migrations
 pub fn setup_sqlite(conn: &rusqlite::Connection, doc: &Document) -> Result<()> {
     let (sqlite_version, vec_version): (String, String) =
         conn.query_row("select sqlite_version(), vec_version()", [], |row| {
@@ -384,13 +405,12 @@ pub fn insert_base_data(conn: &rusqlite::Connection, doc: &Document) -> Result<(
     eprintln!("📁 Searching files in \"./datasources/{doc_name}\"...");
 
     let inserted = parse_and_insert(format!("./datasources/{doc_name}"), db_path, doc)?;
-
     let elapsed = start.elapsed().as_millis();
+
     eprintln!(
         "ℹ️{inserted} entries inserted in {doc_name}_raw! ({elapsed} ms). {}",
         if inserted == 0 { "No new entries." } else { "" }
     );
-    ////////////
 
     let start = std::time::Instant::now();
     conn.execute("BEGIN TRANSACTION", [])
@@ -430,61 +450,6 @@ pub fn insert_base_data(conn: &rusqlite::Connection, doc: &Document) -> Result<(
     Ok(())
 }
 
-fn check_headers<T, U>(actual: &[T], expected: &[U]) -> eyre::Result<()>
-where
-    T: AsRef<str> + PartialEq + std::fmt::Debug,
-    U: AsRef<str> + PartialEq + std::fmt::Debug,
-{
-    // It is O(n^2) but they are small slices
-    let has_extra = actual
-        .iter()
-        .any(|h| !expected.iter().any(|e| e.as_ref() == h.as_ref()));
-
-    let has_missing = expected
-        .iter()
-        .any(|h| !actual.iter().any(|a| a.as_ref() == h.as_ref()));
-
-    match (has_missing, has_extra) {
-        (false, false) => Ok(()),
-        (false, true) => {
-            let extra: Vec<_> = actual
-                .iter()
-                .filter(|h| !expected.iter().any(|e| e.as_ref() == h.as_ref()))
-                .map(AsRef::as_ref)
-                .collect();
-            Err(eyre!("File has unsupported fields: {:?}", extra))
-        }
-
-        (true, false) => {
-            let missing: Vec<_> = expected
-                .iter()
-                .filter(|h| !actual.iter().any(|a| a.as_ref() == h.as_ref()))
-                .map(AsRef::as_ref)
-                .collect();
-            Err(eyre!("File has missing fields: {:?}", missing))
-        }
-
-        (true, true) => {
-            let extra: Vec<_> = actual
-                .iter()
-                .filter(|h| !expected.iter().any(|e| e.as_ref() == h.as_ref()))
-                .map(AsRef::as_ref)
-                .collect();
-            let missing: Vec<_> = expected
-                .iter()
-                .filter(|h| !actual.iter().any(|a| a.as_ref() == h.as_ref()))
-                .map(AsRef::as_ref)
-                .collect();
-
-            Err(eyre!(
-                "File doesn't have fields: {:?} but has unsupported fields: {:?}",
-                missing,
-                extra
-            ))
-        }
-    }
-}
-
 fn parse_and_insert<T: AsRef<Path> + Debug>(
     path: T,
     db_path: &str,
@@ -512,7 +477,7 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
     for (source, ext) in parse_sources(&path)? {
         let mut conn = Connection::open(db_path).expect("Should be a valid path to a sqlite db");
         match ext {
-            gulfi_common::Filetype::Csv => {
+            Filetype::Csv => {
                 let mut reader = ReaderBuilder::new()
                     .flexible(true)
                     .trim(csv::Trim::All)
@@ -559,7 +524,7 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
 
                 tx.commit()?;
             }
-            gulfi_common::Filetype::Json => {
+            Filetype::Json => {
                 let file = File::open(&source)?;
                 let reader = BufReader::new(file);
                 let data: Vec<serde_json::Value> = serde_json::from_reader(reader)?;
@@ -623,7 +588,6 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
 
     Ok(total_count)
 }
-
 fn validate_sql_identifier(name: &str) -> Result<()> {
     if name.is_empty() || name.len() > 64 {
         return Err(eyre!("Invalid identifier length"));
@@ -638,6 +602,7 @@ fn validate_sql_identifier(name: &str) -> Result<()> {
         return Err(eyre!("Identifier contains invalid characters"));
     }
 
+    // Prevent SQL keywords (basic list)
     if KEYWORDS.contains(&name.to_ascii_uppercase().as_str()) {
         return Err(eyre!("Identifier cannot be an SQL keyword"));
     }
@@ -645,14 +610,57 @@ fn validate_sql_identifier(name: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn create_indexes(conn: &Connection, doc: &Document) -> Result<()> {
-    let doc_name = doc.name.clone();
-    let queries = vec![format!(
-        "CREATE INDEX IF NOT EXISTS idx_{doc_name}_vec_input ON {doc_name}(vec_input) WHERE length(vec_input) > 0"
-    )];
+fn check_headers<T, U>(actual: &[T], expected: &[U]) -> eyre::Result<()>
+where
+    T: AsRef<str> + PartialEq + std::fmt::Debug,
+    U: AsRef<str> + PartialEq + std::fmt::Debug,
+{
+    // It is O(n^2) but they are small slices
+    let has_extra = actual
+        .iter()
+        .any(|h| !expected.iter().any(|e| e.as_ref() == h.as_ref()));
 
-    for query in queries {
-        conn.execute(&query, [])?;
+    let has_missing = expected
+        .iter()
+        .any(|h| !actual.iter().any(|a| a.as_ref() == h.as_ref()));
+
+    match (has_missing, has_extra) {
+        (false, false) => Ok(()),
+        (false, true) => {
+            let extra: Vec<_> = actual
+                .iter()
+                .filter(|h| !expected.iter().any(|e| e.as_ref() == h.as_ref()))
+                .map(AsRef::as_ref)
+                .collect();
+            Err(eyre!("File has unsupported fields: {:?}", extra))
+        }
+
+        (true, false) => {
+            let missing: Vec<_> = expected
+                .iter()
+                .filter(|h| !actual.iter().any(|a| a.as_ref() == h.as_ref()))
+                .map(AsRef::as_ref)
+                .collect();
+            Err(eyre!("File has missing fields: {:?}", missing))
+        }
+
+        (true, true) => {
+            let extra: Vec<_> = actual
+                .iter()
+                .filter(|h| !expected.iter().any(|e| e.as_ref() == h.as_ref()))
+                .map(AsRef::as_ref)
+                .collect();
+            let missing: Vec<_> = expected
+                .iter()
+                .filter(|h| !actual.iter().any(|a| a.as_ref() == h.as_ref()))
+                .map(AsRef::as_ref)
+                .collect();
+
+            Err(eyre!(
+                "File doesn't have fields: {:?} but has unsupported fields: {:?}",
+                missing,
+                extra
+            ))
+        }
     }
-    Ok(())
 }

@@ -11,4 +11,4 @@ expect-test = "1.5.1"
 
 [dev-dependencies]
 proptest = "1.6.0"
-pretty_assertions = "1.4.1"
+expect-test = "1.5.1"
