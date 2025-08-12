@@ -1,42 +1,41 @@
 use std::{
-    fs::{DirBuilder, File, OpenOptions},
+    fs::{DirBuilder, File, OpenOptions, read_to_string},
     io::{BufRead as _, BufReader, Read, Write},
     path::Path,
 };
 
-use config::ConfigError;
-
 use crate::CliError;
 
-pub fn create_config_template() -> Result<(), CliError> {
-    let config_content = r#"# Application Configuration
+const CONFIG_TEMPLATE: &'static str = r#"
+# Application Configuration
 app_settings:
-  name: "MyApp"
-  port: "3000"
-  host: "127.0.0.1"
-  meta_file_path: "./meta.json"
+    name: "MyApp"
+    port: "3000"
+    host: "127.0.0.1"
+    meta_file_path: "./meta.json"
 embedding_provider:
-  endpoint_url: "https://api.openai.com/v1/embeddings"
-  auth_token: "your-secret-token-here"
+    endpoint_url: "https://api.openai.com/v1/embeddings"
+    auth_token: "your-secret-token-here"
 db_settings:
-  pool_size: "10"
-  db_path: "./gulfi.db"
+    pool_size: "10"
+    db_path: "./gulfi.db"
+tracer_provider:
+    service_name: my-app
+    protocol: HttpBinary
+    api_key "secret-api-key"
+    endpoint: "endpoint"
 "#;
 
+pub fn create_config_template() -> Result<(), CliError> {
     let config_path = "configuration/config.yml";
-    let gitignore_path = ".gitignore";
     let config_entry = "/configuration";
 
-    let is_git_repo = Path::new(".git").exists();
-
     if Path::new(config_path).exists() {
-        let mut existing_file = File::open(config_path)?;
-        let mut contents = String::new();
-        existing_file.read_to_string(&mut contents)?;
+        let contents = read_to_string(config_path).expect("File should be present");
+
         if !contents.trim().is_empty() {
-            return Err(ConfigError::Message(
-                "Config file already exists and is not empty. Please remove or rename the existing config.yml file.".to_string()
-            ).into());
+            eprintln!("Config file already exists and it's not empty.");
+            return Ok(());
         }
     }
 
@@ -47,11 +46,11 @@ db_settings:
         .create(true)
         .truncate(true)
         .open(config_path)?;
-    file.write_all(config_content.as_bytes())?;
+    file.write_all(CONFIG_TEMPLATE.as_bytes())?;
 
-    if is_git_repo {
-        if Path::new(gitignore_path).exists() {
-            let gitignore_file = File::open(gitignore_path)?;
+    if Path::new(".git").exists() {
+        if Path::new(".gitignore").exists() {
+            let gitignore_file = File::open(".gitignore")?;
             let reader = BufReader::new(gitignore_file);
             let mut found_config_entry = false;
 
@@ -64,21 +63,21 @@ db_settings:
             }
 
             if found_config_entry {
-                println!("ℹ️  /configuration already exists in .gitignore");
+                println!("ℹ️  /configuration already set in .gitignore");
             } else {
-                let mut gitignore_file = OpenOptions::new().append(true).open(gitignore_path)?;
-
+                let mut gitignore_file = OpenOptions::new().append(true).open(".gitignore")?;
                 let mut contents = String::new();
-                File::open(gitignore_path)?.read_to_string(&mut contents)?;
+
+                File::open(".gitignore")?.read_to_string(&mut contents)?;
                 if !contents.ends_with('\n') && !contents.is_empty() {
                     writeln!(gitignore_file)?;
                 }
 
                 writeln!(gitignore_file, "{config_entry}")?;
-                println!("✅ Added /configuration to existing .gitignore");
+                println!("✅ Added /configuration .gitignore");
             }
         } else {
-            let mut gitignore_file = File::create(gitignore_path)?;
+            let mut gitignore_file = File::create(".gitignore")?;
             writeln!(gitignore_file, "{config_entry}")?;
             println!("✅ Created .gitignore with /configuration entry");
         }

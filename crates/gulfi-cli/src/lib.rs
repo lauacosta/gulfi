@@ -1,11 +1,11 @@
 pub mod clierror;
 pub mod commands;
 pub mod helper;
-
 pub use clierror::*;
 pub use gulfi_server::configuration::get_configuration;
 
 use clap::{Parser, Subcommand, ValueEnum, command, crate_version};
+use eyre::Result;
 use gulfi_server::configuration::Settings;
 use std::{net::IpAddr, path::PathBuf};
 
@@ -34,17 +34,10 @@ pub struct Cli {
     pub meta_file_path: Option<PathBuf>,
 
     #[command(subcommand)]
-    command: Option<Command>,
+    pub command: Command,
 }
 
 impl Cli {
-    #[must_use]
-    pub fn command(&self) -> Command {
-        self.command.clone().unwrap_or(Command::List {
-            format: Format::Pretty,
-        })
-    }
-
     pub fn merge_with_config(cli: Cli, config: &Settings) -> Cli {
         let db = cli.db.clone().or(Some(config.db_settings.db_path.clone()));
         let meta_file_path = cli
@@ -57,6 +50,10 @@ impl Cli {
             meta_file_path,
             ..cli
         }
+    }
+
+    pub fn check_config() -> Result<(), CliError> {
+        crate::commands::configuration::create_config_template()
     }
 }
 
@@ -114,9 +111,6 @@ pub enum Command {
     Delete { document: String },
     /// Creates a new user in the database.
     CreateUser { username: String, password: String },
-
-    /// Creates a config template
-    Init,
 }
 
 #[cfg(debug_assertions)]

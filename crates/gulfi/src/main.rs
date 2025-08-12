@@ -13,6 +13,8 @@ use gulfi_common::MILLISECONDS_MULTIPLIER;
 
 fn main() -> eyre::Result<()> {
     color_eyre::install()?;
+    Cli::check_config()?;
+
     let cli = Cli::parse();
 
     if let Err(e) = run_cli(cli) {
@@ -23,24 +25,11 @@ fn main() -> eyre::Result<()> {
 }
 
 fn run_cli(cli: Cli) -> Result<(), CliError> {
-    match cli.command() {
-        Command::Init => commands::configuration::create_config_template(),
-        Command::Serve { .. }
-        | Command::Sync { .. }
-        | Command::List { .. }
-        | Command::Add
-        | Command::Delete { .. }
-        | Command::CreateUser { .. } => run_with_config(cli),
-    }
-}
-
-fn run_with_config(cli: Cli) -> Result<(), CliError> {
     let cli = Cli::merge_with_config(cli, &get_configuration()?);
 
     let (_, documents) = load_meta_docs(&cli)?;
 
-    match cli.command() {
-        Command::Init => unreachable!("Init is handled elsewhere"),
+    match cli.command {
         Command::List { format } => {
             commands::list::handle(&documents, &format).or_exit();
         }
