@@ -8,8 +8,7 @@ use clap::Parser;
 use gulfi_cli::commands::server::ServerOverrides;
 use gulfi_cli::{Cli, CliError, Command, ExitOnError, helper::initialize_meta_file};
 use gulfi_cli::{commands, get_configuration};
-use gulfi_common::Document;
-use gulfi_common::MILLISECONDS_MULTIPLIER;
+use gulfi_ingest::Document;
 
 fn main() -> eyre::Result<()> {
     color_eyre::install()?;
@@ -62,7 +61,7 @@ fn run_cli(cli: Cli) -> Result<(), CliError> {
         } => {
             let db_path = cli.db.as_ref().expect("db file missing");
 
-            let base_delay = base_delay * MILLISECONDS_MULTIPLIER;
+            let base_delay = base_delay * 1000;
 
             let start = Instant::now();
             let doc = commands::setup_db::handle(db_path, &documents, &document, force)?;

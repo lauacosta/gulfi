@@ -6,7 +6,7 @@ use std::{
 
 use crate::CliError;
 
-const CONFIG_TEMPLATE: &'static str = r#"
+const CONFIG_TEMPLATE: &str = r#"
 # Application Configuration
 app_settings:
     name: "MyApp"
