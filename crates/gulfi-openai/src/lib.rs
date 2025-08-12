@@ -154,7 +154,8 @@ impl OpenAIClient {
     }
 
     #[instrument(name = "embed.request", skip(self, input, client) ,  fields(url = %self.endpoint_url, input_len = input.len()))]
-    pub async fn embed_single(&self, input: String, client: &Client) -> Result<Vec<f32>> {
+    pub async fn embed_single(&self, input: &str, client: &Client) -> Result<Vec<f32>> {
+        let input = input.to_string();
         let global_start = Instant::now();
 
         #[derive(Serialize, Deserialize)]

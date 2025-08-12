@@ -11,6 +11,8 @@ use std::io::Write;
 use termcolor::{ColorChoice, StandardStream};
 use tracing::error;
 
+use crate::startup::CacheError;
+
 pub type SearchResult = Result<Response, HttpError>;
 
 pub trait IntoHttp {
@@ -101,6 +103,7 @@ impl_from!(std::io::Error);
 impl_from!(serde_urlencoded::de::Error);
 impl_from!(serde_json::Error);
 impl_from!(rusqlite::Error);
+impl_from!(CacheError);
 impl_from!(gulfi_ingest::pool::PoolError);
 
 impl IntoResponse for HttpError {
