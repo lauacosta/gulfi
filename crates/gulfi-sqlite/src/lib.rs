@@ -534,7 +534,7 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
                 let pb = multi.add(ProgressBar::new_spinner());
                 pb.set_style(style.clone());
                 pb.enable_steady_tick(Duration::from_millis(100));
-                pb.set_message(format!("Reading {source:?}"));
+                pb.set_message(format!("Reading {}", source.display()));
 
                 let data = match ext {
                     DataSources::Csv => {
@@ -587,9 +587,9 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
                 let total_registros = data.len();
 
                 pb.set_message(format!(
-                    "Inserting {} entries from {:?}...",
+                    "Inserting {} entries from {}...",
                     total_registros,
-                    source.file_name().unwrap_or_default()
+                    source.file_name().unwrap_or_default().display()
                 ));
 
                 let (fields_str, placeholders_str) = {
@@ -661,10 +661,10 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
 
                 db.execute("COMMIT", [])?;
                 pb.finish_with_message(format!(
-                    "{} {} entries inserted from {:?}",
+                    "{} {} entries inserted from {}",
                     "✔".bright_green().bold(),
                     total_registros,
-                    source.file_name().unwrap_or_default()
+                    source.file_name().unwrap_or_default().display()
                 ));
                 Ok(())
             });

@@ -185,8 +185,7 @@ impl CliError {
                     }
                     rusqlite::Error::StatementChangedRows(expected) => {
                         eprintln!(
-                            "   • Expected to change {} row(s), but operation affected different number",
-                            expected
+                            "   • Expected to change {expected} row(s), but operation affected different number",
                         );
                         eprintln!("   • This might indicate data inconsistency");
                         eprintln!("   • Check your WHERE clauses and data");

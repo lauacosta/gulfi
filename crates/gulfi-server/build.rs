@@ -9,7 +9,7 @@ fn main() {
 
     let build_frontend = match std::env::var("BUILD_FRONTEND") {
         Ok(val) => {
-            println!("cargo:warning=BUILD_FRONTEND set to: {}", val);
+            println!("cargo:warning=BUILD_FRONTEND set to: {val}");
             val == "true"
         }
         Err(_) => {
@@ -25,7 +25,7 @@ fn main() {
     let output_dir = ui_dir.join("dist");
 
     if let Err(e) = std::fs::create_dir_all(&output_dir) {
-        panic!("Failed to create dist directory: {}", e);
+        panic!("Failed to create dist directory: {e}");
     }
 
     if in_ci && !build_frontend {
@@ -37,7 +37,7 @@ fn main() {
                 if let Err(e) = file.write_all(
                     b"<!DOCTYPE html><html><body><h1>Placeholder for CI</h1></body></html>",
                 ) {
-                    panic!("Failed to write to placeholder file: {}", e);
+                    panic!("Failed to write to placeholder file: {e}");
                 }
                 println!(
                     "cargo:warning=Placeholder created for CI at: {}",
@@ -45,7 +45,7 @@ fn main() {
                 );
             }
             Err(e) => {
-                panic!("Failed to create placeholder file: {}", e);
+                panic!("Failed to create placeholder file: {e}");
             }
         }
         return;
@@ -56,8 +56,7 @@ fn main() {
         Ok(output) => output,
         Err(e) => {
             panic!(
-                "Failed to check pnpm installation: {}. Make sure pnpm is installed and in PATH.",
-                e
+                "Failed to check pnpm installation: {e}. Make sure pnpm is installed and in PATH."
             );
         }
     };
@@ -87,7 +86,7 @@ fn main() {
     {
         Ok(status) => status,
         Err(e) => {
-            panic!("Failed to execute pnpm build command: {}", e);
+            panic!("Failed to execute pnpm build command: {e}");
         }
     };
 

@@ -2,6 +2,8 @@ use axum::{
     BoxError, Extension, Router, body::Body, error_handling::HandleErrorLayer, http::Request,
     routing::get, serve::Serve,
 };
+use opentelemetry::trace::TraceContextExt;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use color_eyre::owo_colors::OwoColorize;
 use eyre::Result;
@@ -11,7 +13,7 @@ use gulfi_sqlite::{pooling::AsyncConnectionPool, spawn_vec_connection};
 use http::{Method, StatusCode};
 use moka::future::Cache;
 use secrecy::ExposeSecret;
-use std::{fmt, io};
+use std::io;
 use std::{
     net::IpAddr,
     sync::Arc,
@@ -22,16 +24,17 @@ use tower::buffer::BufferLayer;
 use tower_http::{
     compression::CompressionLayer,
     cors::{Any, CorsLayer},
-    trace::{OnResponse, TraceLayer},
+    trace::TraceLayer,
 };
 
 use tokio::{net::TcpListener, signal};
 use tower::ServiceBuilder;
 use tower_request_id::{RequestId, RequestIdLayer};
-use tracing::{Instrument, Level, debug_span, error, info, info_span};
+use tracing::{Instrument, Level, Span, error, info, info_span};
 
 use crate::bg_tasks::{WriteJob, spawn_writer_task};
 use crate::configuration::Settings;
+use crate::formatter::ColoredOnResponse;
 use crate::routes::{
     add_favoritos, auth, delete_favoritos, delete_historial, documents, favoritos, health_check,
     historial_detailed, historial_summary, search, serve_ui,
@@ -236,19 +239,23 @@ pub fn build_server(listener: TcpListener, state: ServerState) -> Result<Serve<R
                                 .get::<RequestId>()
                                 .map_or_else(|| "unknown".into(), ToString::to_string);
 
-                            let user_agent = request
-                                .headers()
-                                .get("user-agent")
-                                .and_then(|h| h.to_str().ok())
-                                .unwrap_or("unkown");
-
-                            debug_span!(
+                            info_span!(
                                 "request",
                                 id = %request_id,
+                                trace_id = tracing::field::Empty,
+                                span_id = tracing::field::Empty,
                                 method = %request.method().blue().bold(),
                                 uri = %request.uri(),
-                                user_agent= %user_agent
                             )
+                        })
+                        .on_request(|_request: &Request<Body>, span: &Span| {
+                            let context = span.context();
+
+                            let span_id = context.span().span_context().span_id().to_string();
+                            let trace_id = context.span().span_context().trace_id().to_string();
+
+                            span.record("span_id", &span_id);
+                            span.record("trace_id", &trace_id);
                         })
                         .on_response(
                             ColoredOnResponse::new()
@@ -272,6 +279,7 @@ pub async fn run_server(
     match Application::build(&configuration, documents).await {
         Ok(app) => {
             let url = format!("http://{}:{}", app.host(), app.port());
+            dbg!("{:?}", &configuration);
             let name = configuration.app_settings.name;
             let version = env!("CARGO_PKG_VERSION");
 
@@ -304,137 +312,4 @@ pub async fn run_server(
         }
     }
     Ok(())
-}
-
-#[derive(Clone)]
-struct ColoredOnResponse {
-    level: Level,
-    include_headers: bool,
-}
-
-impl ColoredOnResponse {
-    fn new() -> Self {
-        Self {
-            level: Level::INFO,
-            include_headers: false,
-        }
-    }
-
-    fn level(mut self, level: Level) -> Self {
-        self.level = level;
-        self
-    }
-
-    fn include_headers(mut self, include: bool) -> Self {
-        self.include_headers = include;
-        self
-    }
-}
-
-struct Latency {
-    duration: Duration,
-}
-
-impl Latency {
-    fn new(duration: Duration) -> Self {
-        Self { duration }
-    }
-
-    fn best_unit_and_value(&self) -> (f64, &'static str) {
-        let nanos = self.duration.as_nanos();
-
-        if nanos >= 1_000_000_000 {
-            (self.duration.as_secs_f64(), "s")
-        } else if nanos >= 1_000_000 {
-            (self.duration.as_millis() as f64, "ms")
-        } else if nanos >= 1_000 {
-            (self.duration.as_micros() as f64, "μs")
-        } else {
-            (nanos as f64, "ns")
-        }
-    }
-}
-
-impl fmt::Display for Latency {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (value, unit) = self.best_unit_and_value();
-
-        write!(f, "{value:.3} {unit}")
-    }
-}
-
-macro_rules! event_dynamic_lvl {
-    ( $(target: $target:expr,)? $(parent: $parent:expr,)? $lvl:expr, $($tt:tt)* ) => {
-        match $lvl {
-            tracing::Level::ERROR => {
-                tracing::event!(
-                    $(target: $target,)?
-                    $(parent: $parent,)?
-                    tracing::Level::ERROR,
-                    $($tt)*
-                );
-            }
-            tracing::Level::WARN => {
-                tracing::event!(
-                    $(target: $target,)?
-                    $(parent: $parent,)?
-                    tracing::Level::WARN,
-                    $($tt)*
-                );
-            }
-            tracing::Level::INFO => {
-                tracing::event!(
-                    $(target: $target,)?
-                    $(parent: $parent,)?
-                    tracing::Level::INFO,
-                    $($tt)*
-                );
-            }
-            tracing::Level::DEBUG => {
-                tracing::event!(
-                    $(target: $target,)?
-                    $(parent: $parent,)?
-                    tracing::Level::DEBUG,
-                    $($tt)*
-                );
-            }
-            tracing::Level::TRACE => {
-                tracing::event!(
-                    $(target: $target,)?
-                    $(parent: $parent,)?
-                    tracing::Level::TRACE,
-                    $($tt)*
-                );
-            }
-        }
-    };
-}
-
-impl<B> OnResponse<B> for ColoredOnResponse {
-    fn on_response(self, response: &http::Response<B>, latency: Duration, _: &tracing::Span) {
-        let latency = Latency::new(latency);
-
-        let response_headers = self
-            .include_headers
-            .then(|| tracing::field::debug(response.headers()));
-
-        let status = response.status();
-        let colored_status = if status.is_success() {
-            format!("{}", status.bright_green().bold())
-        } else if status.is_client_error() {
-            format!("{}", status.bright_yellow().bold())
-        } else if status.is_server_error() {
-            format!("{}", status.bright_red().bold())
-        } else {
-            format!("{}", status.bright_cyan().bold())
-        };
-
-        event_dynamic_lvl!(
-            self.level,
-            latency = %format!("{}", latency.bright_blue().bold()),
-            status = %colored_status,
-            response_headers,
-            "request procesado"
-        );
-    }
 }

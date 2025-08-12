@@ -1,13 +1,8 @@
-use std::{fmt::Debug, path::Path};
-
 use gulfi_common::Document;
 
 use crate::{CliError, Format};
 
-pub fn handle<P>(documents: &[Document], meta_path: P, format: &Format) -> Result<(), CliError>
-where
-    P: AsRef<Path> + Debug,
-{
+pub fn handle(documents: &[Document], format: &Format) -> Result<(), CliError> {
     match format {
         Format::Pretty => {
             for doc in documents {
