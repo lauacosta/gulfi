@@ -9,7 +9,7 @@ use gulfi_query::{
     Constraint::{self, Exact, GreaterThan, LesserThan},
     Query,
 };
-use std::{collections::HashMap, fmt::Write, sync::Arc};
+use std::{collections::BTreeMap, fmt::Write, sync::Arc};
 
 use reqwest::Client;
 use rusqlite::{
@@ -134,7 +134,7 @@ impl SearchStrategy {
             SearchStrategy::Fts => {
                 span.record("source", "dynamic");
             }
-        };
+        }
 
         debug!(?query);
 
@@ -480,7 +480,7 @@ enum SearchStrategyError {
 }
 
 fn build_conditions(
-    constraints: Option<&HashMap<String, Vec<Constraint>>>,
+    constraints: Option<&BTreeMap<String, Vec<Constraint>>>,
 ) -> (Vec<String>, Vec<&dyn ToSql>) {
     let mut conditions = Vec::new();
     let mut binding_values: Vec<&dyn ToSql> = Vec::new();
@@ -516,7 +516,7 @@ fn build_conditions(
 fn sqlite_value_to_string(row: &Row<'_>, idx: usize) -> Result<String, rusqlite::Error> {
     let val = match row.get_ref(idx)? {
         ValueRef::Text(text) => String::from_utf8_lossy(text).into_owned(),
-        ValueRef::Real(real) => format!("{:.3}", -1. * real),
+        ValueRef::Real(real) => format!("{:.3}", -real),
         ValueRef::Integer(int) => int.to_string(),
         _ => "Tipo de dato desconocido".to_owned(),
     };

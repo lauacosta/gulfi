@@ -37,12 +37,12 @@ fn run_cli(cli: Cli) -> Result<(), CliError> {
 fn run_with_config(cli: Cli) -> Result<(), CliError> {
     let cli = Cli::merge_with_config(cli, &get_configuration()?);
 
-    let (meta_file, documents) = load_meta_docs(&cli)?;
+    let (_, documents) = load_meta_docs(&cli)?;
 
     match cli.command() {
         Command::Init => unreachable!("Init is handled elsewhere"),
         Command::List { format } => {
-            commands::list::handle(&documents, meta_file, &format).or_exit();
+            commands::list::handle(&documents, &format).or_exit();
         }
 
         Command::Add => commands::documents::add_document().or_exit(),

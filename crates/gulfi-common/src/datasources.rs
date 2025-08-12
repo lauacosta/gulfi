@@ -151,11 +151,11 @@ pub fn parse_sources<T: AsRef<Path> + Debug>(path: T) -> eyre::Result<Vec<(PathB
         let path = entry?.path();
         let utf_8_path = Utf8Path::from_path(&path).expect("Should be UTF-8");
 
-        if utf_8_path.is_file() {
-            if let Some(ext) = utf_8_path.extension() {
-                let file = DataSources::from_extension(ext)?;
-                datasources.push((path, file));
-            }
+        if utf_8_path.is_file()
+            && let Some(ext) = utf_8_path.extension()
+        {
+            let file = DataSources::from_extension(ext)?;
+            datasources.push((path, file));
         }
     }
 
