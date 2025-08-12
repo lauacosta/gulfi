@@ -2,7 +2,7 @@ use std::path::Path;
 
 use argon2::{Argon2, PasswordHasher};
 use color_eyre::owo_colors::OwoColorize;
-use gulfi_sqlite::spawn_vec_connection;
+use gulfi_ingest::spawn_vec_connection;
 use password_hash::{SaltString, rand_core::OsRng};
 use rusqlite::params;
 

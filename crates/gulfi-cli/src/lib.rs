@@ -34,15 +34,12 @@ pub struct Cli {
     pub meta_file_path: Option<PathBuf>,
 
     #[command(subcommand)]
-    command: Option<Command>,
+    pub command: Command,
 }
 
 impl Cli {
-    #[must_use]
-    pub fn command(&self) -> Command {
-        self.command.clone().unwrap_or(Command::List {
-            format: Format::Pretty,
-        })
+    pub fn check_config() -> Result<(), CliError> {
+        crate::commands::configuration::create_config_template()
     }
 
     pub fn merge_with_config(cli: Cli, config: &Settings) -> Cli {
@@ -114,9 +111,6 @@ pub enum Command {
     Delete { document: String },
     /// Creates a new user in the database.
     CreateUser { username: String, password: String },
-
-    /// Creates a config template
-    Init,
 }
 
 #[cfg(debug_assertions)]

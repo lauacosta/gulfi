@@ -2,14 +2,14 @@ use axum::{
     BoxError, Extension, Router, body::Body, error_handling::HandleErrorLayer, http::Request,
     routing::get, serve::Serve,
 };
+use gulfi_ingest::Document;
 use opentelemetry::trace::TraceContextExt;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use color_eyre::owo_colors::OwoColorize;
 use eyre::Result;
-use gulfi_common::Document;
+use gulfi_ingest::{pool::AsyncConnectionPool, spawn_vec_connection};
 use gulfi_openai::OpenAIClient;
-use gulfi_sqlite::{pooling::AsyncConnectionPool, spawn_vec_connection};
 use http::{Method, StatusCode};
 use moka::future::Cache;
 use secrecy::ExposeSecret;

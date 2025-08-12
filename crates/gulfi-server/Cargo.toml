@@ -44,7 +44,6 @@ password-hash.workspace = true
 secrecy.workspace = true
 
 gulfi-query = { path = "../gulfi-query/"}
-gulfi-sqlite= { path = "../gulfi-sqlite/"}
-gulfi-common = { path = "../gulfi-common/"}
+gulfi-ingest= { path = "../gulfi-ingest/"}
 gulfi-openai = { path = "../gulfi-openai/"}
 

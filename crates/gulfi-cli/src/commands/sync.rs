@@ -1,10 +1,9 @@
 use std::{path::Path, time::Instant};
 
 use color_eyre::owo_colors::OwoColorize;
-use gulfi_common::Document;
+use gulfi_ingest::{Document, create_indexes, spawn_vec_connection, sync_fts_data, sync_vec_data};
 use gulfi_openai::OpenAIClient;
 use gulfi_server::configuration::get_configuration;
-use gulfi_sqlite::{create_indexes, spawn_vec_connection, sync_fts_data, sync_vec_data};
 use rusqlite::Connection;
 use secrecy::ExposeSecret;
 
