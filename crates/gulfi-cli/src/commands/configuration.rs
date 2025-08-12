@@ -22,7 +22,7 @@ db_settings:
 tracer_provider:
     service_name: my-app
     protocol: HttpBinary
-    api_key "secret-api-key"
+    api_key: "secret-api-key"
     endpoint: "endpoint"
 "#;
 
