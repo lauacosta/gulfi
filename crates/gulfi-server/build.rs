@@ -14,7 +14,7 @@ fn main() {
         }
         Err(_) => {
             println!(
-                "cargo:warning=BUILD_FRONTEND not set, defaulting to: {}",
+                "cargo:warning=BUILD_FRONTEND not set, default to: {}",
                 !in_ci
             );
             !in_ci
@@ -90,16 +90,17 @@ fn main() {
         }
     };
 
-    if !status.success() {
-        panic!("Svelte build failed with exit code: {:?}", status.code());
-    }
+    assert!(
+        status.success(),
+        "Svelte build failed with exit code: {:?}",
+        status.code()
+    );
 
-    if !output_dir.exists() {
-        panic!(
-            "Build completed successfully, but output directory '{}' was not created!",
-            output_dir.display()
-        );
-    }
+    assert!(
+        output_dir.exists(),
+        "Build completed successfully, but output directory '{}' was not created!",
+        output_dir.display()
+    );
 
     println!(
         "cargo:warning=UI built successfully at: {}",

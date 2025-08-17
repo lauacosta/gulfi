@@ -1,11 +1,11 @@
 pub mod clierror;
 pub mod commands;
 pub mod helper;
-
 pub use clierror::*;
 pub use gulfi_server::configuration::get_configuration;
 
 use clap::{Parser, Subcommand, ValueEnum, command, crate_version};
+use eyre::Result;
 use gulfi_server::configuration::Settings;
 use std::{net::IpAddr, path::PathBuf};
 
@@ -38,10 +38,6 @@ pub struct Cli {
 }
 
 impl Cli {
-    pub fn check_config() -> Result<(), CliError> {
-        crate::commands::configuration::create_config_template()
-    }
-
     pub fn merge_with_config(cli: Cli, config: &Settings) -> Cli {
         let db = cli.db.clone().or(Some(config.db_settings.db_path.clone()));
         let meta_file_path = cli
@@ -54,6 +50,10 @@ impl Cli {
             meta_file_path,
             ..cli
         }
+    }
+
+    pub fn check_config() -> Result<(), CliError> {
+        crate::commands::configuration::create_config_template()
     }
 }
 
