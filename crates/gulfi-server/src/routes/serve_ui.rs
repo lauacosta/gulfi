@@ -26,7 +26,7 @@ pub async fn serve_ui(uri: Uri) -> impl IntoResponse {
         let mut headers = HeaderMap::new();
         headers.insert(
             "Content-Type",
-            HeaderValue::from_str(mime_type.as_ref()).unwrap(),
+            HeaderValue::from_str(mime_type.as_ref()).expect("It has invalid ASCII characters"),
         );
 
         if file_path.starts_with("assets/") {

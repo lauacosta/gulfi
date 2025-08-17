@@ -106,7 +106,7 @@ impl ServerState {
                 );
 
                 self.embeddings_cache
-                    .insert(query.to_string(), embedding.clone().into())
+                    .insert(query.to_string(), embedding.clone())
                     .await;
 
                 span.record("source", "miss");

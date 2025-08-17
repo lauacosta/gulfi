@@ -45,7 +45,9 @@ pub async fn sync_vec_data(
 
     let start = std::time::Instant::now();
     println!("Syncing VEC tables in {doc_name}!");
-    std::io::stdout().flush().unwrap();
+    std::io::stdout()
+        .flush()
+        .expect("Should be able to flush the pipe");
 
     let mut statement = conn.prepare_cached(&format!("select id, vec_input from {doc_name}"))?;
 
@@ -79,27 +81,26 @@ pub async fn sync_vec_data(
             let jobs_done = jobs_done.clone();
             tokio::spawn(async move {
                 while let Some(msg) = rx.recv().await {
-                    match msg {
-                        EmbeddingMessage::Complete { .. } => {
-                            let jobs_done = 1 + jobs_done.fetch_add(1, Ordering::Relaxed);
-                            print!("\r    Progress: ");
-                            let bar_current = if chunks == 0 {
-                                0
-                            } else {
-                                bar_max * jobs_done / chunks
-                            };
+                    if let EmbeddingMessage::Complete { .. } = msg {
+                        let jobs_done = 1 + jobs_done.fetch_add(1, Ordering::Relaxed);
+                        print!("\r    Progress: ");
+                        let bar_current = if chunks == 0 {
+                            0
+                        } else {
+                            bar_max * jobs_done / chunks
+                        };
 
-                            for _ in 0..bar_current {
-                                print!("#");
-                            }
-                            for _ in bar_current..bar_max {
-                                print!(".");
-                            }
-
-                            print!(" ({jobs_done}/{chunks})");
-                            std::io::stdout().flush().unwrap();
+                        for _ in 0..bar_current {
+                            print!("#");
                         }
-                        _ => (),
+                        for _ in bar_current..bar_max {
+                            print!(".");
+                        }
+
+                        print!(" ({jobs_done}/{chunks})");
+                        std::io::stdout()
+                            .flush()
+                            .expect("Should be able to flush the pipe");
                     }
                 }
             });
@@ -176,7 +177,9 @@ pub async fn sync_vec_data(
         "VEC tables".bright_purple(),
         start.elapsed().as_millis()
     );
-    std::io::stdout().flush().unwrap();
+    std::io::stdout()
+        .flush()
+        .expect("Should be able to flush the pipe");
 
     Ok((total, media))
 }
@@ -226,7 +229,10 @@ pub fn sync_fts_data(conn: &Connection, doc: &Document) -> usize {
                     "\r{} Syncing FTS tables in {}...",
                     tick_chars[tick_index], doc_name
                 );
-                std::io::stdout().flush().unwrap();
+                std::io::stdout()
+                    .flush()
+                    .expect("Should be able to flush the pipe");
+
                 tick_index = (tick_index + 1) % tick_chars.len();
                 std::thread::sleep(Duration::from_millis(100));
             }
@@ -257,13 +263,15 @@ pub fn sync_fts_data(conn: &Connection, doc: &Document) -> usize {
     }
 
     keep_spinning.store(false, Ordering::Relaxed);
-    spinner_handle.join().unwrap();
+    spinner_handle.join().expect("Thread shouldn't be dropped");
     println!(
         "\r{} updated! ({} ms)",
         "FTS tables".bright_cyan(),
         start.elapsed().as_millis()
     );
-    std::io::stdout().flush().unwrap();
+    std::io::stdout()
+        .flush()
+        .expect("Should be able to flush the pipe");
 
     inserted
 }
@@ -544,7 +552,7 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
                     .trim(csv::Trim::All)
                     .has_headers(true)
                     .quote(b'"')
-                    .from_path(&source)?;
+                    .from_path(source)?;
 
                 let mut headers = reader.headers()?.iter().collect::<Vec<_>>();
                 headers.sort_unstable();
@@ -582,7 +590,7 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
                 tx.commit()?;
             }
             Filetype::Json => {
-                let file = File::open(&source)?;
+                let file = File::open(source)?;
                 let reader = BufReader::new(file);
                 let data: Vec<serde_json::Value> = serde_json::from_reader(reader)?;
 
