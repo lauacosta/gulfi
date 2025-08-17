@@ -1,4 +1,6 @@
 use std::fmt::Write as _;
+use std::io::Write;
+use std::sync::atomic::AtomicBool;
 use std::{
     fmt::Debug,
     fs::File,
@@ -16,7 +18,6 @@ use csv::ReaderBuilder;
 use eyre::{Result, eyre};
 use futures::StreamExt;
 use gulfi_openai::{OpenAIClient, embedding_message::EmbeddingMessage};
-use indicatif::{ProgressBar, ProgressStyle};
 use rusqlite::{
     Connection,
     ffi::{sqlite3, sqlite3_api_routines, sqlite3_auto_extension},
@@ -29,7 +30,6 @@ use zerocopy::IntoBytes;
 use crate::Filetype;
 use crate::reader::{Document, parse_sources};
 
-const BATCH_SIZE: usize = 1000;
 pub const DIMENSION: usize = 1536;
 const KEYWORDS: &[&str] = &["SELECT", "DROP", "DELETE", "UPDATE", "INSERT", "TABLE"];
 
@@ -43,7 +43,9 @@ pub async fn sync_vec_data(
     let doc_name = doc.name.clone();
     validate_sql_identifier(&doc_name).expect("Should be a safe identifier");
 
-    eprintln!("Syncing VEC tables in {doc_name}");
+    let start = std::time::Instant::now();
+    println!("Syncing VEC tables in {doc_name}!");
+    std::io::stdout().flush().unwrap();
 
     let mut statement = conn.prepare_cached(&format!("select id, vec_input from {doc_name}"))?;
 
@@ -58,49 +60,58 @@ pub async fn sync_vec_data(
         Err(err) => return Err(eyre!(err)),
     };
 
-    eprintln!(
-        "{} {} entries to process",
-        "ⓘ".bright_green(),
-        v_inputs.len()
-    );
-
-    let chunks = v_inputs.chunks(chunk_size).count();
-
     let http_client = reqwest::ClientBuilder::new()
         .deflate(true)
         .gzip(true)
         .build()?;
 
-    println!("Generating embeddings");
+    let bar_max = 30;
+    let chunks = v_inputs.chunks(chunk_size).count();
+    let jobs_done = Arc::new(AtomicUsize::new(0));
 
     let futures_iterator = v_inputs
         .chunks(chunk_size)
         .enumerate()
-        .map(|(proc_id, chunk)| {
+        .map(|(chunk_id, chunk)| {
             let (indices, v_inputs) = chunk.iter().cloned().unzip();
             let (tx, mut rx) = tokio::sync::mpsc::channel::<EmbeddingMessage>(10);
 
-            println!("Processing chunk {} - preparing...", proc_id + 1);
-
+            let jobs_done = jobs_done.clone();
             tokio::spawn(async move {
                 while let Some(msg) = rx.recv().await {
                     match msg {
                         EmbeddingMessage::Complete { .. } => {
-                            eprintln!(
-                                "{} Chunk {} - {} ",
-                                "✔".bright_green().bold(),
-                                proc_id + 1,
-                                msg
-                            );
+                            let jobs_done = 1 + jobs_done.fetch_add(1, Ordering::Relaxed);
+                            print!("\r    Progress: ");
+                            let bar_current = if chunks == 0 {
+                                0
+                            } else {
+                                bar_max * jobs_done / chunks
+                            };
+
+                            for _ in 0..bar_current {
+                                print!("#");
+                            }
+                            for _ in bar_current..bar_max {
+                                print!(".");
+                            }
+
+                            print!(" ({jobs_done}/{chunks})");
+                            std::io::stdout().flush().unwrap();
                         }
-                        _ => {
-                            eprintln!("Chunk {} - {}", proc_id + 1, msg);
-                        }
+                        _ => (),
                     }
                 }
             });
 
-            client.embed_vec_with_progress(indices, v_inputs, &http_client, proc_id, base_delay, tx)
+            client.embed_vec_with_progress(
+                indices,
+                v_inputs,
+                &http_client,
+                chunk_id,
+                base_delay,
+                tx,
+            )
         });
 
     let futures_stream = futures::stream::iter(futures_iterator);
@@ -147,12 +158,25 @@ pub async fn sync_vec_data(
         }
     }).await;
 
-    eprintln!("{} Embeddings completados", "✔".bright_green().bold(),);
-
     let total = total_inserted.load(Ordering::Relaxed);
     let total_acc_chunks = acc_time_per_chunk.load(Ordering::Relaxed);
 
     let media = total_acc_chunks as f32 / chunks as f32;
+
+    print!("\r    Progress: ");
+    for _ in 0..bar_max {
+        print!("#");
+    }
+
+    print!(" ({chunks}/{chunks})");
+    println!();
+
+    println!(
+        "{} updated! ({} ms)",
+        "VEC tables".bright_purple(),
+        start.elapsed().as_millis()
+    );
+    std::io::stdout().flush().unwrap();
 
     Ok((total, media))
 }
@@ -171,16 +195,8 @@ pub fn create_indexes(conn: &Connection, doc: &Document) -> Result<()> {
 
 pub fn sync_fts_data(conn: &Connection, doc: &Document) -> usize {
     let doc_name = doc.name.clone();
+    let start = std::time::Instant::now();
     validate_sql_identifier(&doc_name).expect("Should be a safe identifier");
-
-    let pb = ProgressBar::new_spinner();
-    let style = ProgressStyle::with_template("{spinner:.green}{wide_msg}")
-        .expect("Should be a valid template")
-        .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ ");
-
-    pb.set_style(style);
-    pb.enable_steady_tick(Duration::from_millis(100));
-    pb.set_message(format!(" Syncing FTS tables in {doc_name}..."));
 
     for field in &doc.fields {
         validate_sql_identifier(&field.name).expect("Should be a safe identifier");
@@ -195,6 +211,26 @@ pub fn sync_fts_data(conn: &Connection, doc: &Document) -> usize {
             .collect();
 
         fields.join(", ")
+    };
+
+    let keep_spinning = Arc::new(AtomicBool::new(true));
+    let spinner_handle = {
+        let keep_spinning = Arc::clone(&keep_spinning);
+        let doc_name = doc_name.clone();
+        std::thread::spawn(move || {
+            let tick_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+            let mut tick_index = 0;
+
+            while keep_spinning.load(Ordering::Relaxed) {
+                print!(
+                    "\r{} Syncing FTS tables in {}...",
+                    tick_chars[tick_index], doc_name
+                );
+                std::io::stdout().flush().unwrap();
+                tick_index = (tick_index + 1) % tick_chars.len();
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        })
     };
 
     let inserted = conn
@@ -220,7 +256,14 @@ pub fn sync_fts_data(conn: &Connection, doc: &Document) -> usize {
             .expect("Should be a valid SQL sentence");
     }
 
-    pb.finish();
+    keep_spinning.store(false, Ordering::Relaxed);
+    spinner_handle.join().unwrap();
+    println!(
+        "\r{} updated! ({} ms)",
+        "FTS tables".bright_cyan(),
+        start.elapsed().as_millis()
+    );
+    std::io::stdout().flush().unwrap();
 
     inserted
 }
@@ -406,10 +449,9 @@ pub fn insert_base_data(conn: &rusqlite::Connection, doc: &Document) -> Result<(
 
     let inserted = parse_and_insert(format!("./datasources/{doc_name}"), db_path, doc)?;
     let elapsed = start.elapsed().as_millis();
-
     eprintln!(
-        "ℹ️{inserted} entries inserted in {doc_name}_raw! ({elapsed} ms). {}",
-        if inserted == 0 { "No new entries." } else { "" }
+        "Total records processed: {inserted} into {} ({elapsed} ms)",
+        format!("{doc_name}_raw").bright_yellow()
     );
 
     let start = std::time::Instant::now();
@@ -436,12 +478,10 @@ pub fn insert_base_data(conn: &rusqlite::Connection, doc: &Document) -> Result<(
     let inserted = statement
         .execute(rusqlite::params![])
         .map_err(|err| eyre!(err))?;
-
     let elapsed = start.elapsed().as_millis();
-
     eprintln!(
-        "ℹ️{inserted} entries inserted in {doc_name}! ({elapsed} ms). {}",
-        if inserted == 0 { "No new entries." } else { "" }
+        "Total records processed: {inserted} into {} ({elapsed} ms)",
+        doc_name.bright_purple()
     );
 
     conn.execute("COMMIT", [])
@@ -455,7 +495,6 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
     db_path: &str,
     doc: &Document,
 ) -> Result<usize> {
-    // let inserted = Arc::new(AtomicUsize::new(0));
     let doc_name = doc.name.clone();
     let mut total_count = 0;
 
@@ -474,8 +513,30 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
     };
     let sql = format!("INSERT INTO {doc_name}_raw ({fields}) VALUES ({placeholders})");
 
-    for (source, ext) in parse_sources(&path)? {
+    let workload = parse_sources(&path)?;
+    let bar_max = 30;
+    let max_jobs = workload.len();
+
+    for (job_counter, (source, ext)) in workload.iter().enumerate() {
         let mut conn = Connection::open(db_path).expect("Should be a valid path to a sqlite db");
+
+        print!("\r    Progress: ");
+        let bar_current = if max_jobs == 0 {
+            0
+        } else {
+            bar_max * job_counter / max_jobs
+        };
+
+        for _ in 0..bar_current {
+            print!("#");
+        }
+        for _ in bar_current..bar_max {
+            print!(".");
+        }
+
+        print!(" ({job_counter}/{max_jobs})");
+        std::io::stdout().flush()?;
+
         match ext {
             Filetype::Csv => {
                 let mut reader = ReaderBuilder::new()
@@ -514,11 +575,7 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
                         statement.execute(params_from_iter(params.iter()))?;
 
                         count += 1;
-                        if count % BATCH_SIZE == 0 {
-                            println!("Processed  {count} records...");
-                        }
                     }
-                    println!("Total records processed: {count}");
                     total_count += count;
                 }
 
@@ -574,11 +631,7 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
                         statement.execute(params_from_iter(params.iter()))?;
 
                         count += 1;
-                        if count % BATCH_SIZE == 0 {
-                            println!("Processed  {count} records...");
-                        }
                     }
-                    println!("Total records processed: {count}");
                     total_count += count;
                 }
                 tx.commit()?;
@@ -586,8 +639,17 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
         }
     }
 
+    print!("\r    Progress: ");
+    for _ in 0..bar_max {
+        print!("#");
+    }
+
+    print!(" ({max_jobs}/{max_jobs})");
+    println!();
+
     Ok(total_count)
 }
+
 fn validate_sql_identifier(name: &str) -> Result<()> {
     if name.is_empty() || name.len() > 64 {
         return Err(eyre!("Invalid identifier length"));
