@@ -4,6 +4,7 @@ use axum::{
 };
 use gulfi_ingest::Document;
 use opentelemetry::trace::TraceContextExt;
+use reqwest::Client;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use color_eyre::owo_colors::OwoColorize;
@@ -39,6 +40,7 @@ use crate::routes::{
     add_favoritos, auth, delete_favoritos, delete_historial, documents, favoritos, health_check,
     historial_detailed, historial_summary, search, serve_ui,
 };
+use crate::search::SearchStrategy;
 
 #[derive(Debug, Clone)]
 pub struct ServerState {
@@ -47,6 +49,75 @@ pub struct ServerState {
     pub embeddings_provider: OpenAIClient,
     pub pool: AsyncConnectionPool,
     pub embeddings_cache: Cache<String, Arc<Vec<f32>>>,
+}
+
+#[derive(Debug)]
+pub enum CacheResult<T> {
+    Hit(T),
+    Miss(T),
+    Skip,
+}
+
+impl<T> CacheResult<T> {
+    pub fn into_inner(self) -> Option<T> {
+        match self {
+            CacheResult::Hit(value) | CacheResult::Miss(value) => Some(value),
+            CacheResult::Skip => None,
+        }
+    }
+
+    pub fn is_hit(&self) -> bool {
+        matches!(self, CacheResult::Hit(_))
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum CacheError {
+    #[error("Embedding generation failed: {0}")]
+    EmbeddingError(String),
+    #[error("Cache operation failed: {0}")]
+    CacheError(String),
+}
+
+impl ServerState {
+    pub async fn get_embeddings(
+        &self,
+        query: &str,
+        client: &Client,
+        strategy: SearchStrategy,
+        span: &Span,
+    ) -> Result<CacheResult<Arc<Vec<f32>>>, CacheError> {
+        match strategy {
+            SearchStrategy::Semantic | SearchStrategy::ReciprocalRankFusion => {
+                if let Some(cached_embedding) = self.embeddings_cache.get(query).await {
+                    span.record("source", "hit");
+                    return Ok(CacheResult::Hit(cached_embedding));
+                }
+
+                let embedding_span = info_span!("embedding.request");
+                let _guard = embedding_span.enter();
+
+                let embedding = Arc::new(
+                    self.embeddings_provider
+                        // TODO: Add support for retries
+                        .embed_single(query, client)
+                        .await
+                        .map_err(|e| CacheError::EmbeddingError(e.to_string()))?,
+                );
+
+                self.embeddings_cache
+                    .insert(query.to_string(), embedding.clone())
+                    .await;
+
+                span.record("source", "miss");
+                Ok(CacheResult::Miss(embedding))
+            }
+            SearchStrategy::Fts => {
+                span.record("source", "dynamic");
+                Ok(CacheResult::Skip)
+            }
+        }
+    }
 }
 
 #[derive(Debug)]

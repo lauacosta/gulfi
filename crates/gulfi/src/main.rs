@@ -1,5 +1,3 @@
-#![allow(clippy::too_many_lines)]
-
 use std::io::{Error, ErrorKind};
 use std::path::PathBuf;
 use std::{fs::File, time::Instant};
