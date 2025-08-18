@@ -46,4 +46,5 @@ secrecy.workspace = true
 gulfi-query = { path = "../gulfi-query/"}
 gulfi-ingest= { path = "../gulfi-ingest/"}
 gulfi-openai = { path = "../gulfi-openai/"}
+tokio-tungstenite = "0.27.0"
 
