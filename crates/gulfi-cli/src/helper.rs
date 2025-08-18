@@ -42,7 +42,7 @@ pub fn initialize_meta_file() -> Result<()> {
 pub fn run_new() -> Result<()> {
     let path = Path::new("meta.json");
     if !path.exists() {
-        println!(
+        eprintln!(
             "\n{:<WIDTH$}{stage}  No se ha encontrado un archivo `meta.json`. Creando primer documento...",
             "",
             stage = " Gulfi ".bright_white().bold().on_green(),
@@ -157,7 +157,7 @@ fn prompt_options(msg: &str, opts: &[char]) -> char {
 }
 
 fn prompt_for_field(fields: &mut Vec<Field>) {
-    println!();
+    eprintln!();
     let name = prompt_input("Nombre del campo:", validate_field_name);
     let vec_input = prompt_confirm("¿Quieres que sea usado en la busqueda?");
     let unique = prompt_confirm("¿Este campo debería ser único?");

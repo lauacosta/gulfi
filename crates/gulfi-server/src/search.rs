@@ -9,7 +9,7 @@ use gulfi_query::{
     Constraint::{self, Exact, GreaterThan, LesserThan},
     Query,
 };
-use std::{collections::BTreeMap, fmt::Write, sync::Arc};
+use std::{collections::BTreeMap, fmt::Write};
 
 use reqwest::Client;
 use rusqlite::{
@@ -19,7 +19,7 @@ use rusqlite::{
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use thiserror::Error;
-use tracing::{Span, debug, info, info_span, instrument};
+use tracing::{debug, info, info_span, instrument};
 use zerocopy::IntoBytes;
 
 use crate::startup::ServerState;
@@ -53,8 +53,6 @@ impl SearchStrategy {
         client: &Client,
         params: SearchParams,
     ) -> SearchResult {
-        let span = Span::current();
-
         let document = state
             .documents
             .iter()
@@ -70,7 +68,7 @@ impl SearchStrategy {
 
         let string = format!("query: {}", params.search_str);
         let query = Query::parse(&string).map_err(HttpError::from)?;
-        dbg!("{:#?}", &query);
+        debug!(?query);
 
         let (valid_fields, invalid_fields) = {
             let mut invalid = Vec::new();
@@ -100,44 +98,16 @@ impl SearchStrategy {
             ));
         }
 
-        let mut query_emb: Option<Arc<Vec<f32>>> = None;
-        match self {
-            SearchStrategy::Semantic | SearchStrategy::ReciprocalRankFusion => {
-                if let Some(cached_embedding) = state.embeddings_cache.get(&query.query).await {
-                    query_emb = Some(cached_embedding);
-                    span.record("source", "hit");
-                } else {
-                    let embedding_span = info_span!("embedding.request");
-                    let _guard = embedding_span.enter();
-                    let embedding = Arc::new(
-                        state
-                            .embeddings_provider
-                            .embed_single(query.query.clone(), client)
-                            .await
-                            .map_err(|err| {
-                                tracing::error!("{err}");
-                                HttpError::Internal {
-                                    err: "Failed to create query embedding".to_string(),
-                                }
-                            })?,
-                    );
+        let span = info_span!("query.embedding");
+        let _guard = span.enter();
 
-                    state
-                        .embeddings_cache
-                        .insert(query.query.clone(), embedding.clone())
-                        .await;
+        let query_emb = state
+            .get_embeddings(&query.query, client, self, &span)
+            .await?
+            .into_inner();
 
-                    query_emb = Some(embedding);
-                    span.record("source", "miss");
-                }
-            }
-            SearchStrategy::Fts => {
-                span.record("source", "dynamic");
-            }
-        }
-
-        debug!(?query);
-
+        // TODO: Rework this completely, it is memory inefficient and
+        // it is badly written.
         let (column_names, table, total_query_count) = {
             let pool = state.pool.clone();
             let conn_handle = {
@@ -153,7 +123,6 @@ impl SearchStrategy {
             let _guard = query_execution_span.enter();
 
             match self {
-                // I dont use `task::spawn_blocking` here because it proved to just add overhead.
                 SearchStrategy::Fts => {
                     let search = {
                         let start = "select rank as score,";
