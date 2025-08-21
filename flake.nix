@@ -29,6 +29,8 @@
             hyperfine
             cargo-udeps
             nodejs
+            biome
+            svelte-language-server
             pkg-config
             openssl.dev
             pnpm

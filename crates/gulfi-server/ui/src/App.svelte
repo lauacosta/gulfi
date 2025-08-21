@@ -1,12 +1,12 @@
 <script lang="ts">
 import { RouterView } from "@dvcol/svelte-simple-router/components";
 import type { Route, RouterOptions } from "@dvcol/svelte-simple-router/models";
-import Home from "./routes/Home.svelte";
-import Fallback from "./routes/Fallback.svelte";
 import Layout from "./lib/Layout.svelte";
 import Sidebar from "./lib/Sidebar.svelte";
+import Fallback from "./routes/Fallback.svelte";
 import Favorites from "./routes/Favorites.svelte";
 import History from "./routes/History.svelte";
+import Home from "./routes/Home.svelte";
 
 const RouteName = {
 	Home: "home",

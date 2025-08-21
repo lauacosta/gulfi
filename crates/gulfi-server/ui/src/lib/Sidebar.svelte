@@ -1,17 +1,17 @@
 <script lang="ts">
-    import { writable } from "svelte/store";
+import { writable } from "svelte/store";
 
-    let isExpanded = $state(false);
+let isExpanded = $state(false);
 
-    let currentPath = writable(window.location.pathname);
+const currentPath = writable(window.location.pathname);
 
-    window.addEventListener("popstate", () => {
-        currentPath.set(window.location.pathname);
-    });
+window.addEventListener("popstate", () => {
+	currentPath.set(window.location.pathname);
+});
 
-    function isActive(path: string) {
-        return $currentPath === path;
-    }
+function isActive(path: string) {
+	return $currentPath === path;
+}
 </script>
 
 <aside class={isExpanded ? "expanded" : "collapsed"}>

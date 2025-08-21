@@ -1,28 +1,32 @@
-#![allow(clippy::too_many_lines)]
 use crate::{
     bg_tasks::WriteJob,
     into_http::{HttpError, IntoHttp, SearchResult},
 };
+
+use axum::{response::{sse::{Event, KeepAlive}, Sse}};
 use axum::Json;
 use eyre::Report;
+use futures::{stream, Stream, StreamExt as _};
+use gulfi_ingest::Document;
 use gulfi_query::{
     Constraint::{self, Exact, GreaterThan, LesserThan},
     Query,
 };
-use std::{collections::BTreeMap, fmt::Write};
+use std::{collections::BTreeMap, convert::Infallible, fmt::Write, sync::Arc};
 
 use reqwest::Client;
 use rusqlite::{
-    Row, ToSql,
+    ToSql,
     types::{FromSql, FromSqlError, ToSqlOutput, ValueRef},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use thiserror::Error;
-use tracing::{debug, info, info_span, instrument};
+use tracing::{debug, error, info, info_span, instrument};
 use zerocopy::IntoBytes;
 
 use crate::startup::ServerState;
+
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Default)]
 pub enum SearchStrategy {
@@ -42,10 +46,349 @@ pub struct SearchParams {
     pub peso_semantic: f32,
     #[serde(rename = "k")]
     pub k_neighbors: u64,
+    pub batch_size: Option<usize>,
 }
 
 type QueryResult = Result<(Vec<String>, Vec<Vec<String>>, usize), HttpError>;
 impl SearchStrategy {
+    #[instrument(name = "searching", skip(self, state, client, params), fields(source = tracing::field::Empty))]
+    pub async fn search_stream(
+        self,
+        state: ServerState,
+        client: Client,
+        params: SearchParams,
+    ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+        let state = state.clone();
+        let client = client.clone();
+
+        let s = async_stream::stream! {
+            let search_result = match Self::prepare_search(&state, &params).await {
+                Ok(res) => res,
+                Err(e) => {
+                    let error_msg = StreamMessage::Error { msg: e.to_string() };
+                    yield Ok(Event::default().data(serde_json::to_string(&error_msg).unwrap()));
+                    return;
+                }
+            };
+
+            let columns: Vec<String> = search_result
+                .document
+                .fields
+                .iter()
+                .map(|f| f.name.clone())
+                .collect();
+            let metadata = StreamMessage::Metadata { columns };
+            yield Ok(Event::default().data(serde_json::to_string(&metadata).unwrap()));
+
+
+        let mut row_count = 0;
+        match SearchStrategy::stream_results(
+            search_result,
+            client,
+            state,
+            params.batch_size.unwrap_or(10)
+        )
+        .await
+        {
+            Ok(mut result_stream) => {
+                 while let Some(result) = result_stream.recv().await {
+                    match result {
+                        Ok(msg) => {
+                            match &msg {
+                                StreamMessage::Rows { data } => row_count += data.len(),
+                                _ => {}
+                            }
+                            yield Ok(Event::default().data(serde_json::to_string(&msg).unwrap()));
+                        }
+                        Err(err) => {
+                            let error_msg = StreamMessage::Error { msg: err.to_string() };
+                            yield Ok(Event::default().data(serde_json::to_string(&error_msg).unwrap()));
+                            break;
+                        }
+                    }
+                }
+            }
+            Err(err) => {
+                let error_msg = StreamMessage::Error { msg: err.to_string() };
+                yield Ok(Event::default().data(serde_json::to_string(&error_msg).unwrap()));
+                
+            }
+        }
+            let complete = StreamMessage::Complete { total_sent: row_count };
+            yield Ok(Event::default().data(serde_json::to_string(&complete).unwrap()));
+        };
+
+        Sse::new(s)
+    }
+
+    // async fn handle_search_stream(
+    //     self,
+    //     socket: WebSocket,
+    //     state: ServerState,
+    //     client: Client,
+    //     params: SearchParams,
+    // ) -> eyre::Result<()> {
+    //     let mut socket = socket;
+
+    //     let search_result = match Self::prepare_search(&state, &params).await {
+    //         Ok(result) => result,
+    //         Err(e) => {
+    //             let error_msg = StreamMessage::Error { msg: e.to_string() };
+
+    //             let _ = socket
+    //                 .send(Message::Text(serde_json::to_string(&error_msg)?))
+    //                 .await;
+
+    //             return Ok(());
+    //         }
+    //     };
+
+    //     let columns: Vec<String> = search_result
+    //         .document
+    //         .fields
+    //         .iter()
+    //         .map(|f| f.name.clone())
+    //         .collect();
+
+    //     let metadata = StreamMessage::Metadata { columns };
+
+    //     socket
+    //         .send(Message::Text(serde_json::to_string(&metadata)?))
+    //         .await?;
+
+    //     let mut row_count = 0;
+    //     match SearchStrategy::stream_results(
+    //         search_result,
+    //         &client,
+    //         &state,
+    //         &mut socket,
+    //         &mut row_count,
+    //         params.batch_size.unwrap_or(10),
+    //     )
+    //     .await
+    //     {
+    //         Ok(()) => {
+    //             let complete = StreamMessage::Complete {
+    //                 total_sent: row_count,
+    //             };
+    //             let _ = socket
+    //                 .send(Message::Text(serde_json::to_string(&complete)?))
+    //                 .await;
+    //         }
+    //         Err(e) => {
+    //             let error_msg = StreamMessage::Error { msg: e.to_string() };
+    //             let _ = socket
+    //                 .send(Message::Text(serde_json::to_string(&error_msg)?))
+    //                 .await;
+    //         }
+    //     }
+
+    //     Ok(())
+    // }
+
+    async fn prepare_search(
+        state: &ServerState,
+        params: &SearchParams,
+    ) -> Result<StreamSearch, HttpError> {
+        let document = state
+            .documents
+            .iter()
+            .find(|x| x.name.eq_ignore_ascii_case(&params.document))
+            .ok_or_else(|| {
+                HttpError::missing_document(format!("Document {} not found", params.document))
+            })?;
+
+        let query =
+            Query::parse(&format!("query: {}", params.search_str)).map_err(HttpError::from)?;
+
+        validate_query_constraints(document, &query)?;
+
+        Ok(StreamSearch {
+            document: document.clone(),
+            query,
+            strategy: params.strategy,
+            k_neighbors: params.k_neighbors,
+            peso_fts: params.peso_fts,
+            peso_semantic: params.peso_semantic,
+        })
+    }
+
+    async fn stream_results(
+        search: StreamSearch,
+        client: Client,
+        state: ServerState,
+        batch_size: usize,
+    ) -> eyre::Result<tokio::sync::mpsc::Receiver<Result<StreamMessage, eyre::Error>>> {
+        let pool = state.pool.clone();
+        let conn_handle = {
+            let span = info_span!("conn.acquire");
+            let _guard = span.enter();
+            pool.acquire().await?
+        };
+
+        let query_emb = {
+            let span = info_span!("query.embedding");
+            let _guard = span.enter();
+
+            state
+                .get_embeddings(&search.query.query, &client, search.strategy, &span)
+                .await?
+                .into_inner()
+        };
+
+        let (result_tx, result_rx) = tokio::sync::mpsc::channel::<Result<StreamMessage, eyre::Error>>(batch_size * 2);
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<Result<Vec<String>, rusqlite::Error>>(batch_size * 2);
+
+        // TODO: Refactor binding_refs into a simpler type as binding_values is at the moment just a Vec over boxed types
+        tokio::task::spawn_blocking(move || -> eyre::Result<()> {
+            let (sql, binding_values) = Self::build_query(&search, query_emb)?;
+            let mut stmt = conn_handle.prepare_cached(&sql)?;
+
+            let binding_refs: Vec<&dyn ToSql> =
+                binding_values.iter().map(|b| &**b as &dyn ToSql).collect();
+
+            let span = info_span!("search.query");
+            let _guard = span.enter();
+
+            let rows = stmt.query_map(&*binding_refs, process_row_to_strings)?;
+
+            for row_result in rows {
+                if tx.blocking_send(row_result).is_err() {
+                    break; // Receiver dropped
+                }
+            }
+            Ok(())
+        });
+
+        tokio::spawn(async move {
+            let mut batch = Vec::with_capacity(batch_size);
+    
+            while let Some(row_result) = rx.recv().await {
+                match row_result {
+                    Ok(row_data) => {
+                        batch.push(row_data);
+
+                        if batch.len() >= batch_size {
+                            let batch_msg = StreamMessage::Rows {
+                                data: std::mem::take(&mut batch),
+                            };
+                            if result_tx.send(Ok(batch_msg)).await.is_err() {
+                                break; // Receiver dropped
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!("sqlite row error: {e:?}");
+                        let _ = result_tx.send(Err(eyre::eyre!("Database error: {}", e))).await;
+                        break;
+                    }
+                }
+            }
+            if !batch.is_empty() {
+                let batch_msg = StreamMessage::Rows {
+                    data: std::mem::take(&mut batch),
+                };
+                let _ = result_tx.send(Ok(batch_msg)).await;
+            }
+        });
+
+       Ok(result_rx)
+    }
+
+    fn build_query(
+        search: &StreamSearch,
+        query_emb: Option<Arc<Vec<f32>>>,
+    ) -> Result<(String, Vec<Box<dyn ToSql + Send + Sync>>), HttpError> {
+        let result = match search.strategy {
+            SearchStrategy::Fts => Self::build_fts_query(search),
+            SearchStrategy::Semantic => Self::build_semantic_query(search, query_emb)?,
+            _ => todo!(),
+            // SearchStrategy::ReciprocalRankFusion => Self::build_rrf_query(search),
+        };
+        Ok(result)
+    }
+
+    fn build_semantic_query(
+        search: &StreamSearch,
+        query_emb: Option<Arc<Vec<f32>>>,
+    ) -> Result<(String, Vec<Box<dyn ToSql + Send + Sync>>), HttpError> {
+        let embedding = query_emb.ok_or_else(|| HttpError::Internal {
+            err: "failed to create embedding".to_owned(),
+        })?;
+        let embedding = embedding.as_bytes().to_vec();
+
+        let k = search.k_neighbors;
+
+        let search_str = {
+            let start = format!("select vec_{}.distance,", search.document.name);
+            let mut fields = String::new();
+
+            for field in &search.document.fields {
+                if !field.vec_input {
+                    let _ = write!(fields, " {}.{},", search.document.name, field.name);
+                }
+            }
+
+            let doc_name = search.document.name.clone();
+            format!(
+                "{start} {fields} {doc_name}.vec_input as input, 'vec' as match_type from vec_{doc_name} left join {doc_name} on {doc_name}.id = vec_{doc_name}.row_id"
+            )
+        };
+
+        let (mut conditions, mut binding_values) =
+            build_conditions_owned(search.query.constraints.as_ref());
+
+        conditions.push("k = :k".to_owned());
+        binding_values.push(Box::new(k));
+
+        conditions.push("vec_input_embedding match :embedding ".to_owned());
+        binding_values.push(Box::new(embedding));
+
+        let where_clause = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!("where {}", conditions.join(" and "))
+        };
+
+        let sql = format!("{search_str} {where_clause}");
+
+        Ok((sql, binding_values))
+    }
+
+    fn build_fts_query(search: &StreamSearch) -> (String, Vec<Box<dyn ToSql + Send + Sync>>) {
+        let search_str = {
+            let start = "select rank as score,";
+            let mut fields = String::new();
+
+            for field in &search.document.fields {
+                if !field.vec_input {
+                    let _ = write!(fields, "{},", field.name);
+                }
+            }
+
+            let doc_name = search.document.name.clone();
+            format!(
+                "{start}{fields}  highlight(fts_{doc_name}, 0, '<b style=\"color: green;\">', '</b>') as input, 'fts' as match_type from fts_{doc_name}",
+            )
+        };
+
+        let (mut conditions, mut binding_values) =
+            build_conditions_owned(search.query.constraints.as_ref());
+
+        conditions.push("vec_input match '\"' || :query || '\"' ".to_owned());
+        binding_values.push(Box::new(search.query.query.clone()));
+
+        let where_clause = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!("where {}", conditions.join(" and "))
+        };
+
+        let sql = format!("{search_str} {where_clause}");
+
+        (sql, binding_values)
+    }
+
     #[instrument(name = "searching", skip(self, state, client, params), fields(source = tracing::field::Empty))]
     pub async fn search(
         self,
@@ -56,7 +399,7 @@ impl SearchStrategy {
         let document = state
             .documents
             .iter()
-            .find(|x| x.name.to_lowercase() == params.document.to_lowercase())
+            .find(|x| x.name.eq_ignore_ascii_case(&params.document))
             .ok_or_else(|| {
                 HttpError::missing_document(format!("Document {} not found", params.document))
             })?;
@@ -66,53 +409,30 @@ impl SearchStrategy {
         let rrf_k: i64 = 60;
         let k = params.k_neighbors;
 
-        let string = format!("query: {}", params.search_str);
-        let query = Query::parse(&string).map_err(HttpError::from)?;
+        let query =
+            Query::parse(&format!("query: {}", params.search_str)).map_err(HttpError::from)?;
         debug!(?query);
 
-        let (valid_fields, invalid_fields) = {
-            let mut invalid = Vec::new();
-            let fields: Vec<_> = document
-                .fields
-                .iter()
-                .filter(|v| !v.vec_input)
-                .map(|v| v.name.clone())
-                .collect();
 
-            if let Some(constraints) = &query.constraints {
-                for k in constraints.keys() {
-                    if !fields.contains(k) {
-                        invalid.push(k.clone());
-                    }
-                }
-            }
+        validate_query_constraints(document, &query)?;
 
-            (fields, invalid)
+        let query_emb = {
+            let span = info_span!("query.embedding");
+            let _guard = span.enter();
+
+            state
+                .get_embeddings(&query.query, client, self, &span)
+                .await?
+                .into_inner()
         };
-
-        if !invalid_fields.is_empty() {
-            return Err(HttpError::bad_request(
-                "You are looking for fields that don't exist in the document.".to_owned(),
-                valid_fields,
-                invalid_fields,
-            ));
-        }
-
-        let span = info_span!("query.embedding");
-        let _guard = span.enter();
-
-        let query_emb = state
-            .get_embeddings(&query.query, client, self, &span)
-            .await?
-            .into_inner();
 
         // TODO: Rework this completely, it is memory inefficient and
         // it is badly written.
         let (column_names, table, total_query_count) = {
             let pool = state.pool.clone();
             let conn_handle = {
-                let conn_span = info_span!("conn.acquire");
-                let _guard = conn_span.enter();
+                let span = info_span!("conn.acquire");
+                let _guard = span.enter();
                 pool.acquire().await?
             };
 
@@ -159,17 +479,14 @@ impl SearchStrategy {
                     let column_names: Vec<String> =
                         stmt.column_names().into_iter().map(String::from).collect();
 
+                    let span = info_span!("search.query");
+                    let _guard = span.enter();
+
+                    let span = info_span!("search.query");
+                    let _guard = span.enter();
+
                     let table = stmt
-                        .query_map(&*binding_values, |row| {
-                            let mut data = Vec::new();
-
-                            for i in 0..row.as_ref().column_count() {
-                                let val = sqlite_value_to_string(row, i)?;
-                                data.push(val);
-                            }
-
-                            Ok(data)
-                        })?
+                        .query_map(&*binding_values, process_row_to_strings)?
                         .collect::<Result<Vec<Vec<String>>, _>>()?;
 
                     let count = table.len();
@@ -224,17 +541,13 @@ impl SearchStrategy {
                             let column_names: Vec<String> =
                                 stmt.column_names().into_iter().map(String::from).collect();
 
+
+                    let span = info_span!("search.query");
+                    let _guard = span.enter();
                             let table = stmt
-                                .query_map(&*binding_values, |row| {
-                                    let mut data = Vec::new();
-
-                                    for i in 0..row.as_ref().column_count() {
-                                        let val = sqlite_value_to_string(row, i)?;
-                                        data.push(val);
-                                    }
-
-                                    Ok(data)
-                                })?
+                                .query_map(&*binding_values, 
+                                    process_row_to_strings
+                                )?
                                 .collect::<Result<Vec<Vec<String>>, _>>()?;
 
                             let count = table.len();
@@ -346,18 +659,13 @@ impl SearchStrategy {
                             let column_names: Vec<String> =
                                 stmt.column_names().into_iter().map(String::from).collect();
 
-                            let column_count = stmt.column_count();
+
+                    let span = info_span!("search.query");
+                    let _guard = span.enter();
                             let table = stmt
-                                .query_map(&*binding_values, |row| {
-                                    let mut data = Vec::with_capacity(column_count);
-
-                                    for i in 0..row.as_ref().column_count() {
-                                        let val = sqlite_value_to_string(row, i)?;
-                                        data.push(val);
-                                    }
-
-                                    Ok(data)
-                                })?
+                                .query_map(&*binding_values, 
+                                    process_row_to_strings
+                                )?
                                 .collect::<Result<Vec<Vec<String>>, _>>()?;
 
                             let count = table.len();
@@ -366,7 +674,9 @@ impl SearchStrategy {
                         }
                         SearchStrategy::Fts => unreachable!(),
                     };
+
                     Ok(result)
+
                     }).await.map_err(|join_err|  {
                         tracing::error!("Database task panicked: {:?}", join_err);
                         HttpError::Internal { err: "Database operation failed".to_owned() }
@@ -448,6 +758,40 @@ enum SearchStrategyError {
     UnsupportedSearchStrategy(String),
 }
 
+fn build_conditions_owned(
+    constraints: Option<&BTreeMap<String, Vec<Constraint>>>,
+) -> (Vec<String>, Vec<Box<dyn ToSql + Send + Sync>>) {
+    let mut conditions = Vec::new();
+    let mut binding_values: Vec<Box<dyn ToSql + Send + Sync + '_>> = Vec::new();
+
+    if let Some(constraints) = constraints {
+        for (k, values) in constraints {
+            for (i, cons) in values.iter().enumerate() {
+                let param_name = format!(":{k}_{i}");
+                let condition = match cons {
+                    Constraint::Exact(_) => {
+                        format!("LOWER({k}) like LOWER('%' || {param_name} || '%')")
+                    }
+                    Constraint::GreaterThan(_) => format!("{k} > {param_name}"),
+                    Constraint::LesserThan(_) => format!("{k} < {param_name}"),
+                };
+
+                conditions.push(condition);
+
+                let value = match cons {
+                    Constraint::Exact(v)
+                    | Constraint::GreaterThan(v)
+                    | Constraint::LesserThan(v) => v,
+                };
+
+                binding_values.push(Box::new(value.clone()));
+            }
+        }
+    }
+
+    (conditions, binding_values)
+}
+
 fn build_conditions(
     constraints: Option<&BTreeMap<String, Vec<Constraint>>>,
 ) -> (Vec<String>, Vec<&dyn ToSql>) {
@@ -482,12 +826,71 @@ fn build_conditions(
     (conditions, binding_values)
 }
 
-fn sqlite_value_to_string(row: &Row<'_>, idx: usize) -> Result<String, rusqlite::Error> {
-    let val = match row.get_ref(idx)? {
-        ValueRef::Text(text) => String::from_utf8_lossy(text).into_owned(),
-        ValueRef::Real(real) => format!("{:.3}", -real),
-        ValueRef::Integer(int) => int.to_string(),
-        _ => "Tipo de dato desconocido".to_owned(),
-    };
-    Ok(val)
+fn process_row_to_strings(row: &rusqlite::Row<'_>) -> Result<Vec<String>, rusqlite::Error> {
+    (0..row.as_ref().column_count())
+        .map(|idx| {
+            let val = match row.get_ref(idx)? {
+                ValueRef::Text(text) => String::from_utf8_lossy(text).into_owned(),
+                ValueRef::Real(real) => format!("{:.3}", -real),
+                ValueRef::Integer(int) => int.to_string(),
+                _ => "Tipo de dato desconocido".to_owned(),
+            };
+            Ok(val)
+        })
+        .collect()
+}
+
+
+fn validate_query_constraints(document: &Document, query: &Query) -> Result<(), HttpError> {
+     let valid_fields: Vec<String> = document
+        .fields
+        .iter()
+        .filter(|field| !field.vec_input)
+        .map(|field| field.name.clone())
+        .collect();
+
+    if let Some(constraints) = &query.constraints {
+        let invalid_fields: Vec<String> = constraints
+            .keys()
+            .filter(|field| !valid_fields.contains(field))
+            .cloned()
+            .collect();
+
+        if !invalid_fields.is_empty() {
+            return Err(HttpError::bad_request(
+                "You are looking for fields that don't exist in the document.".to_owned(),
+                valid_fields,
+                invalid_fields,
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+struct StreamSearch {
+    document: Document,
+    query: Query,
+    strategy: SearchStrategy,
+    k_neighbors: u64,
+    peso_fts: f32,
+    peso_semantic: f32,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "type")]
+enum StreamMessage {
+    #[serde(rename = "metadata")]
+    Metadata {
+        columns: Vec<String>,
+        // total_estimated: Option<usize>,
+    },
+    #[serde(rename = "row")]
+    _Row { data: Vec<String> },
+    #[serde(rename = "rows")]
+    Rows { data: Vec<Vec<String>> },
+    #[serde(rename = "complete")]
+    Complete { total_sent: usize },
+    #[serde(rename = "error")]
+    Error { msg: String },
 }

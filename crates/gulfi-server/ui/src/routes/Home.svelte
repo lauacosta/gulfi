@@ -1,624 +1,642 @@
 <script lang="ts">
-    import { onMount } from "svelte";
-    import Table from "../lib/Table.svelte";
-    import HistoryFloating from "../lib/HistoryFloating.svelte";
-    import type { ServerError, TableContent } from "../lib/types";
-    import type { favoritesResponse } from "../lib/types";
-    import type { SearchStrategy } from "../lib/types";
-    import { writable } from "svelte/store";
-    import { inputPopUp, renderSearchError } from "../lib/utils";
-    import { selectedDocument } from "../stores";
+import { onDestroy, onMount, tick } from "svelte";
+import { writable } from "svelte/store";
+import HistoryFloating from "../lib/HistoryFloating.svelte";
+import Table from "../lib/Table.svelte";
+import type { SearchStrategy, ServerError, TableContent } from "../lib/types";
+import { inputPopUp, renderSearchError } from "../lib/utils";
+import { selectedDocument } from "../stores";
 
-    const apiUrl = import.meta.env.VITE_API_URL;
+const apiUrl = import.meta.env.VITE_API_URL;
 
-    let heldSearches: favoritesResponse[] = [];
-    const tableContent = writable<TableContent>({
-        msg: "",
-        columns: [],
-        rows: [],
-    });
+let searchState = $state({
+	query: "",
+	strategy: "Fts" as SearchStrategy,
+	sexo: "U",
+	edad_min: 0,
+	edad_max: 100,
+	k: 1000,
+	peso_fts: 50,
+	peso_semantic: 50,
+	isLoading: false,
+	isStreaming: false,
+	error: null as ServerError | null,
+});
 
-    let heldData: Array<string> = [];
-    let heldHeaders = [];
-    let isHolding = false;
-    let itemsCount = $state(0);
-    let dataWeight = $state("0 KB");
-    let downloadBtnDisabled = $state(true);
+const showOcultables = $derived(searchState.strategy !== "Fts");
+const showBalanceSlider = $derived(
+	searchState.strategy === "ReciprocalRankFusion",
+);
+const sliderValue = $derived.by(() => searchState.peso_fts);
 
-    let query = $state("");
-    let error: ServerError | null = $state(null);
+const tableContent = writable<TableContent>({ msg: "", columns: [], rows: [] });
+let downloadState = $state({
+	data: [] as string[],
+	headers: [] as string[],
+	count: 0,
+	weight: "0 KB",
+	disabled: true,
+});
 
-    let strategy: SearchStrategy = $state("Fts");
+let streamingResults = $state<string[][]>([]);
+let streamingColumns = $state<string[]>([]);
+let eventSource: EventSource | null = null;
 
-    let sexo = $state("U");
-    let edad_min = $state(0);
-    let edad_max = $state(100);
-    let k = $state(1000);
-    let sliderValue = $state(50);
-    let peso_fts = $state(50);
-    let peso_semantic = $state(50);
+const shortcuts = [
+	{
+		key: "b",
+		ctrl: true,
+		action: () => document.getElementById("search-input")?.focus(),
+	},
+	{ key: "s", ctrl: true, shift: true, action: downloadCSV },
+	{ key: "f", ctrl: true, shift: true, action: saveFavorite },
+];
 
-    let showOcultables = $state(false);
-    let showBalanceSlider = $state(false);
+onMount(() => {
+	loadUrlParams();
+	setupKeyboardShortcuts();
+});
 
-    onMount(async () => {
-        // await updateHistory();
-        checkUrlParams();
-        hideElements();
-        initKeyboard();
-    });
+onDestroy(() => {
+	eventSource?.close();
+	shortcuts.forEach(({ key, ctrl, shift }) => {
+		document.removeEventListener("keydown", handleKeydown);
+	});
+});
 
-    function checkUrlParams() {
-        const params = new URLSearchParams(window.location.search);
+function loadUrlParams() {
+	const params = new URLSearchParams(window.location.search);
+	if (!params.toString()) return;
 
-        if (!params.toString()) {
-            return;
-        }
+	searchState = {
+		...searchState,
+		query: params.get("query") || "",
+		strategy: (params.get("strategy") as SearchStrategy) || "Fts",
+		sexo: params.get("sexo") || "U",
+		edad_min: Number(params.get("edad_min")) || 0,
+		edad_max: Number(params.get("edad_max")) || 100,
+		peso_fts: Number(params.get("peso_fts")) || 50,
+		peso_semantic: Number(params.get("peso_semantic")) || 50,
+		k: Number(params.get("neighbors")) || 1000,
+	};
+}
 
-        query = params.get("query") || "";
-        strategy = (params.get("strategy") as SearchStrategy) || "Fts";
-        sexo = params.get("sexo") || "U";
-        edad_min = Number(params.get("edad_min")) || 0;
-        edad_max = Number(params.get("edad_max")) || 100;
-        peso_fts = Number(params.get("peso_fts")) || 50;
-        peso_semantic = Number(params.get("peso_semantic")) || 50;
-        k = Number(params.get("neighbors")) || 1000;
+function setupKeyboardShortcuts() {
+	document.addEventListener("keydown", handleKeydown, { capture: true });
+	document.addEventListener("select-query", handleQuerySelect);
+}
 
-        sliderValue = peso_fts;
-    }
+function handleKeydown(event: KeyboardEvent) {
+	const shortcut = shortcuts.find(
+		(s) =>
+			s.key.toLowerCase() === event.key.toLowerCase() &&
+			!!s.ctrl === event.ctrlKey &&
+			!!s.shift === event.shiftKey,
+	);
 
-    function updateSliderValues() {
-        peso_fts = sliderValue;
-        peso_semantic = 100 - sliderValue;
-    }
+	if (shortcut) {
+		event.preventDefault();
+		event.stopImmediatePropagation();
+		shortcut.action();
+	}
+}
 
-    function hideElements() {
-        if (strategy === "ReciprocalRankFusion") {
-            showBalanceSlider = true;
-            showOcultables = true;
-        } else {
-            showBalanceSlider = false;
-            showOcultables = strategy !== "Fts";
-        }
-    }
+function updateSliderValues(value: number) {
+	searchState.peso_fts = value;
+	searchState.peso_semantic = 100 - value;
+}
 
-    function handleStrategyChange() {
-        hideElements();
-    }
+async function handleSearch(event: SubmitEvent) {
+	event.preventDefault();
+	searchState.isLoading = true;
+	searchState.error = null;
 
-    function initKeyboard() {
-        document.addEventListener("keydown", (event) => {
-            if (event.ctrlKey && event.key === "b") {
-                event.preventDefault();
-                document.getElementById("search-input")?.focus();
-            }
-        });
+	const formData = new FormData(event.target as HTMLFormElement);
+	const params = new URLSearchParams();
 
-        window.addEventListener(
-            "keydown",
-            (event) => {
-                if (
-                    event.ctrlKey &&
-                    event.shiftKey &&
-                    event.key.toLowerCase() === "s"
-                ) {
-                    event.preventDefault();
-                    event.stopImmediatePropagation();
-                    descargarCSVGlobal();
-                    return false;
-                }
-            },
-            { capture: true, passive: false },
-        );
+	for (const [key, value] of formData) {
+		params.append(key, value.toString());
+	}
 
-        window.addEventListener(
-            "keydown",
-            (event) => {
-                if (
-                    event.ctrlKey &&
-                    event.shiftKey &&
-                    event.key.toLowerCase() === "f"
-                ) {
-                    event.preventDefault();
-                    event.stopImmediatePropagation();
-                    saveFavorite();
-                    return false;
-                }
-            },
-            { capture: true, passive: false },
-        );
-    }
+	try {
+		const response = await fetch(`${apiUrl}/api/search?${params}`);
 
-    async function handleSearch(event: SubmitEvent) {
-        event.preventDefault();
+		if (!response.ok) {
+			searchState.error = await response.json();
+			return;
+		}
 
-        const formData = new FormData(event.target as HTMLFormElement);
-        const searchParams = new URLSearchParams();
+		const table: TableContent = await response.json();
+		tableContent.set(table);
 
-        for (const [key, value] of formData.entries()) {
-            searchParams.append(key, value.toString());
-        }
+		await tick();
+		initializeTableFeatures();
+	} catch (err) {
+		searchState.error = {
+			err: "Error desconocido",
+			date: new Date().toISOString(),
+		};
+	} finally {
+		searchState.isLoading = false;
+	}
+}
 
-        try {
-            const response = await fetch(
-                `${apiUrl}/api/search?${searchParams.toString()}`,
-            );
+async function handleStreamingSearch(event: SubmitEvent) {
+	event.preventDefault();
 
-            if (!response.ok) {
-                const json = await response.json();
-                error = json as ServerError;
-                return;
-            }
+	if (eventSource) {
+		eventSource.close();
+		eventSource = null;
+	}
 
-            error = null;
-            const table: TableContent = await response.json();
+	searchState.isStreaming = true;
+	searchState.error = null;
+	streamingResults = [];
+	streamingColumns = [];
 
-            tableContent.set(table);
+	const formData = new FormData(event.target as HTMLFormElement);
+	const params = new URLSearchParams();
 
-            requestAnimationFrame(() => {
-                initPagination();
-                guardarResultados();
-                // updateHistory();
-            });
-        } catch (error) {
-            console.error("Error en la búsqueda:", error);
-            error = {
-                err: "Error desconocido",
-                date: new Date().toISOString(),
-            };
-        }
-    }
+	for (const [key, value] of formData) {
+		params.append(key, value.toString());
+	}
+	params.append("batch_size", "10");
 
-    function initPagination() {
-        const content = document.querySelector(".modern-table");
-        if (!content) return;
+	try {
+		const sseUrl = `${apiUrl}/api/search_stream?${params}`;
+		eventSource = new EventSource(sseUrl);
 
-        const itemsPerPage = 10;
-        let currentPage = 0;
-        const items = Array.from(content.getElementsByTagName("tr")).slice(1);
-        const totalPages = Math.ceil(items.length / itemsPerPage);
+		eventSource.onopen = () => {
+			console.log("SSE connection opened");
+		};
 
-        function showPage(page: number) {
-            const startIndex = page * itemsPerPage;
-            const endIndex = startIndex + itemsPerPage;
+		eventSource.onmessage = (event) => {
+			try {
+				const message = JSON.parse(event.data);
 
-            items.forEach((item, index) => {
-                item.style.display =
-                    index >= startIndex && index < endIndex ? "" : "none";
-            });
+				if (message.type === "metadata") {
+					streamingColumns = message.columns;
+					tableContent.set({
+						msg: `Recibiendo resultados...`,
+						columns: streamingColumns,
+						rows: [],
+					});
+				} else if (message.type === "rows" && message.data) {
+					streamingResults = [...streamingResults, ...message.data];
+					tableContent.set({
+						msg: `Recibiendo resultados (${streamingResults.length})`,
+						columns: streamingColumns,
+						rows: streamingResults,
+					});
+				} else if (message.type === "complete") {
+					finishStreaming();
+				}
+			} catch (parseError) {
+				console.error("Error parsing SSE message:", parseError);
+			}
+		};
 
-            const pageInfo = document.querySelector(".page-info");
-            if (pageInfo) {
-                pageInfo.textContent = `Página ${page + 1} de ${totalPages}`;
-            }
-        }
+		eventSource.onerror = (event) => {
+			console.error("SSE error:", event);
 
-        const paginationContainer = document.querySelector(".pagination");
-        if (!paginationContainer) return;
+			if (eventSource?.readyState === EventSource.CLOSED) {
+				console.log("SSE connection closed");
+				finishStreaming();
+			} else {
+				searchState.error = {
+					err: "Error en la conexión SSE",
+					date: new Date().toISOString(),
+				};
+				finishStreaming();
+			}
+		};
+	} catch (err) {
+		console.error("Error creating SSE connection:", err);
+		searchState.isStreaming = false;
+		searchState.error = {
+			err: "Error al conectar con el servidor",
+			date: new Date().toISOString(),
+		};
+	}
+}
 
-        paginationContainer.innerHTML = "";
+function finishStreaming() {
+	searchState.isStreaming = false;
 
-        const startButton = document.createElement("button");
-        startButton.textContent = "<<";
-        startButton.addEventListener("click", (e) => {
-            e.preventDefault();
-            currentPage = 0;
-            showPage(currentPage);
-        });
+	if (eventSource) {
+		eventSource.close();
+		eventSource = null;
+	}
 
-        // Prev button
-        const prevButton = document.createElement("button");
-        prevButton.textContent = "<";
-        prevButton.addEventListener("click", (e) => {
-            e.preventDefault();
-            if (currentPage > 0) {
-                showPage(--currentPage);
-            }
-        });
+	tableContent.set({
+		msg: `Found ${streamingResults.length} results`,
+		columns: streamingColumns,
+		rows: streamingResults,
+	});
 
-        const pageInfo = document.createElement("span");
-        pageInfo.classList.add("page-info");
-        pageInfo.textContent = `Página ${currentPage + 1} de ${totalPages}`;
+	tick().then(initializeTableFeatures);
+}
 
-        const nextButton = document.createElement("button");
-        nextButton.textContent = ">";
-        nextButton.addEventListener("click", (e) => {
-            e.preventDefault();
-            if (currentPage < totalPages - 1) {
-                showPage(++currentPage);
-            }
-        });
+function cancelStreaming() {
+	if (eventSource) {
+		eventSource.close();
+		eventSource = null;
+	}
+	searchState.isStreaming = false;
+}
 
-        const endButton = document.createElement("button");
-        endButton.textContent = ">>";
-        endButton.addEventListener("click", (e) => {
-            e.preventDefault();
-            currentPage = totalPages - 1;
-            showPage(currentPage);
-        });
+function initializeTableFeatures() {
+	initPagination();
+	setupColumnSelection();
+}
 
-        paginationContainer.append(
-            startButton,
-            prevButton,
-            pageInfo,
-            nextButton,
-            endButton,
-        );
-        showPage(currentPage);
-    }
+function initPagination() {
+	const table = document.querySelector(".modern-table");
+	if (!table) return;
 
-    function guardarResultados() {
-        const table = document.getElementById("table-content");
-        if (!table) return;
+	const itemsPerPage = 10;
+	let currentPage = 0;
+	const rows: Element[] = Array.from(table.querySelectorAll("tbody tr"));
+	const totalPages = Math.ceil(rows.length / itemsPerPage);
 
-        const headers =
-            table.querySelectorAll<HTMLTableCellElement>("thead th");
+	function showPage(page: number) {
+		const start = page * itemsPerPage;
+		const end = start + itemsPerPage;
 
-        headers.forEach((header, index) => {
-            header.addEventListener("mousedown", () => {
-                if (!isHolding) {
-                    isHolding = true;
+		rows.forEach((row, i) => {
+			row.style.display = i >= start && i < end ? "" : "none";
+		});
 
-                    heldHeaders.push(header.innerText);
+		const pageInfo = document.querySelector(".page-info");
+		if (pageInfo) pageInfo.textContent = `Página ${page + 1} de ${totalPages}`;
+	}
 
-                    heldData.push(
-                        ...[...table.querySelectorAll("tbody tr")].map(
-                            (row) => {
-                                const cell = row.children[index] as HTMLElement;
-                                return cell
-                                    ? cell.innerText.trim().replace(/\n/g, "")
-                                    : "";
-                            },
-                        ),
-                    );
+	const container = document.querySelector(".pagination");
+	if (!container) return;
 
-                    const weight = calcularPeso(heldData);
-                    itemsCount = heldData.length;
-                    dataWeight = `${weight} KB`;
-                    downloadBtnDisabled = false;
+	const buttons = [
+		{ text: "<<", action: () => showPage((currentPage = 0)) },
+		{ text: "<", action: () => currentPage > 0 && showPage(--currentPage) },
+		{
+			text: ">",
+			action: () => currentPage < totalPages - 1 && showPage(++currentPage),
+		},
+		{ text: ">>", action: () => showPage((currentPage = totalPages - 1)) },
+	];
 
-                    if (query.trim()) {
-                        heldSearches.push({ query, strategy: strategy });
-                    }
-                }
-            });
+	container.innerHTML = "";
+	buttons.forEach(({ text, action }, i) => {
+		const btn = document.createElement("button");
+		btn.textContent = text;
+		btn.onclick = (e) => {
+			e.preventDefault();
+			action();
+		};
+		container.appendChild(btn);
 
-            header.addEventListener("mouseup", () => {
-                isHolding = false;
-            });
-        });
-    }
+		if (i === 1) {
+			const info = document.createElement("span");
+			info.className = "page-info";
+			container.appendChild(info);
+		}
+	});
 
-    function resetHeldData() {
-        heldData = [];
-        heldHeaders = [];
-        itemsCount = 0;
-        dataWeight = "0 KB";
-        downloadBtnDisabled = true;
-    }
+	showPage(0);
+}
 
-    function descargarCSVGlobal() {
-        if (heldData.length === 0) return;
+function setupColumnSelection() {
+	const headers = document.querySelectorAll("#table-content thead th");
+	const table = document.getElementById("table-content");
+	if (!table) return;
 
-        const csvRows = heldData.map((item) => item.toString());
+	headers.forEach((header, index) => {
+		header.addEventListener("mousedown", () => {
+			const columnData = [
+				header.textContent?.trim() || "",
+				...Array.from(table.querySelectorAll("tbody tr")).map((row) => {
+					const cell = row.children[index] as HTMLElement;
+					return cell?.textContent?.trim().replace(/\n/g, "") || "";
+				}),
+			];
 
-        const csvString = csvRows.join("\n");
-        const blob = new Blob([csvString], { type: "text/csv" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
+			downloadState.headers = [header.textContent?.trim() || ""];
+			downloadState.data = columnData.slice(1);
+			downloadState.count = downloadState.data.length;
+			downloadState.weight = `${(new Blob([JSON.stringify(downloadState.data)]).size / 1024).toFixed(2)} KB`;
+			downloadState.disabled = false;
+		});
+	});
+}
 
-        let now = new Date();
-        let day = String(now.getDate()).padStart(2, "0");
-        let month = String(now.getMonth() + 1).padStart(2, "0");
-        let year = now.getFullYear();
+function resetDownload() {
+	downloadState = {
+		data: [],
+		headers: [],
+		count: 0,
+		weight: "0 KB",
+		disabled: true,
+	};
+}
 
-        let dateNumber = Number(`${day}${month}${year}`);
+function downloadCSV() {
+	if (!downloadState.data.length) return;
 
-        a.download = `busqueda_${query.replace(/\s+/g, "_")}_${dateNumber}.csv`;
-        a.click();
-        URL.revokeObjectURL(url);
+	const csv = downloadState.data.join("\n");
+	const blob = new Blob([csv], { type: "text/csv" });
+	const url = URL.createObjectURL(blob);
 
-        resetHeldData();
-        heldSearches = [];
-    }
+	const a = document.createElement("a");
+	a.href = url;
+	a.download = `busqueda_${searchState.query.replace(/\s+/g, "_")}_${new Date().toLocaleDateString("es-AR").replace(/\//g, "")}.csv`;
+	a.click();
 
-    async function saveFavorite() {
-        if (heldData.length === 0 || heldSearches.length === 0) return;
+	URL.revokeObjectURL(url);
+	resetDownload();
+}
 
-        const input = await inputPopUp("Ingresa un nombre para guardarlo");
+async function saveFavorite() {
+	if (!downloadState.data.length) return;
 
-        if (input === null) {
-            return;
-        }
-        const name = input?.replace(/[^a-zA-Z0-9_\-\s]/g, "");
+	const name = await inputPopUp("Ingresa un nombre para guardarlo");
+	if (!name?.trim()) return;
 
-        if (name !== null && name !== "") {
-            const data = {
-                nombre: name,
-                data: heldData,
-                busquedas: heldSearches,
-            };
+	const sanitizedName = name.replace(/[^a-zA-Z0-9_\-\s]/g, "");
 
-            try {
-                const response = await fetch(
-                    `${apiUrl}/api/${$selectedDocument}/favorites`,
-                    {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify(data),
-                    },
-                );
-                if (response.ok) {
-                    heldSearches = [];
-                } else {
-                    throw Error("Error al guardar");
-                }
-            } catch (error) {
-                console.error("Error:", error);
-            }
-        }
-    }
+	try {
+		const response = await fetch(
+			`${apiUrl}/api/${$selectedDocument}/favorites`,
+			{
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					nombre: sanitizedName,
+					data: downloadState.data,
+					busquedas: [
+						{ query: searchState.query, strategy: searchState.strategy },
+					],
+				}),
+			},
+		);
 
-    function calcularPeso(data: Array<string>) {
-        const jsonData = JSON.stringify(data);
-        const bytes = new Blob([jsonData]).size;
-        return (bytes / 1024).toFixed(2);
-    }
+		if (!response.ok) throw new Error("Error al guardar");
+	} catch (err) {
+		console.error("Error:", err);
+	}
+}
 
-    const HandleQuery = (event: CustomEvent<{ query_trimmed: string }>) => {
-        let input = document.getElementById(
-            "search-input",
-        ) as HTMLInputElement | null;
-        if (input) {
-            input.value = event.detail.query_trimmed;
-            input.focus();
-        }
-    };
-
-    onMount(() => {
-        document.addEventListener("select-query", HandleQuery);
-        return () => {
-            document.removeEventListener("select-query", HandleQuery);
-        };
-    });
+function handleQuerySelect(event: CustomEvent<{ query_trimmed: string }>) {
+	const input = document.getElementById("search-input") as HTMLInputElement;
+	if (input) {
+		input.value = event.detail.query_trimmed;
+		input.focus();
+	}
+}
 </script>
 
 <main class="main-content">
     <HistoryFloating />
+    
     <div class="legend">
         <div class="legend-title">Atajos</div>
-        <div class="legend-item">
-            <span class="kbssample"> Ctrl+b</span>
-            <span class="legend-text">Buscar</span>
-        </div>
-        <div class="legend-item">
-            <span class="kbssample">Ctrl+h</span>
-            <span class="legend-text">Abrir History</span>
-        </div>
-        <div class="legend-item">
-            <span class="kbssample">Ctrl+Shift+s</span>
-            <span class="legend-text">Descargar CSV</span>
-        </div>
-
-        <div class="legend-item">
-            <span class="kbssample">Ctrl+Shift+f</span>
-            <span class="legend-text">Añadir a Favorites</span>
-        </div>
+        {#each [
+            { key: "Ctrl+b", desc: "Buscar" },
+            { key: "Ctrl+h", desc: "Abrir History" },
+            { key: "Ctrl+Shift+s", desc: "Descargar CSV" },
+            { key: "Ctrl+Shift+f", desc: "Añadir a Favorites" }
+        ] as shortcut}
+            <div class="legend-item">
+                <span class="kbssample">{shortcut.key}</span>
+                <span class="legend-text">{shortcut.desc}</span>
+            </div>
+        {/each}
     </div>
 
     <div class="form-container">
-        <form onsubmit={handleSearch} class="search-form" id="search-form">
-            <!-- Top row: Configuration options -->
+        <form onsubmit={handleStreamingSearch}>
             <div class="config-options">
                 <div class="search-group">
                     <label for="strategy">Método de Búsqueda:</label>
-                    <select
-                        id="strategy"
-                        name="strategy"
-                        class="search-type"
-                        bind:value={strategy}
-                        onchange={handleStrategyChange}
-                    >
+                    <select id="strategy" name="strategy" bind:value={searchState.strategy}>
                         <option value="Fts">Full Text Search</option>
                         <option value="Semantic">Semántica</option>
-                        <option value="ReciprocalRankFusion"
-                            >Reciprocal Rank Fusion</option
-                        >
+                        <option value="ReciprocalRankFusion">Reciprocal Rank Fusion</option>
                     </select>
                 </div>
 
-                {#if showOcultables}
-                    <div class="search-group ocultable">
-                        <label for="vecinos">
-                            N° de Vecinos:
-                            <span class="help-icon">
-                                i
-                                <span class="search-tooltip"
-                                    >Representa el número de resultados más
-                                    cercanos que se quiere buscar.</span
-                                >
-                            </span>
-                        </label>
-                        <div class="age-range">
-                            <input
-                                type="number"
-                                id="vecinos"
-                                name="k"
-                                min="1"
-                                max="4096"
-                                bind:value={k}
-                            />
-                        </div>
+                 {#if showOcultables}
+                    <div class="search-group">
+                        <label for="k">N° de Vecinos:</label>
+                        <input type="number" id="k" name="k" min="1" max="4096" bind:value={searchState.k} />
                     </div>
                 {:else}
-                    <input type="hidden" name="k" value={k} />
+                    <input type="hidden" name="k" value={searchState.k} />
                 {/if}
 
-                <input
-                    type="hidden"
-                    name="document"
-                    value={$selectedDocument}
-                />
-
                 {#if showBalanceSlider}
-                    <div class="search-group balance-slider">
-                        <label for="balanceSlider">
-                            Pesos:
-                            <span class="help-icon">
-                                i
-                                <span class="search-tooltip"
-                                    >Representa el compromiso de asignarle más
-                                    importancia a los resultados de cada
-                                    búsqueda.</span
-                                >
-                            </span>
-                        </label>
-                        <input
-                            type="range"
-                            id="balanceSlider"
-                            min="0"
-                            max="100"
-                            bind:value={sliderValue}
-                            oninput={updateSliderValues}
+                    <div class="search-group">
+                        <label for="balance">Pesos:</label>
+                        <input 
+                            type="range" 
+                            id="balance" 
+                            min="0" 
+                            max="100" 
+                            bind:value={searchState.peso_fts}
+                            oninput={(e) => updateSliderValues(+e.target.value)}
                         />
-                        <p>
-                            Peso FTS: <span
-                                id="value1Display"
-                                class="slider-value">{peso_fts}</span
-                            >
-                        </p>
-                        <p>
-                            Peso Semantic: <span
-                                id="value2Display"
-                                class="slider-value">{peso_semantic}</span
-                            >
-                        </p>
+                        <p>FTS: {searchState.peso_fts} | Semantic: {searchState.peso_semantic}</p>
                     </div>
                 {/if}
 
-                <div class="search-group">
-                    <input
-                        type="hidden"
-                        id="hiddenValue1"
-                        name="peso_fts"
-                        value={peso_fts}
-                    />
-                    <input
-                        type="hidden"
-                        id="hiddenValue2"
-                        name="peso_semantic"
-                        value={peso_semantic}
-                    />
-                </div>
+                <!-- Hidden fields -->
+                <input type="hidden" name="document" value={$selectedDocument} />
+                <input type="hidden" name="peso_fts" value={searchState.peso_fts} />
+                <input type="hidden" name="peso_semantic" value={searchState.peso_semantic} />
             </div>
 
-            <!-- Middle row: Search bar (full width) -->
             <div class="search-group search-bar full-width">
-                <label for="search-input">
-                    Búsqueda:
-                    <span class="help-icon">
-                        i
-                        <span class="search-tooltip">
-                            [busqueda], [filtro 1:valor], ..., [filtro n:valor]
-                        </span>
-                    </span>
-                </label>
+                <label for="search-input">Búsqueda:</label>
                 <input
                     type="text"
-                    class="search-input"
                     id="search-input"
-                    placeholder="Ingresa tu busqueda..."
                     name="query"
-                    bind:value={query}
+                    placeholder="Ingresa tu busqueda..."
+                    bind:value={searchState.query}
                     required
                 />
-                <p id="validationMessage" class="validation-message">
-                    Por favor ingrese un valor
-                </p>
             </div>
 
-            {#if error}
+            {#if searchState.error}
                 <div class="error-box">
-                    <p>{renderSearchError(error)}</p>
+                    <p>{renderSearchError(searchState.error)}</p>
                 </div>
             {/if}
 
-            <!-- Bottom row: Buttons -->
             <div class="button-container">
-                <button
-                    aria-label="Buscar"
-                    title="Buscar"
-                    type="submit"
-                    class="btn search-button">Buscar</button
-                >
-                <button
-                    aria-label="Descargar"
-                    title="Descargar"
-                    id="downloadBtn"
-                    class="btn search-button"
-                    disabled={downloadBtnDisabled}
-                    onclick={descargarCSVGlobal}
-                >
-                    Descargar <span id="itemsCount">{itemsCount}</span>
-                    elementos (<span id="dataWeight">{dataWeight}</span>)
-                </button>
-                <button
-                    aria-label="Resetear descarga"
-                    title="Resetear descarga"
-                    id="resetDownloadBtn"
-                    class="btn btn-icon"
-                    disabled={downloadBtnDisabled}
-                    onclick={resetHeldData}
-                >
-                    <svg
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        ><path d="M23 4v6h-6" /><path d="M1 20v-6h6" /><path
-                            d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"
-                        /></svg
-                    >
-                </button>
-                <button
-                    aria-label="Agregar búsqueda a favorites"
-                    title="Agregar búsqueda a favorites"
-                    id="saveBtn"
-                    class="btn btn-icon"
-                    disabled={downloadBtnDisabled}
-                    onclick={saveFavorite}
-                >
-                    <svg
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        ><polygon
-                            points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
-                        ></polygon></svg
-                    >
-                </button>
-            </div>
+                {#if searchState.isStreaming}
+                    <button type="button" class="btn btn-cancel" onclick={cancelStreaming}>
+                        Cancelar ({streamingResults.length} resultados)
+                    </button>
+                {:else}
+                    <button type="submit" class="btn search-button" disabled={searchState.isLoading}>
+                        {searchState.isLoading ? 'Buscando...' : 'Buscar'}
+                    </button>
+                {/if}
 
-            <div class="tooltip">
-                Presiona Ctrl + b para empezar a buscar. Presiona Ctrl + Shift +
-                s para descargar.
+                <button 
+                    type="button" 
+                    class="btn search-button" 
+                    disabled={downloadState.disabled}
+                    onclick={downloadCSV}
+                >
+                    Descargar {downloadState.count} elementos ({downloadState.weight})
+                </button>
+
+                <button type="button" class="btn btn-icon" disabled={downloadState.disabled} onclick={resetDownload}>
+                    <!-- Reset icon SVG -->
+                </button>
+
+                <button type="button" class="btn btn-icon" disabled={downloadState.disabled} onclick={saveFavorite}>
+                    <!-- Star icon SVG -->
+                </button>
             </div>
         </form>
     </div>
 
-    <div id="table-content">
-        <Table table={$tableContent} />
+    <div>
+        <Table 
+        table={$tableContent} 
+        isLoading={searchState.isLoading}
+        isStreaming={searchState.isStreaming}
+        streamingCount={streamingResults.length}
+        />
     </div>
 </main>
+
+<style>
+    .kbssample {
+        background-color: var(--my-dark-gray);
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        color: white;
+        font-weight: bold;
+        padding: 2px 5px;
+        margin-right: 10px;
+        width: 100px;
+        min-width: 80px;
+        display: inline-block;
+        text-align: center;
+    }
+
+    .form-container {
+        max-width: 100%;
+        margin: 1rem 2rem auto;
+        background-color: white;
+        padding: 20px;
+        border: 1px solid var(--my-light-gray);
+        border-radius: var(--my-border-radius);
+        box-shadow: var(--my-shadow);
+    }
+
+    .form-container input[type="text"],
+    .form-container input[type="number"],
+    .form-container select {
+        width: 100%;
+        padding: 12px;
+        border-radius: 8px;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        background-color: rgba(0, 0, 0, 0.02);
+        font-size: 15px;
+        transition: all 0.2s ease;
+    }
+
+    .form-container input[type="text"]:focus,
+    .form-container input[type="number"]:focus,
+    .form-container select:focus {
+        outline: none;
+        border-color: var(--my-green);
+        box-shadow: var(--my-shadow);
+    }
+
+    .config-options {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1rem;
+    }
+
+    @media (max-width: 768px) {
+        .config-options {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .search-group label {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 18px;
+        font-weight: 500;
+        color: var(--my-mid-gray);
+    }
+
+    .search-group {
+        position: relative;
+        flex-direction: column;
+        padding-top: 15px;
+    }
+
+    .search-group [type="range"] {
+        width: 100%;
+    }
+
+    .search-bar {
+        margin-top: 2rem;
+        font-size: 1.25rem;
+        padding: 1rem;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .search-bar.full-width {
+        width: 100%;
+    }
+
+    .error-box {
+        box-shadow: var(--my-popup-shadow);
+        background-color: #fee2e2;
+        color: #b91c1c;
+        padding: 12px;
+        border-radius: 6px;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+    }
+
+    .button-container {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+    }
+
+    .btn-cancel {
+        background-color: #dc3545;
+        color: white;
+    }
+
+    .btn-cancel:hover {
+        background-color: #c82333;
+    }
+
+    @keyframes pulse {
+        0% {
+            opacity: 1;
+            transform: scale(1);
+        }
+        50% {
+            opacity: 0.5;
+            transform: scale(1.2);
+        }
+        100% {
+            opacity: 1;
+            transform: scale(1);
+        }
+    }
+</style>

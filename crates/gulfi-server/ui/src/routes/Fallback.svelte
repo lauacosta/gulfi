@@ -1,6 +1,6 @@
 <script>
-    export let err = "";
-    export let date = "";
+export const err = "";
+export const date = "";
 </script>
 
 <div class="error_container">
@@ -25,14 +25,6 @@
         An error ocurred. Please, try again or go to the <a href="/"> homepage </a>
     </p>
     <div class="error_details">{err}</div>
-    <!-- <div class="button_group"> -->
-    <!--     <a href="" class="button primary_button" role="button" -->
-    <!--         >Intentar Nuevamente</a -->
-    <!--     > -->
-    <!--     <a href="/" class="button secondary_button" role="button" -->
-    <!--         >Volver al Inicio</a -->
-    <!--     > -->
-    <!-- </div> -->
 </div>
 
 <style>
@@ -42,18 +34,7 @@
         --border-color: #fecaca;
         --text-color: #450a0a;
     }
-    body {
-        font-family:
-            system-ui,
-            -apple-system,
-            sans-serif;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        min-height: 100vh;
-        margin: 0;
-        background-color: #f9fafb;
-    }
+
     .error_container {
         background-color: white;
         border-radius: 8px;
@@ -105,34 +86,5 @@
         font-size: 0.875rem;
         white-space: pre-wrap;
         overflow-x: auto;
-    }
-    .button_group {
-        display: flex;
-        gap: 0.75rem;
-        justify-content: center;
-    }
-    .button {
-        padding: 0.5rem 1rem;
-        border-radius: 6px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.2s;
-        font-size: 0.875rem;
-    }
-    .primary_button {
-        background-color: var(--primary-color);
-        color: white;
-        border: none;
-    }
-    .primary_button:hover {
-        background-color: #2563eb;
-    }
-    .secondary_button {
-        background-color: white;
-        color: #374151;
-        border: 1px solid #d1d5db;
-    }
-    .secondary_button:hover {
-        background-color: #f9fafb;
     }
 </style>

@@ -31,14 +31,14 @@ use tower_http::{
 use tokio::{net::TcpListener, signal};
 use tower::ServiceBuilder;
 use tower_request_id::{RequestId, RequestIdLayer};
-use tracing::{Instrument, Level, Span, error, info, info_span};
+use tracing::{Instrument, Level, Span, error, info, info_span, instrument};
 
 use crate::bg_tasks::{WriteJob, spawn_writer_task};
 use crate::configuration::Settings;
 use crate::formatter::ColoredOnResponse;
 use crate::routes::{
     add_favoritos, auth, delete_favoritos, delete_historial, documents, favoritos, health_check,
-    historial_detailed, historial_summary, search, serve_ui,
+    historial_detailed, historial_summary, search, search_stream, serve_ui,
 };
 use crate::search::SearchStrategy;
 
@@ -80,6 +80,7 @@ pub enum CacheError {
 }
 
 impl ServerState {
+    #[instrument(name = "gen_embeddings", skip(self, client))]
     pub async fn get_embeddings(
         &self,
         query: &str,
@@ -257,16 +258,19 @@ pub fn build_server(listener: TcpListener, state: ServerState) -> Result<Serve<R
         )
         .route("/:doc/history-full", get(historial_detailed));
 
-    let search_routes = Router::new().route("/search", get(search)).layer(
-        ServiceBuilder::new()
-            .layer(HandleErrorLayer::new(|err: BoxError| async move {
-                (
-                    StatusCode::TOO_MANY_REQUESTS,
-                    format!("Unhandled error {err}"),
-                )
-            }))
-            .layer(BufferLayer::new(1024)), // .layer(RateLimitLayer::new(1000, Duration::from_secs(1))),
-    );
+    let search_routes = Router::new()
+        .route("/search", get(search))
+        .route("/search_stream", get(search_stream))
+        .layer(
+            ServiceBuilder::new()
+                .layer(HandleErrorLayer::new(|err: BoxError| async move {
+                    (
+                        StatusCode::TOO_MANY_REQUESTS,
+                        format!("Unhandled error {err}"),
+                    )
+                }))
+                .layer(BufferLayer::new(1024)), // .layer(RateLimitLayer::new(1000, Duration::from_secs(1))),
+        );
 
     let frontend_routes = Router::new()
         .route("/assets/*path", get(serve_ui))

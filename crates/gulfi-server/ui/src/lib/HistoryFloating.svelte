@@ -1,88 +1,80 @@
 <script lang="ts">
-    import { onMount, onDestroy } from "svelte";
-    import { selectedDocument } from "../stores";
+import { onDestroy, onMount } from "svelte";
+import { selectedDocument } from "../stores";
 
-    type HistoryResponse = {
-        id: number;
-        query: string;
-    };
+type HistoryResponse = {
+	id: number;
+	query: string;
+};
 
-    const apiUrl = import.meta.env.VITE_API_URL;
+const apiUrl = import.meta.env.VITE_API_URL;
 
-    let historyItems: HistoryResponse[] = $state([]);
-    let visible = $state(false);
+let historyItems: HistoryResponse[] = $state([]);
+let visible = $state(false);
 
-    async function fetchHistory() {
-        try {
-            let endpoint = `${apiUrl}/api/${$selectedDocument}/history`;
-            const response = await fetch(endpoint);
+async function fetchHistory() {
+	try {
+		const endpoint = `${apiUrl}/api/${$selectedDocument}/history`;
+		const response = await fetch(endpoint);
 
-            if (response.ok) {
-                historyItems = await response.json();
-            } else {
-                console.error("Failed to fetch history");
-            }
-        } catch (error) {
-            console.error("Error fetching history:", error);
-        }
-    }
+		if (response.ok) {
+			historyItems = await response.json();
+		} else {
+			console.error("Failed to fetch history");
+		}
+	} catch (error) {
+		console.error("Error fetching history:", error);
+	}
+}
 
-    async function deleteHistoryItem(id: number, queryText: string) {
-        try {
-            let delete_url = 
-                `${apiUrl}/api/${$selectedDocument}/history?query=${encodeURIComponent(queryText)}`;
+async function deleteHistoryItem(id: number, queryText: string) {
+	try {
+		const delete_url = `${apiUrl}/api/${$selectedDocument}/history?query=${encodeURIComponent(queryText)}`;
 
-            const deleteResponse = await fetch(
-                delete_url,
-                {
-                    method: "DELETE",
-                },
-            );
+		const deleteResponse = await fetch(delete_url, {
+			method: "DELETE",
+		});
 
-            if (deleteResponse.ok) {
-                historyItems = historyItems.filter(
-                    (item) => item.id !== id,
-                );
-            } else {
-                throw Error("Error al eliminar el elemento.");
-            }
-        } catch (error) {
-            console.error(
-                "Ha ocurrido un error al intentar eliminar el elemento.",
-            );
-        }
-    }
+		if (deleteResponse.ok) {
+			historyItems = historyItems.filter((item) => item.id !== id);
+		} else {
+			throw Error("Error al eliminar el elemento.");
+		}
+	} catch (error) {
+		console.error("Ha ocurrido un error al intentar eliminar el elemento.");
+	}
+}
 
-    function handleKeydown(event) {
-        if (event.ctrlKey && event.key === "h") {
-            event.preventDefault();
-            visible = true;
-            fetchHistory();
-        }
+function handleKeydown(event) {
+	if (event.ctrlKey && event.key === "h") {
+		event.preventDefault();
+		visible = true;
+		fetchHistory();
+	}
 
-        if (event.key === "Escape" && visible) {
-            visible = false;
-        }
-    }
+	if (event.key === "Escape" && visible) {
+		visible = false;
+	}
+}
 
-    function handleItemClick(query: string) {
-        const query_trimmed = query.trim();
-        const event = new CustomEvent("select-query", {
-            detail: { query_trimmed },
-            bubbles: true,
-        });
-        document.dispatchEvent(event);
+function handleItemClick(query: string) {
+	const query_trimmed = query.trim();
+	const event = new CustomEvent("select-query", {
+		detail: { query_trimmed },
+		bubbles: true,
+	});
+	document.dispatchEvent(event);
 
-        visible = false;
-    }
+	visible = false;
+}
 
-    onMount(() => {
-        window.addEventListener("keydown", handleKeydown);
-    });
+onMount(() => {
+	window.addEventListener("keydown", handleKeydown);
+});
 
-    onDestroy(() => {
-        window.removeEventListener("keydown", handleKeydown);
-    });
+onDestroy(() => {
+	window.removeEventListener("keydown", handleKeydown);
+});
 </script>
 
 {#if visible}
