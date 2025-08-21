@@ -1,5 +1,4 @@
-use crate::into_http::SearchResult;
-use axum::{Extension, extract::State};
+use axum::{Extension, extract::State, response::IntoResponse};
 use tracing::debug;
 
 use crate::{
@@ -10,9 +9,10 @@ use crate::{
 pub async fn search(
     SearchExtractor(params): SearchExtractor<SearchParams>,
     State(app): State<ServerState>,
-    client: Extension<reqwest::Client>,
-) -> SearchResult {
+    Extension(client): Extension<reqwest::Client>,
+) -> impl IntoResponse {
     debug!(?params);
-
-    SearchStrategy::search(params.strategy, &app, &client, params).await
+    let app = app.clone();
+    let client = client.clone();
+    SearchStrategy::search_stream(params.strategy, app, client, params).await
 }

@@ -1,84 +1,82 @@
 <script lang="ts">
-    import { onMount } from "svelte";
-    import { getBgColor } from "../lib/utils";
-    import Empty from "../lib/Empty.svelte";
-    import { selectedDocument } from "../stores";
-    const apiUrl = import.meta.env.VITE_API_URL;
+import { onMount } from "svelte";
+import Empty from "../lib/Empty.svelte";
+import { getBgColor } from "../lib/utils";
+import { selectedDocument } from "../stores";
 
-    type Resultados = {
-        id: number;
-        nombre: string;
-        data: string;
-        fecha: string;
-        busquedas: [string, string][];
-    };
+const apiUrl = import.meta.env.VITE_API_URL;
 
-    type Favorites = {
-        favorites: Resultados[];
-    };
+type Resultados = {
+	id: number;
+	nombre: string;
+	data: string;
+	fecha: string;
+	busquedas: [string, string][];
+};
 
-    export let favorites: Favorites = { favorites: [] };
+type Favorites = {
+	favorites: Resultados[];
+};
 
-    const descargarCSVFavorites = (data: string, nombre: string) => {
-        data = data.trim();
-        data = data.replace(/^(\[)+|(\])+/g, "");
-        const items = data.split(",").map((item) => item.trim());
-        const csvString = items.join("\n");
+export let favorites: Favorites = { favorites: [] };
 
-        const blob = new Blob([csvString], { type: "text/csv" });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `${nombre}.csv`;
-        link.click();
-        URL.revokeObjectURL(url);
-    };
+const descargarCSVFavorites = (data: string, nombre: string) => {
+	data = data.trim();
+	data = data.replace(/^(\[)+|(\])+/g, "");
+	const items = data.split(",").map((item) => item.trim());
+	const csvString = items.join("\n");
 
-    const borrarFavorito = async (nombre: string) => {
-        try {
-            const response = await fetch(
-                `${apiUrl}/api/${$selectedDocument}/favorites?nombre=${encodeURIComponent(nombre)}`,
-                {
-                    method: "DELETE",
-                },
-            );
+	const blob = new Blob([csvString], { type: "text/csv" });
+	const url = URL.createObjectURL(blob);
+	const link = document.createElement("a");
+	link.href = url;
+	link.download = `${nombre}.csv`;
+	link.click();
+	URL.revokeObjectURL(url);
+};
 
-            if (response.ok) {
-                favorites.favorites = favorites.favorites.filter(
-                    (fav) => fav.nombre !== nombre,
-                );
-            } else {
-                console.error(`Fallo al borrar favorito: ${nombre}`);
-            }
-        } catch (error) {
-            console.error(`Error eliminando favorito: ${error}`);
-        }
-    };
+const borrarFavorito = async (nombre: string) => {
+	try {
+		const response = await fetch(
+			`${apiUrl}/api/${$selectedDocument}/favorites?nombre=${encodeURIComponent(nombre)}`,
+			{
+				method: "DELETE",
+			},
+		);
 
-    const fetchFavorites = async () => {
-        try {
-            const response = await fetch(
-                `${apiUrl}/api/${$selectedDocument}/favorites`,
-            );
+		if (response.ok) {
+			favorites.favorites = favorites.favorites.filter(
+				(fav) => fav.nombre !== nombre,
+			);
+		} else {
+			console.error(`Fallo al borrar favorito: ${nombre}`);
+		}
+	} catch (error) {
+		console.error(`Error eliminando favorito: ${error}`);
+	}
+};
 
-            if (response.ok) {
-                const data: Favorites = await response.json();
-                favorites = data;
-                console.log(data);
-            } else {
-                console.error(
-                    "Fallo al hacer fetch en favorites:",
-                    response.statusText,
-                );
-            }
-        } catch (error) {
-            console.error("Error al hacer fetch en favorites:", error);
-        }
-    };
+const fetchFavorites = async () => {
+	try {
+		const response = await fetch(
+			`${apiUrl}/api/${$selectedDocument}/favorites`,
+		);
 
-    onMount(() => {
-        fetchFavorites();
-    });
+		if (response.ok) {
+			const data: Favorites = await response.json();
+			favorites = data;
+			console.log(data);
+		} else {
+			console.error("Fallo al hacer fetch en favorites:", response.statusText);
+		}
+	} catch (error) {
+		console.error("Error al hacer fetch en favorites:", error);
+	}
+};
+
+onMount(() => {
+	fetchFavorites();
+});
 </script>
 
 <main>

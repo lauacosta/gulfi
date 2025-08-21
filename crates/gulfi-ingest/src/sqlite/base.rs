@@ -525,6 +525,7 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
     let bar_max = 30;
     let max_jobs = workload.len();
 
+    let mut files_metadata = Vec::with_capacity(workload.len());
     for (job_counter, (source, ext)) in workload.iter().enumerate() {
         let mut conn = Connection::open(db_path).expect("Should be a valid path to a sqlite db");
 
@@ -545,6 +546,7 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
         print!(" ({job_counter}/{max_jobs})");
         std::io::stdout().flush()?;
 
+        let start = std::time::Instant::now();
         match ext {
             Filetype::Csv => {
                 let mut reader = ReaderBuilder::new()
@@ -585,6 +587,7 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
                         count += 1;
                     }
                     total_count += count;
+                    files_metadata.push((source, count, start.elapsed()));
                 }
 
                 tx.commit()?;
@@ -641,6 +644,7 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
                         count += 1;
                     }
                     total_count += count;
+                    files_metadata.push((source, count, start.elapsed()));
                 }
                 tx.commit()?;
             }
@@ -652,8 +656,16 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
         print!("#");
     }
 
-    print!(" ({max_jobs}/{max_jobs})");
-    println!();
+    println!(" ({max_jobs}/{max_jobs})");
+
+    for (path, count, duration) in files_metadata {
+        println!(
+            "    file {} took {} ms ({} entries)",
+            path.to_string_lossy().bright_green(),
+            duration.as_millis().bright_purple(),
+            count.bright_cyan()
+        )
+    }
 
     Ok(total_count)
 }

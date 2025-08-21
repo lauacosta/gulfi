@@ -1,7 +1,8 @@
 <script lang="ts">
-import { getBgColor } from "../lib/utils";
 import type { History } from "../lib/types";
+import { getBgColor } from "../lib/utils";
 export let items: History[];
+
 import Empty from "../lib/Empty.svelte";
 import { selectedDocument } from "../stores";
 

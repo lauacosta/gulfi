@@ -46,4 +46,6 @@ secrecy.workspace = true
 gulfi-query = { path = "../gulfi-query/"}
 gulfi-ingest= { path = "../gulfi-ingest/"}
 gulfi-openai = { path = "../gulfi-openai/"}
+futures = "0.3.31"
+async-stream = "0.3.6"
 

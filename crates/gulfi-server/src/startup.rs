@@ -31,7 +31,7 @@ use tower_http::{
 use tokio::{net::TcpListener, signal};
 use tower::ServiceBuilder;
 use tower_request_id::{RequestId, RequestIdLayer};
-use tracing::{Instrument, Level, Span, error, info, info_span};
+use tracing::{Instrument, Level, Span, error, info, info_span, instrument};
 
 use crate::bg_tasks::{WriteJob, spawn_writer_task};
 use crate::configuration::Settings;
@@ -80,6 +80,7 @@ pub enum CacheError {
 }
 
 impl ServerState {
+    #[instrument(name = "gen_embeddings", skip(self, client, span))]
     pub async fn get_embeddings(
         &self,
         query: &str,

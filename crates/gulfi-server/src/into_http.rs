@@ -7,7 +7,7 @@ use chrono::Local;
 use color_eyre::Report;
 use gulfi_query::ParsingError;
 use serde_json::json;
-use std::io::Write;
+use std::{fmt, io::Write};
 use termcolor::{ColorChoice, StandardStream};
 use tracing::error;
 
@@ -186,5 +186,20 @@ impl From<ParsingError> for HttpError {
 impl From<argon2::password_hash::Error> for HttpError {
     fn from(err: argon2::password_hash::Error) -> Self {
         Self::from_report(eyre::eyre!("argon2 error: {:?}", err))
+    }
+}
+
+impl std::error::Error for HttpError {}
+
+impl fmt::Display for HttpError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let msg = match self {
+            HttpError::AuthError { msg, err } => format!("{msg}{err}"),
+            HttpError::MissingDocument { msg } => msg.to_owned(),
+            HttpError::Internal { err } => err.to_owned(),
+            HttpError::BadRequest { message, .. } => message.to_owned(),
+            HttpError::Parsing(parsing_error) => parsing_error.to_string(),
+        };
+        write!(f, "HttpError: {}", msg)
     }
 }

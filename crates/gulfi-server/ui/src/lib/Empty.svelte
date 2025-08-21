@@ -1,7 +1,7 @@
 <script lang="ts">
-    export let titulo: string;
-    export let motivo: string;
-    export let solucion: string;
+export let titulo: string;
+export let motivo: string;
+export let solucion: string;
 </script>
 
 <div class="empty-state">
