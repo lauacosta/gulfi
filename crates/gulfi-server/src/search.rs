@@ -1,15 +1,11 @@
-use crate::{
-    bg_tasks::WriteJob,
-    into_http::{HttpError, IntoHttp, SearchResult},
-};
+use crate::into_http::HttpError;
 
-use axum::{response::{sse::{Event, KeepAlive}, Sse}};
-use axum::Json;
+use axum::response::{Sse, sse::Event};
 use eyre::Report;
-use futures::{stream, Stream, StreamExt as _};
+use futures::Stream;
 use gulfi_ingest::Document;
 use gulfi_query::{
-    Constraint::{self, Exact, GreaterThan, LesserThan},
+    Constraint::{self},
     Query,
 };
 use std::{collections::BTreeMap, convert::Infallible, fmt::Write, sync::Arc};
@@ -20,13 +16,11 @@ use rusqlite::{
     types::{FromSql, FromSqlError, ToSqlOutput, ValueRef},
 };
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use thiserror::Error;
-use tracing::{debug, error, info, info_span, instrument};
+use tracing::{error, info_span, instrument};
 use zerocopy::IntoBytes;
 
 use crate::startup::ServerState;
-
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Default)]
 pub enum SearchStrategy {
@@ -49,7 +43,6 @@ pub struct SearchParams {
     pub batch_size: Option<usize>,
 }
 
-type QueryResult = Result<(Vec<String>, Vec<Vec<String>>, usize), HttpError>;
 impl SearchStrategy {
     #[instrument(name = "searching", skip(self, state, client, params), fields(source = tracing::field::Empty))]
     pub async fn search_stream(
@@ -111,7 +104,7 @@ impl SearchStrategy {
             Err(err) => {
                 let error_msg = StreamMessage::Error { msg: err.to_string() };
                 yield Ok(Event::default().data(serde_json::to_string(&error_msg).unwrap()));
-                
+
             }
         }
             let complete = StreamMessage::Complete { total_sent: row_count };
@@ -120,71 +113,6 @@ impl SearchStrategy {
 
         Sse::new(s)
     }
-
-    // async fn handle_search_stream(
-    //     self,
-    //     socket: WebSocket,
-    //     state: ServerState,
-    //     client: Client,
-    //     params: SearchParams,
-    // ) -> eyre::Result<()> {
-    //     let mut socket = socket;
-
-    //     let search_result = match Self::prepare_search(&state, &params).await {
-    //         Ok(result) => result,
-    //         Err(e) => {
-    //             let error_msg = StreamMessage::Error { msg: e.to_string() };
-
-    //             let _ = socket
-    //                 .send(Message::Text(serde_json::to_string(&error_msg)?))
-    //                 .await;
-
-    //             return Ok(());
-    //         }
-    //     };
-
-    //     let columns: Vec<String> = search_result
-    //         .document
-    //         .fields
-    //         .iter()
-    //         .map(|f| f.name.clone())
-    //         .collect();
-
-    //     let metadata = StreamMessage::Metadata { columns };
-
-    //     socket
-    //         .send(Message::Text(serde_json::to_string(&metadata)?))
-    //         .await?;
-
-    //     let mut row_count = 0;
-    //     match SearchStrategy::stream_results(
-    //         search_result,
-    //         &client,
-    //         &state,
-    //         &mut socket,
-    //         &mut row_count,
-    //         params.batch_size.unwrap_or(10),
-    //     )
-    //     .await
-    //     {
-    //         Ok(()) => {
-    //             let complete = StreamMessage::Complete {
-    //                 total_sent: row_count,
-    //             };
-    //             let _ = socket
-    //                 .send(Message::Text(serde_json::to_string(&complete)?))
-    //                 .await;
-    //         }
-    //         Err(e) => {
-    //             let error_msg = StreamMessage::Error { msg: e.to_string() };
-    //             let _ = socket
-    //                 .send(Message::Text(serde_json::to_string(&error_msg)?))
-    //                 .await;
-    //         }
-    //     }
-
-    //     Ok(())
-    // }
 
     async fn prepare_search(
         state: &ServerState,
@@ -208,8 +136,8 @@ impl SearchStrategy {
             query,
             strategy: params.strategy,
             k_neighbors: params.k_neighbors,
-            peso_fts: params.peso_fts,
-            peso_semantic: params.peso_semantic,
+            weight_fts: params.peso_fts,
+            weight_vec: params.peso_semantic,
         })
     }
 
@@ -236,8 +164,10 @@ impl SearchStrategy {
                 .into_inner()
         };
 
-        let (result_tx, result_rx) = tokio::sync::mpsc::channel::<Result<StreamMessage, eyre::Error>>(batch_size * 2);
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<Result<Vec<String>, rusqlite::Error>>(batch_size * 2);
+        let (result_tx, result_rx) =
+            tokio::sync::mpsc::channel::<Result<StreamMessage, eyre::Error>>(batch_size * 2);
+        let (tx, mut rx) =
+            tokio::sync::mpsc::channel::<Result<Vec<String>, rusqlite::Error>>(batch_size * 2);
 
         // TODO: Refactor binding_refs into a simpler type as binding_values is at the moment just a Vec over boxed types
         tokio::task::spawn_blocking(move || -> eyre::Result<()> {
@@ -262,7 +192,7 @@ impl SearchStrategy {
 
         tokio::spawn(async move {
             let mut batch = Vec::with_capacity(batch_size);
-    
+
             while let Some(row_result) = rx.recv().await {
                 match row_result {
                     Ok(row_data) => {
@@ -279,7 +209,9 @@ impl SearchStrategy {
                     }
                     Err(e) => {
                         error!("sqlite row error: {e:?}");
-                        let _ = result_tx.send(Err(eyre::eyre!("Database error: {}", e))).await;
+                        let _ = result_tx
+                            .send(Err(eyre::eyre!("Database error: {}", e)))
+                            .await;
                         break;
                     }
                 }
@@ -292,7 +224,7 @@ impl SearchStrategy {
             }
         });
 
-       Ok(result_rx)
+        Ok(result_rx)
     }
 
     fn build_query(
@@ -302,8 +234,7 @@ impl SearchStrategy {
         let result = match search.strategy {
             SearchStrategy::Fts => Self::build_fts_query(search),
             SearchStrategy::Semantic => Self::build_semantic_query(search, query_emb)?,
-            _ => todo!(),
-            // SearchStrategy::ReciprocalRankFusion => Self::build_rrf_query(search),
+            SearchStrategy::ReciprocalRankFusion => Self::build_rrf_query(search, query_emb)?,
         };
         Ok(result)
     }
@@ -316,8 +247,6 @@ impl SearchStrategy {
             err: "failed to create embedding".to_owned(),
         })?;
         let embedding = embedding.as_bytes().to_vec();
-
-        let k = search.k_neighbors;
 
         let search_str = {
             let start = format!("select vec_{}.distance,", search.document.name);
@@ -339,7 +268,7 @@ impl SearchStrategy {
             build_conditions_owned(search.query.constraints.as_ref());
 
         conditions.push("k = :k".to_owned());
-        binding_values.push(Box::new(k));
+        binding_values.push(Box::new(search.k_neighbors));
 
         conditions.push("vec_input_embedding match :embedding ".to_owned());
         binding_values.push(Box::new(embedding));
@@ -389,324 +318,95 @@ impl SearchStrategy {
         (sql, binding_values)
     }
 
-    #[instrument(name = "searching", skip(self, state, client, params), fields(source = tracing::field::Empty))]
-    pub async fn search(
-        self,
-        state: &ServerState,
-        client: &Client,
-        params: SearchParams,
-    ) -> SearchResult {
-        let document = state
-            .documents
-            .iter()
-            .find(|x| x.name.eq_ignore_ascii_case(&params.document))
-            .ok_or_else(|| {
-                HttpError::missing_document(format!("Document {} not found", params.document))
-            })?;
+    fn build_rrf_query(
+        search: &StreamSearch,
+        query_emb: Option<Arc<Vec<f32>>>,
+    ) -> Result<(String, Vec<Box<dyn ToSql + Send + Sync>>), HttpError> {
+        let embedding = query_emb.ok_or_else(|| HttpError::Internal {
+            err: "failed to create embedding".to_owned(),
+        })?;
+        let embedding = embedding.as_bytes().to_vec();
 
-        let weight_vec = params.peso_semantic / 100.0;
-        let weight_fts: f32 = params.peso_fts / 100.0;
-        let rrf_k: i64 = 60;
-        let k = params.k_neighbors;
+        let build_final_query = |conditions: &str| -> String {
+            let doc_name = search.document.name.clone();
+            let mut fields = String::new();
 
-        let query =
-            Query::parse(&format!("query: {}", params.search_str)).map_err(HttpError::from)?;
-        debug!(?query);
-
-
-        validate_query_constraints(document, &query)?;
-
-        let query_emb = {
-            let span = info_span!("query.embedding");
-            let _guard = span.enter();
-
-            state
-                .get_embeddings(&query.query, client, self, &span)
-                .await?
-                .into_inner()
-        };
-
-        // TODO: Rework this completely, it is memory inefficient and
-        // it is badly written.
-        let (column_names, table, total_query_count) = {
-            let pool = state.pool.clone();
-            let conn_handle = {
-                let span = info_span!("conn.acquire");
-                let _guard = span.enter();
-                pool.acquire().await?
-            };
-
-            debug!("{:?}", pool.stats());
-            debug!("{:?}", pool.corruption_info());
-
-            let query_execution_span = info_span!("query.execution");
-            let _guard = query_execution_span.enter();
-
-            match self {
-                SearchStrategy::Fts => {
-                    let search = {
-                        let start = "select rank as score,";
-                        let mut fields = String::new();
-
-                        for field in &document.fields {
-                            if !field.vec_input {
-                                let _ = write!(fields, "{},", field.name);
-                            }
-                        }
-
-                        let doc_name = document.name.clone();
-                        format!(
-                            "{start}{fields}  highlight(fts_{doc_name}, 0, '<b style=\"color: green;\">', '</b>') as input, 'fts' as match_type from fts_{doc_name}",
-                        )
-                    };
-
-                    let (mut conditions, mut binding_values) =
-                        build_conditions(query.constraints.as_ref());
-
-                    conditions.push("vec_input match '\"' || :query || '\"' ".to_owned());
-                    binding_values.push(&query.query as &dyn ToSql);
-
-                    let where_clause = if conditions.is_empty() {
-                        String::new()
-                    } else {
-                        format!("where {}", conditions.join(" and "))
-                    };
-
-                    let sql = format!("{search} {where_clause}");
-
-                    let mut stmt = conn_handle.prepare_cached(&sql)?;
-
-                    let column_names: Vec<String> =
-                        stmt.column_names().into_iter().map(String::from).collect();
-
-                    let span = info_span!("search.query");
-                    let _guard = span.enter();
-
-                    let span = info_span!("search.query");
-                    let _guard = span.enter();
-
-                    let table = stmt
-                        .query_map(&*binding_values, process_row_to_strings)?
-                        .collect::<Result<Vec<Vec<String>>, _>>()?;
-
-                    let count = table.len();
-
-                    (column_names, table, count)
-                }
-                SearchStrategy::Semantic | SearchStrategy::ReciprocalRankFusion => {
-                    let search_strategy = self;
-                    let document = document.clone();
-                    let query = query.clone();
-
-                    tokio::task::spawn_blocking( move || -> QueryResult  {
-                    let result = match search_strategy {
-                        SearchStrategy::Semantic => {
-                            let embedding = query_emb.ok_or_else(|| HttpError::Internal { err: "failed to create embedding".to_owned()})?;
-                            let embedding = embedding.as_bytes();
-
-                            let search = {
-                                let start = format!("select vec_{}.distance,", document.name);
-                                let mut fields = String::new();
-
-                                for field in &document.fields {
-                                    if !field.vec_input {
-                                        let _ = write!(fields, " {}.{},", document.name, field.name);
-                                    }
-                                }
-
-                                let doc_name = document.name.clone();
-                                format!(
-                                    "{start} {fields} {doc_name}.vec_input as input, 'vec' as match_type from vec_{doc_name} left join {doc_name} on {doc_name}.id = vec_{doc_name}.row_id"
-                                )
-                            };
-
-                            let (mut conditions, mut binding_values) =
-                                build_conditions(query.constraints.as_ref());
-
-                            conditions.push("k = :k".to_owned());
-                            binding_values.push(&k as &dyn ToSql);
-
-                            conditions.push("vec_input_embedding match :embedding ".to_owned());
-                            binding_values.push(&embedding as &dyn ToSql);
-
-                            let where_clause = if conditions.is_empty() {
-                                String::new()
-                            } else {
-                                format!("where {}", conditions.join(" and "))
-                            };
-
-                            let sql = format!("{search} {where_clause}");
-
-                            let mut stmt = conn_handle.prepare_cached(&sql)?;
-                            let column_names: Vec<String> =
-                                stmt.column_names().into_iter().map(String::from).collect();
-
-
-                    let span = info_span!("search.query");
-                    let _guard = span.enter();
-                            let table = stmt
-                                .query_map(&*binding_values, 
-                                    process_row_to_strings
-                                )?
-                                .collect::<Result<Vec<Vec<String>>, _>>()?;
-
-                            let count = table.len();
-
-                            (column_names, table, count)
-                        }
-                        SearchStrategy::ReciprocalRankFusion => {
-                            let embedding = query_emb.ok_or_else(|| HttpError::Internal { err: "failed to create embedding".to_owned()})?;
-                            let embedding = embedding.as_bytes();
-
-                            let build_final_query = |conditions: &str| -> String {
-                                let doc_name = document.name.clone();
-                                let mut fields = String::new();
-
-                                for field in &document.fields {
-                                    if !field.vec_input {
-                                        let _ = write!(fields, "{doc_name}.{},", field.name);
-                                    }
-                                }
-
-                                let search_query = format!(
-                                "select 
-                                    {fields}
-                                    {doc_name}.vec_input as input,
-                                    vec_matches.rank_number as vec_rank,
-                                    fts_matches.rank_number as fts_rank,
-                                    (
-                                        coalesce(1.0 / (:rrf_k + fts_matches.rank_number), 0.0) * :weight_fts +
-                                        coalesce(1.0 / (:rrf_k + vec_matches.rank_number), 0.0) * :weight_vec
-                                    ) as combined_rank,
-                                    vec_matches.distance as vec_distance,
-                                    fts_matches.score as fts_score
-                                from fts_matches
-                                full outer join vec_matches on vec_matches.row_id = fts_matches.row_id
-                                join {doc_name} on {doc_name}.id = coalesce(fts_matches.row_id, vec_matches.row_id)");
-
-                                let base = format!(
-                                "with vec_matches as (
-                                    select
-                                        row_id,
-                                        row_number() over (order by distance) as rank_number,
-                                        distance
-                                    from vec_{doc_name}
-                                    where
-                                        vec_input_embedding match :embedding
-                                        and k = :k
-                                ),
-
-                                fts_matches as (
-                                    select
-                                        rowid as row_id,
-                                        row_number() over (order by rank) as rank_number,
-                                        rank as score
-                                    from fts_{doc_name}
-                                    where vec_input match '\"' || :query || '\"'
-                                    ),
-
-                                final as ( {search_query} {conditions} order by combined_rank desc) select * from final;"
-                            );
-
-                                base
-                            };
-
-                            let mut conditions = Vec::new();
-
-                            let mut binding_values: Vec<&dyn ToSql> = vec![
-                                &embedding as &dyn ToSql,
-                                &k as &dyn ToSql,
-                                &query.query as &dyn ToSql,
-                                &rrf_k as &dyn ToSql,
-                                &weight_fts as &dyn ToSql,
-                                &weight_vec as &dyn ToSql,
-                            ];
-
-                            //INFO: EL orden en que los campos son cargados en binding_values es importante.
-                            //No me fascina pero por ahora no es el mayor de mis problemas.
-
-                            if let Some(contraints) = &query.constraints {
-                                for (k, values) in contraints {
-                                    for (i, cons) in values.iter().enumerate() {
-                                        let param_name = format!(":{k}_{i}");
-                                        let condition = match cons {
-                                            Exact(_) => {
-                                                format!("LOWER({k}) like LOWER('%' || {param_name} || '%')")
-                                            }
-                                            GreaterThan(_) => format!("{k} > {param_name}"),
-                                            LesserThan(_) => format!("{k} < {param_name}"),
-                                        };
-
-                                        let value = match cons {
-                                            Exact(val) | GreaterThan(val) | LesserThan(val) => val,
-                                        };
-
-                                        conditions.push(condition);
-                                        binding_values.push(value);
-                                    }
-                                }
-                            }
-
-                            let where_clause = if conditions.is_empty() {
-                                String::new()
-                            } else {
-                                format!("where {}", conditions.join(" and "))
-                            };
-
-                            let sql = build_final_query(&where_clause);
-
-                            let mut stmt = conn_handle.prepare_cached(&sql)?;
-                            let column_names: Vec<String> =
-                                stmt.column_names().into_iter().map(String::from).collect();
-
-
-                    let span = info_span!("search.query");
-                    let _guard = span.enter();
-                            let table = stmt
-                                .query_map(&*binding_values, 
-                                    process_row_to_strings
-                                )?
-                                .collect::<Result<Vec<Vec<String>>, _>>()?;
-
-                            let count = table.len();
-
-                            (column_names, table, count)
-                        }
-                        SearchStrategy::Fts => unreachable!(),
-                    };
-
-                    Ok(result)
-
-                    }).await.map_err(|join_err|  {
-                        tracing::error!("Database task panicked: {:?}", join_err);
-                        HttpError::Internal { err: "Database operation failed".to_owned() }
-                    })??
+            for field in &search.document.fields {
+                if !field.vec_input {
+                    let _ = write!(fields, "{doc_name}.{},", field.name);
                 }
             }
+            let search_query = format!(
+                "select 
+                    {fields}
+                    {doc_name}.vec_input as input,
+                    vec_matches.rank_number as vec_rank,
+                    fts_matches.rank_number as fts_rank,
+                    (
+                        coalesce(1.0 / (:rrf_k + fts_matches.rank_number), 0.0) * :weight_fts +
+                        coalesce(1.0 / (:rrf_k + vec_matches.rank_number), 0.0) * :weight_vec
+                    ) as combined_rank,
+                    vec_matches.distance as vec_distance,
+                    fts_matches.score as fts_score
+                from fts_matches
+                full outer join vec_matches on vec_matches.row_id = fts_matches.row_id
+                join {doc_name} on {doc_name}.id = coalesce(fts_matches.row_id, vec_matches.row_id)");
+
+            let base = format!(
+                "with vec_matches as (
+                    select
+                        row_id,
+                        row_number() over (order by distance) as rank_number,
+                        distance
+                    from vec_{doc_name}
+                    where
+                        vec_input_embedding match :embedding
+                        and k = :k
+                ),
+
+                fts_matches as (
+                    select
+                        rowid as row_id,
+                        row_number() over (order by rank) as rank_number,
+                        rank as score
+                    from fts_{doc_name}
+                    where vec_input match '\"' || :query || '\"'
+                    ),
+
+                final as ( {search_query} {conditions} order by combined_rank desc) select * from final;"
+            );
+
+            base
         };
 
-        info!(
-            "Busqueda para el query: `{}`, exitosa! {} registros",
-            query.query, total_query_count,
-        );
+        let mut conditions = Vec::new();
+        let mut binding_values: Vec<Box<dyn ToSql + Send + Sync>> = vec![
+            Box::new(embedding),
+            Box::new(search.k_neighbors),
+            Box::new(search.query.query.clone()),
+            // TODO:
+            Box::new(60),
+            Box::new(search.weight_fts),
+            Box::new(search.weight_vec),
+        ];
 
-        if let Err(e) = state.writer.send(WriteJob::History {
-            query: params.search_str,
-            doc: params.document,
-            strategy: params.strategy,
-            peso_fts: params.peso_fts,
-            peso_semantic: params.peso_semantic,
-            k_neighbors: params.k_neighbors,
-        }) {
-            tracing::error!("No se pudo enviar a la tarea de escritura: {:?}", e);
+        let (a, b) = build_conditions_owned(search.query.constraints.as_ref());
+        for x in a {
+            conditions.push(x);
+        }
+        for x in b {
+            binding_values.push(x);
         }
 
-        Json(json!({
-            "msg": format!("Hay un total de {} resultados", total_query_count),
-            "columns": column_names,
-            "rows": table,
-        }))
-        .into_http()
+        let where_clause = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!("where {}", conditions.join(" and "))
+        };
+
+        let sql = build_final_query(&where_clause);
+
+        Ok((sql, binding_values))
     }
 }
 
@@ -792,40 +492,6 @@ fn build_conditions_owned(
     (conditions, binding_values)
 }
 
-fn build_conditions(
-    constraints: Option<&BTreeMap<String, Vec<Constraint>>>,
-) -> (Vec<String>, Vec<&dyn ToSql>) {
-    let mut conditions = Vec::new();
-    let mut binding_values: Vec<&dyn ToSql> = Vec::new();
-
-    if let Some(constraints) = constraints {
-        for (k, values) in constraints {
-            for (i, cons) in values.iter().enumerate() {
-                let param_name = format!(":{k}_{i}");
-                let condition = match cons {
-                    Constraint::Exact(_) => {
-                        format!("LOWER({k}) like LOWER('%' || {param_name} || '%')")
-                    }
-                    Constraint::GreaterThan(_) => format!("{k} > {param_name}"),
-                    Constraint::LesserThan(_) => format!("{k} < {param_name}"),
-                };
-
-                conditions.push(condition);
-
-                let value = match cons {
-                    Constraint::Exact(v)
-                    | Constraint::GreaterThan(v)
-                    | Constraint::LesserThan(v) => v,
-                };
-
-                binding_values.push(value);
-            }
-        }
-    }
-
-    (conditions, binding_values)
-}
-
 fn process_row_to_strings(row: &rusqlite::Row<'_>) -> Result<Vec<String>, rusqlite::Error> {
     (0..row.as_ref().column_count())
         .map(|idx| {
@@ -840,9 +506,8 @@ fn process_row_to_strings(row: &rusqlite::Row<'_>) -> Result<Vec<String>, rusqli
         .collect()
 }
 
-
 fn validate_query_constraints(document: &Document, query: &Query) -> Result<(), HttpError> {
-     let valid_fields: Vec<String> = document
+    let valid_fields: Vec<String> = document
         .fields
         .iter()
         .filter(|field| !field.vec_input)
@@ -873,8 +538,8 @@ struct StreamSearch {
     query: Query,
     strategy: SearchStrategy,
     k_neighbors: u64,
-    peso_fts: f32,
-    peso_semantic: f32,
+    weight_fts: f32,
+    weight_vec: f32,
 }
 
 #[derive(Serialize)]

@@ -587,7 +587,7 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
                         count += 1;
                     }
                     total_count += count;
-                    files_metadata.push((source, count, start.elapsed()))
+                    files_metadata.push((source, count, start.elapsed()));
                 }
 
                 tx.commit()?;
@@ -644,7 +644,7 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
                         count += 1;
                     }
                     total_count += count;
-                    files_metadata.push((source, count, start.elapsed()))
+                    files_metadata.push((source, count, start.elapsed()));
                 }
                 tx.commit()?;
             }
@@ -656,7 +656,7 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
         print!("#");
     }
 
-    print!(" ({max_jobs}/{max_jobs})\n");
+    println!(" ({max_jobs}/{max_jobs})");
 
     for (path, count, duration) in files_metadata {
         println!(

@@ -1,4 +1,3 @@
-use crate::into_http::SearchResult;
 use axum::{Extension, extract::State, response::IntoResponse};
 use tracing::debug;
 
@@ -8,17 +7,6 @@ use crate::{
 
 #[axum::debug_handler]
 pub async fn search(
-    SearchExtractor(params): SearchExtractor<SearchParams>,
-    State(app): State<ServerState>,
-    client: Extension<reqwest::Client>,
-) -> SearchResult {
-    debug!(?params);
-
-    SearchStrategy::search(params.strategy, &app, &client, params).await
-}
-
-#[axum::debug_handler]
-pub async fn search_stream(
     SearchExtractor(params): SearchExtractor<SearchParams>,
     State(app): State<ServerState>,
     Extension(client): Extension<reqwest::Client>,
