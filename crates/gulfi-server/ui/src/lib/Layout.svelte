@@ -1,38 +1,53 @@
 <script lang="ts">
-import { onMount } from "svelte";
-import { selectedDocument } from "../stores";
-import type { Document } from "./types";
-
-let options: string[] = $state([]);
-
-const apiUrl = import.meta.env.VITE_API_URL;
-async function fetch_documents(): Promise<Document[]> {
-	const response = await fetch(`${apiUrl}/api/documents`);
-	return await response.json();
-}
-
-onMount(async () => {
-	const response = await fetch_documents();
-	options = response.map((doc) => doc.name);
-
-	if ($selectedDocument === null && options.length > 0) {
-		selectedDocument.set(options[0]);
-	}
-});
+import Sidebar from "./Sidebar.svelte";
 </script>
 
-<div class="top-bar">
-    <label>
-        Documento:
-        <select bind:value={$selectedDocument}>
-            {#each options as option}
-                <option value={option}>{option}</option>
-            {/each}
-        </select>
-    </label>
+<div class="app-layout">
+    <aside class="sidebar">
+        <Sidebar />
+    </aside>
+    <div class="main-section">
+        <main class="content-area">
+            <slot />
+        </main>
+    </div>
+    <aside class="sidebar">
+        <Sidebar />
+    </aside>
 </div>
 
-<!-- svelte-ignore slot_element_deprecated -->
-<div class="content-wrapper">
-    <slot />
-</div>
+<style>
+.app-layout {
+    display: flex;
+    height: 100vh;
+    background-color: #1e1e1e;
+    color: #eaeaea;
+}
+
+.sidebar {
+    width: 240px;
+    background-color: #181818;
+    border-right: 1px solid #2a2a2a;
+    display: flex;
+    flex-direction: column;
+}
+
+.main-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.top-bar {
+    background-color: #181818;
+    padding: 1rem;
+    border-bottom: 1px solid #2a2a2a;
+}
+
+.content-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.5rem;
+    background-color: #1e1e1e;
+}
+</style>

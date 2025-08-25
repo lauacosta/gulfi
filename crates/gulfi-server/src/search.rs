@@ -1,4 +1,4 @@
-use crate::into_http::HttpError;
+use crate::{bg_tasks::WriteJob, into_http::HttpError};
 
 use axum::response::{Sse, sse::Event};
 use eyre::Report;
@@ -53,6 +53,17 @@ impl SearchStrategy {
     ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
         let state = state.clone();
         let client = client.clone();
+
+        if let Err(e) = state.writer.send(WriteJob::History {
+            query: params.search_str.clone(),
+            doc: params.document.clone(),
+            strategy: params.strategy,
+            peso_fts: params.peso_fts,
+            peso_semantic: params.peso_semantic,
+            k_neighbors: params.k_neighbors,
+        }) {
+            tracing::error!("No se pudo enviar a la tarea de escritura: {:?}", e);
+        }
 
         let s = async_stream::stream! {
             let search_result = match Self::prepare_search(&state, &params).await {

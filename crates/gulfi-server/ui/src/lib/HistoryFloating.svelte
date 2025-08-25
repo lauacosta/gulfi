@@ -45,12 +45,19 @@ async function deleteHistoryItem(id: number, queryText: string) {
 	}
 }
 
-function handleKeydown(event) {
-	if (event.ctrlKey && event.key === "h") {
-		event.preventDefault();
-		visible = true;
-		fetchHistory();
-	}
+function handleKeydown(event: KeyboardEvent) {
+  const isToggleHotkey = event.ctrlKey && event.key === "h";
+
+  if (isToggleHotkey) {
+    event.preventDefault();
+    visible = !visible;
+
+    if (visible) {
+      fetchHistory();
+    }
+    return;
+  }
+
 
 	if (event.key === "Escape" && visible) {
 		visible = false;
@@ -142,4 +149,100 @@ onDestroy(() => {
 {/if}
 
 <style>
+	
+.history-list {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	padding: 16px;
+	max-width: 900px;
+	margin: 0 auto;
+	list-style-type: none;
+}
+
+.history-overlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+
+	background-color: rgba(0, 0, 0, 0.5);
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	z-index: 1000;
+}
+
+.history-window {
+	background-color: var(--my-bg);
+	border-radius: 8px;
+	box-shadow:
+		0 4px 20px rgba(0, 0, 0, 0.2),
+		inset 0 0 4px 4px rgba(0, 0, 0, 0.1);
+	width: 500px;
+	height: 500px;
+	max-width: 90%;
+	max-height: 80vh;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+}
+
+.history-header {
+	padding: 16px;
+	background-color: var(--my-dark-gray);
+	border-bottom: 1px solid #ddd;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+}
+
+.history-title {
+	font-weight: bold;
+	color: white;
+	font-size: 18px;
+	margin: 0;
+}
+
+.history-body {
+	flex: 1;
+	overflow-y: auto;
+	padding: 0;
+}
+
+.history-item {
+	padding: 12px 16px;
+	border-bottom: 1px solid #eee;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	cursor: pointer;
+}
+
+.history-item:hover {
+	background-color: var(--my-green);
+}
+
+.query-text {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.empty-history {
+	padding: 20px;
+	text-align: center;
+	color: #666;
+	max-width: 500px;
+	margin: auto;
+	background: var(--my-light-gray);
+	border-radius: 10px;
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+}
+
 </style>

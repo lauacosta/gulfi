@@ -8,7 +8,7 @@ fmt:
     cargo fmt
 
 watch: 
-    watchexec -r -e rs -- cargo run -- serve dev
+    watchexec -r -e rs,svelte,html,ts,css -- cargo run -- serve prod
 
 
 # Searches for unused dependencies

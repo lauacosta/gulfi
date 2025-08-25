@@ -1,5 +1,8 @@
 <script lang="ts">
 import { writable } from "svelte/store";
+import { onMount } from "svelte";
+import { selectedDocument } from "../stores";
+import type { Document } from "./types";
 
 let isExpanded = $state(false);
 
@@ -12,6 +15,24 @@ window.addEventListener("popstate", () => {
 function isActive(path: string) {
 	return $currentPath === path;
 }
+
+let options: string[] = $state([]);
+
+const apiUrl = import.meta.env.VITE_API_URL;
+async function fetch_documents(): Promise<Document[]> {
+	const response = await fetch(`${apiUrl}/api/documents`);
+	return await response.json();
+}
+
+onMount(async () => {
+	const response = await fetch_documents();
+	options = response.map((doc) => doc.name);
+
+	if ($selectedDocument === null && options.length > 0) {
+		selectedDocument.set(options[0]);
+	}
+});
+
 </script>
 
 <aside class={isExpanded ? "expanded" : "collapsed"}>
@@ -128,9 +149,80 @@ function isActive(path: string) {
             </li>
         </ul>
     </nav>
+    <footer class="top-bar">
+        <label>
+            {$selectedDocument.toLocaleUpperCase()}
+            <select bind:value={$selectedDocument}>
+                {#each options as option}
+                    <option value={option}>{option}</option>
+                {/each}
+            </select>
+        </label>
+    </footer>
 </aside>
 
 <style>
+
+aside {
+	background-color: var(--my-dark-gray);
+	color: white;
+	padding: 1rem;
+	border: 1px solid var(--my-mid-gray);
+	display: flex;
+	flex-direction: column;
+	transition: width 0.5s ease-in-out;
+	height: auto;
+	min-height: 100%;
+}
+
+.expanded {
+	width: 15rem;
+}
+
+.collapsed {
+	width: 10rem;
+	align-items: center;
+}
+
+aside ul {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+}
+
+aside li {
+	padding: 1px;
+	cursor: pointer;
+	border-radius: 5px;
+}
+
+aside li:hover {
+	background-color: #444;
+}
+
+.active {
+	background-color: rgba(0, 0, 0, 0.2);
+	border-radius: 5px;
+}
+
+.icon {
+	font-size: 1.5rem;
+	padding: 8px;
+	border-radius: 5px;
+}
+
+.label {
+	margin-left: 10px;
+}
+
+.collapsed .label {
+	display: none;
+}
+
+.collapsed a {
+	justify-content: center;
+}
+
 
 .toggle-btn {
     background: none;
@@ -140,4 +232,6 @@ function isActive(path: string) {
     font-size: 1.2rem;
     margin-bottom: 1rem;
 }
+
+
 </style>
