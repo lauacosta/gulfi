@@ -39,7 +39,8 @@ pub struct Query {
 }
 
 impl Query {
-    // TODO: Write a good one
+    // TODO: Write a good one using nom (https://github.com/rust-bakery/nom), to be easily
+    // extendable
     pub fn parse(input: &str) -> Result<Self, ParsingError> {
         let input_clean = clean_html(input.to_owned());
 

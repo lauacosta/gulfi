@@ -38,16 +38,10 @@ fn run_cli(cli: Cli) -> Result<(), CliError> {
             port,
             open,
             pool_size,
-            #[cfg(debug_assertions)]
-            mode,
         } => {
             let db_path = cli.db.clone();
             let overrides = ServerOverrides::new(interface, port, db_path, pool_size);
 
-            #[cfg(debug_assertions)]
-            commands::server::start_server(overrides, open, documents, &mode)?;
-
-            #[cfg(not(debug_assertions))]
             commands::server::start_server(overrides, open, documents)?;
         }
         Command::Sync {
@@ -70,11 +64,6 @@ fn run_cli(cli: Cli) -> Result<(), CliError> {
                 "\n🎉 Synchronization finished! took {} ms.\n",
                 start.elapsed().as_millis()
             );
-        }
-        Command::CreateUser { username, password } => {
-            let db_path = cli.db.as_ref().expect("db file missing");
-
-            commands::users::create_user(db_path, &username, &password).or_exit();
         }
     }
 

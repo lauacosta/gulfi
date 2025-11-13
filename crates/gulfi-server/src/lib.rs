@@ -20,7 +20,7 @@ use serde::Serialize;
 use std::fmt::{Display, Formatter};
 use views::HistorialView;
 
-pub static ASSETS: Dir = include_dir!("$CARGO_MANIFEST_DIR/ui/dist");
+pub static ASSETS: Dir = include_dir!("$CARGO_MANIFEST_DIR/dist");
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
 pub enum Sexo {

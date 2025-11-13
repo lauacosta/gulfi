@@ -61,14 +61,11 @@ impl Cli {
 pub enum Command {
     /// Starts the HTTP server.
     Serve {
-        #[cfg(debug_assertions)]
-        mode: Profile,
-
-        /// Sets the IP address.
+        /// Sets the IP address for the HTTP server.
         #[clap(short = 'I', long)]
         interface: Option<IpAddr>,
 
-        /// Sets the port.
+        /// Sets the port for the HTTP server.
         #[clap(short = 'P', long)]
         port: Option<u16>,
 
@@ -76,23 +73,26 @@ pub enum Command {
         #[clap(long)]
         pool_size: Option<usize>,
 
-        /// Opens the web interface.
+        /// Opens the web interface in the default browser.
         #[arg(long, default_value = "false")]
         open: bool,
     },
     /// Updates the database.
     Sync {
+        /// Name of the document to sync.
         document: String,
-
-        /// Updates from scratch.
+        /// Rewrites the database from scratch.
         #[arg(long, default_value = "false")]
         force: bool,
 
-        /// Sets the strategy for updating.
+        /// Sets the strategy for updating. Possible values are Fts, Vector, Full and indicate
+        /// wether it will synchronize the fts virtual table, the vector virtual table or both
+        /// tables against the new data.
         #[arg(value_enum,  default_value_t = SyncStrategy::Fts)]
         sync_strat: SyncStrategy,
 
-        /// Sets the base time for backoff in requests in ms.
+        // TODO: Open up to other alternatives to embedding, like local models, etc.
+        /// Sets the base time for doing expontential backoff for the requests to OpenAI's API in ms.
         #[arg(long, default_value_t = 2)]
         base_delay: u64,
 
@@ -105,19 +105,12 @@ pub enum Command {
         #[arg(value_enum, long, default_value_t = Format::Pretty)]
         format: Format,
     },
-    /// Adds a new document.
+    /// Starts the wizard to add a new document.
     Add,
-    /// Deletes a document.
-    Delete { document: String },
-    /// Creates a new user in the database.
-    CreateUser { username: String, password: String },
-}
 
-#[cfg(debug_assertions)]
-#[derive(Debug, Clone, ValueEnum, PartialEq, Eq)]
-pub enum Profile {
-    Dev,
-    Prod,
+    // TODO: Evaluate the need of the meta.json file instead of having everything in the database.
+    /// Deletes a document, deleting it from the meta.json and the sqlite database.
+    Delete { document: String },
 }
 
 #[derive(Debug, Clone, ValueEnum, PartialEq, Eq)]
@@ -139,16 +132,3 @@ pub enum Cache {
     Enabled,
     Disabled,
 }
-
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//
-//     // #[test]
-//     // fn it_works() {
-//     //     let result = add(2, 2);
-//     //     assert_eq!(result, 4);
-//     // }
-// }
-//
-//

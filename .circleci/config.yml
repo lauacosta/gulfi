@@ -4,7 +4,7 @@ orbs:
   shadesmar: shadesmar/rust@1.2.0
   node: circleci/node@7.1.0
   slack: circleci/slack@5.1.1
-  sonarcloud: sonarsource/sonarcloud@3.0
+  # sonarcloud: sonarsource/sonarcloud@3.0
 
 workflows:
   version: 2
@@ -28,14 +28,6 @@ workflows:
       - build_ui:
           context: [slack]
 
-      - sonarcloud:
-          context: [aws, slack, sonarqube]
-          requires:
-            - dependency_analysis
-            - check
-            - coverage_report
-            - test
-
       - update_taiga:
           context: [aws, taiga, slack]
           requires:
@@ -46,7 +38,6 @@ workflows:
       - hold_for_approval:
           type: approval
           requires:
-            - sonarcloud
             - update_taiga
             - build_ui
           filters:
@@ -176,19 +167,19 @@ jobs:
           template: basic_fail_1
 
           
-  sonarcloud:
-    docker:
-      - image: node:latest
-    steps:
-      - checkout
-      - attach_workspace:
-          at: /root/project
-      - run: |
-          ls
-      - sonarcloud/scan
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
+  # sonarcloud:
+  #   docker:
+  #     - image: node:latest
+  #   steps:
+  #     - checkout
+  #     - attach_workspace:
+  #         at: /root/project
+  #     - run: |
+  #         ls
+  #     - sonarcloud/scan
+  #     - slack/notify:
+  #         event: fail
+  #         template: basic_fail_1
 
   update_taiga:
     executor: shadesmar/rust
