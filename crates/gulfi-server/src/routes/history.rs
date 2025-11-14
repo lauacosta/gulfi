@@ -14,10 +14,10 @@ use tracing::{debug, info_span};
 
 use crate::{
     HistorialView,
-    search::SearchStrategy,
     startup::ServerState,
     views::{HistorialFullView, HistorialParams},
 };
+use gulfi_shared::SearchStrategy;
 
 #[axum::debug_handler]
 #[tracing::instrument(name = "history.fetch_summary", skip(app))]

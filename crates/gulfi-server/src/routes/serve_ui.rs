@@ -3,14 +3,13 @@ use axum::{
     response::IntoResponse,
 };
 
+use gulfi_ui::ASSETS;
 use http::{HeaderMap, HeaderValue};
 use mime_guess::from_path;
 use tracing::{info, instrument, warn};
 
-use crate::ASSETS;
-
 #[instrument(level = "info")]
-pub async fn serve_ui(uri: Uri) -> impl IntoResponse {
+pub async fn serve_assets(uri: Uri) -> impl IntoResponse {
     let path = uri.path();
 
     let file_path = if path.starts_with("/assets/") {

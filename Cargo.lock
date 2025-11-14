@@ -1206,6 +1206,8 @@ dependencies = [
  "gulfi-ingest",
  "gulfi-openai",
  "gulfi-query",
+ "gulfi-shared",
+ "gulfi-ui",
  "http",
  "include_dir",
  "mime_guess",
@@ -1242,7 +1244,10 @@ name = "gulfi-shared"
 version = "0.6.1"
 dependencies = [
  "chrono",
+ "eyre",
+ "rusqlite",
  "serde",
+ "thiserror 2.0.14",
  "ts-rs",
  "uuid",
  "wasm-bindgen",
@@ -1254,6 +1259,8 @@ version = "0.6.1"
 dependencies = [
  "askama",
  "expect-test",
+ "gulfi-shared",
+ "include_dir",
  "serde",
 ]
 

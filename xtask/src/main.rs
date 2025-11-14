@@ -8,7 +8,7 @@ fn main() {
     args.next();
 
     match args.next().as_deref() {
-        Some("build-frontend") => build_frontend(),
+        Some("bundle") => bundle(),
         Some(cmd) => {
             eprintln!("Unknown xtask command: {}", cmd);
             std::process::exit(1);
@@ -20,10 +20,10 @@ fn main() {
     }
 }
 
-fn build_frontend() {
+fn bundle() {
     let in_ci = std::env::var("CI").is_ok() || std::env::var("GITHUB_ACTIONS").is_ok();
 
-    let build_frontend = match std::env::var("BUILD_FRONTEND") {
+    let bundle = match std::env::var("BUILD_FRONTEND") {
         Ok(val) => {
             println!("cargo:warning=BUILD_FRONTEND set to: {val}");
             val == "true"
@@ -37,10 +37,10 @@ fn build_frontend() {
         }
     };
 
-    let ui_dir = Path::new("frontend");
-    let output_dir = Path::new("frontend/dist");
+    let ui_dir = Path::new("crates/gulfi-ui/frontend");
+    let output_dir = Path::new("crates/gulfi-uifrontend/dist");
 
-    if in_ci && !build_frontend {
+    if in_ci && !bundle {
         println!("cargo:warning=Skipping frontend build in CI");
 
         let placeholder = output_dir.join("placeholder.html");

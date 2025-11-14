@@ -1,3 +1,4 @@
+use axum::response::{Html, IntoResponse};
 use axum::{
     BoxError, Extension, Router, body::Body, error_handling::HandleErrorLayer, http::Request,
     routing::get, serve::Serve,
@@ -38,9 +39,9 @@ use crate::configuration::Settings;
 use crate::formatter::ColoredOnResponse;
 use crate::routes::{
     add_favoritos, auth, delete_favoritos, delete_historial, documents, favoritos, health_check,
-    historial_detailed, historial_summary, search, serve_ui,
+    historial_detailed, historial_summary, search, serve_assets,
 };
-use crate::search::SearchStrategy;
+use gulfi_shared::SearchStrategy;
 
 #[derive(Debug, Clone)]
 pub struct ServerState {
@@ -269,9 +270,13 @@ pub fn build_server(listener: TcpListener, state: ServerState) -> Result<Serve<R
             .layer(BufferLayer::new(1024)), // .layer(RateLimitLayer::new(1000, Duration::from_secs(1))),
     );
 
-    let frontend_routes = Router::new()
-        .route("/assets/*path", get(serve_ui))
-        .fallback(serve_ui);
+    // let frontend_routes = Router::new()
+    //     .route("/assets/*path", get(serve_ui))
+    //     .fallback(serve_ui);
+
+    let askama_routes = Router::new()
+        .route("/", get(askama_index))
+        .route("/assets/*path", get(serve_assets));
 
     let api_routes = Router::new()
         .nest("/api", search_routes)
@@ -284,7 +289,7 @@ pub fn build_server(listener: TcpListener, state: ServerState) -> Result<Serve<R
         )
         .route("/api/documents", get(documents));
 
-    let mut server = api_routes.merge(frontend_routes).with_state(state);
+    let mut server = api_routes.merge(askama_routes).with_state(state);
 
     if cfg!(debug_assertions) {
         let cors = CorsLayer::new()
@@ -384,4 +389,13 @@ pub async fn run_server(
         }
     }
     Ok(())
+}
+
+#[axum::debug_handler]
+async fn askama_index() -> Result<impl IntoResponse, String> {
+    Ok(Html(
+        gulfi_ui::IndexTemplate::default()
+            .renderr()
+            .unwrap_or("Hola!".to_string()),
+    ))
 }

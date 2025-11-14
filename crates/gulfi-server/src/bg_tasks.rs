@@ -1,3 +1,4 @@
+use gulfi_shared::SearchStrategy;
 use rusqlite::{Connection, params};
 use std::{
     path::Path,
@@ -5,8 +6,6 @@ use std::{
 };
 use tokio::sync::mpsc;
 use tracing::{info_span, instrument};
-
-use crate::search::SearchStrategy;
 
 #[derive(Debug)]
 pub enum WriteJob {

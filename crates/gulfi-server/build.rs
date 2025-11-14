@@ -3,7 +3,7 @@ use std::{fs, io, path::Path};
 /// A little setup func to copy the dist folder in frontend to a place where at compile time I can
 /// access it, because I need to use absolute paths in the include_dir crate.
 fn main() {
-    recursive_copy("../../frontend/dist/", "dist")
+    recursive_copy("../gulfi-ui/assets/", "dist/assets")
         .expect("Failed to copy files from frontend/dist to here");
 }
 
