@@ -37,8 +37,8 @@ fn bundle() {
         }
     };
 
-    let ui_dir = Path::new("crates/gulfi-ui/frontend");
-    let output_dir = Path::new("crates/gulfi-uifrontend/dist");
+    let ui_dir = Path::new("crates/gulfi_ui/frontend");
+    let output_dir = Path::new("crates/gulfi_uifrontend/dist");
 
     if in_ci && !bundle {
         println!("cargo:warning=Skipping frontend build in CI");

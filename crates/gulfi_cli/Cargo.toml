@@ -1,0 +1,24 @@
+[package]
+name = "gulfi_cli"
+edition = "2024"
+license.workspace = true
+version.workspace = true
+
+
+[dependencies]
+clap = { workspace = true, features = ["cargo"] }
+eyre.workspace = true
+color-eyre.workspace = true
+serde_json.workspace = true
+serde.workspace = true
+rusqlite.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+argon2.workspace = true
+config.workspace = true
+password-hash.workspace = true
+secrecy.workspace = true
+
+gulfi_server = { path = "../gulfi_server/"}
+gulfi_ingest= { path = "../gulfi_ingest/"}
+gulfi_openai = { path = "../gulfi_openai/" }

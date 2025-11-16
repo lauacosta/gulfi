@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link rel="icon" href="./public/favicon.ico" type="image/x-icon" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin /> <link
+            href="https://fonts.googleapis.com/css2?family=Roboto+Mono:ital,wght@0,100..700;1,100..700&display=swap"
+            rel="stylesheet"
+        />
+        <link rel="stylesheet" href="/assets/styles.css">
+        <title>Gulfi</title>
+    </head>
+  <body>
+    <div class="top-bar">
+        <label>
+            Documento:
+        </label>
+    </div>
+
+    <div class="content-wrapper">
+        <!-- Sidebar -->
+        <aside class="sidebar {% if is_expanded %}expanded{% else %}collapsed{% endif %}">
+            <button class="toggle-btn" onclick="this.classList.toggle('expanded')">
+                <!-- TODO: Move to icons -->
+                <svg class="icon-collapsed"
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="24" height="24" viewBox="0 0 24 24"
+                    fill="none" stroke="currentColor"
+                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect width="18" height="18" x="3" y="3" rx="2" />
+                    <path d="M9 3v18" />
+                    <path d="m16 15-3-3 3-3" />
+                </svg>
+                <svg class="icon-expanded"
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="24" height="24" viewBox="0 0 24 24"
+                    fill="none" stroke="currentColor"
+                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect width="18" height="18" x="3" y="3" rx="2" />
+                    <path d="M9 3v18" />
+                    <path d="m14 9 3 3-3 3" />
+                </svg>
+            </button>
+
+                <nav>
+                  <ul>
+                    <li class="{% if active_route == "/" %}active{% endif %}">
+                        <a href="/">
+                            <span class="icon">{% include "icons/search.svg" %}</span>
+                            {% if is_expanded %}
+                                <span class="label">Busqueda</span>
+                            {% endif %}
+                        </a>
+                    </li>
+
+                    <li class="{% if active_route == "/favorites" %}active{% endif %}">
+                        <a href="/favorites">
+                            <span class="icon">{% include "icons/star.svg" %}</span>
+                            {% if is_expanded %}
+                                <span class="label">Favorites</span>
+                            {% endif %}
+                        </a>
+                    </li>
+
+                    <li class="{% if active_route == "/history" %}active{% endif %}">
+                        <a href="/history">
+                            <span class="icon">{% include "icons/history.svg" %}</span>
+                            {% if is_expanded %}
+                                <span class="label">History</span>
+                            {% endif %}
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+
+            </aside>
+
+            <main class="main-content">
+            <!-- TODO: ASKAMA TO THE RESCUE -->
+            <!-- <HistoryFloating /> -->
+            {% include "partials/history_floating.html" %}
+
+            <div class="legend">
+                <div class="legend-title">Atajos</div>
+                    <div class="legend-item">
+                        <span class="kbssample">Ctrl+b</span>
+                        <span class="legend-text">Search</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="kbssample">Ctrl+h</span>
+                        <span class="legend-text">Open history</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="kbssample">"Ctrl+Shift+s</span>
+                        <span class="legend-text">Download as CSV</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="kbssample">Ctrl+Shift+f</span>
+                        <span class="legend-text">Add to Favorites</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-container">
+                <form method="POST" action="/search">
+                    <div class="config-options">
+                        <div class="search-group">
+                            <label for="strategy">Método de Búsqueda:</label>
+
+                            <select id="strategy" name="strategy">
+                                <option value="Fts"
+                                    {% if strategy == SearchStrategy::Fts %}selected{% endif %}
+                                >
+                                    Full Text Search
+                                </option>
+
+                                <option value="Semantic"
+                                    {% if strategy == SearchStrategy::Semantic %}selected{% endif %}
+                                >
+                                    Semantic
+                                </option>
+
+                                <option value="ReciprocalRankFusion"
+                                    {% if strategy == SearchStrategy::ReciprocalRankFusion %}selected{% endif %}
+                                >
+                                    Hybrid
+                            </select>
+                        </div>
+
+
+                        {% if strategy != SearchStrategy::Fts %}
+                            <div class="search-group">
+                                <label for="k">N° de Vecinos:</label>
+                                <input type="number" id="k" name="k" min="1" max="4096" value="{{ k }}"/>
+                            </div>
+                        {% else %}
+                            <input type="hidden" name="k" value="{{ k }}"/>
+                        {% endif %}
+
+                        {% if strategy == SearchStrategy::ReciprocalRankFusion %}
+                            <div class="search-group">
+                                <label for="balance">Pesos:</label>
+
+                                <input type="range" id="balance" name="peso_fts" min="0" max="100"
+                                    value="{{ peso_fts }}"/>
+
+                                <p>FTS: {{ peso_fts }} | Semantic: {{ peso_semantic }}</p>
+                            </div>
+                        {% endif %}
+
+                        <input type="hidden" name="document" value="{{ selected_document }}"/>
+                    </div>
+
+                    <div class="search-group search-bar full-width">
+                        <label for="search-input">Búsqueda:</label>
+                        <input
+                            type="text"
+                            id="search-input"
+                            name="query"
+                            placeholder="Ingresa tu busqueda..."
+                            required
+                        />
+                    </div>
+
+                    {% if has_search_error() %}
+                        <div class="error-box">
+                            <p>{{ search_error_message() }}</p>
+                        </div>
+                    {% endif %}
+
+
+                    <div class="button-container">
+                        {% if is_streaming %}
+                            <button type="button" class="btn btn-cancel">
+                                Cancelar
+                            </button>
+                        {% else %}
+                            <button type="submit" class="btn search-button">
+                                {% if is_loading %}Buscando...{% else %}Buscar{% endif %}
+                            </button>
+                        {% endif %}
+                    </div>
+
+                </form>
+            </div>
+
+            <div>
+            <!-- TODO: ASKAMA TO THE RESCUE -->
+                <!-- <Table --> 
+                <!-- table={$tableContent} --> 
+                <!-- isLoading={searchState.isLoading} -->
+                <!-- isStreaming={searchState.isStreaming} -->
+                <!-- streamingCount={streamingResults.length} -->
+                <!-- /> -->
+                {% include "partials/table.html" %}
+            </div>
+            </main>
+    </div>
+    <!-- <script type="module" src="/src/main.js"></script> -->
+  </body>
+</html>
+

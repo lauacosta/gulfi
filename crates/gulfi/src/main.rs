@@ -12,17 +12,15 @@ fn main() -> eyre::Result<()> {
     color_eyre::install()?;
     Cli::check_config()?;
 
-    let cli = Cli::parse();
-
-    if let Err(e) = run_cli(cli) {
+    if let Err(e) = run_cli(Cli::parse()) {
         e.exit_with_tips();
     }
 
     Ok(())
 }
 
-fn run_cli(cli: Cli) -> Result<(), CliError> {
-    let cli = Cli::merge_with_config(cli, &get_configuration()?);
+fn run_cli(mut cli: Cli) -> Result<(), CliError> {
+    cli.merge_with_config(&get_configuration()?);
 
     let (_, documents) = load_meta_docs(&cli)?;
 

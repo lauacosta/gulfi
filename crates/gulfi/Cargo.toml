@@ -19,8 +19,8 @@ chrono.workspace = true
 serde_json.workspace = true
 rusqlite.workspace = true
 
-gulfi-ingest = { path = "../gulfi-ingest/"}
-gulfi-cli = { path = "../gulfi-cli/"}
+gulfi_ingest = { path = "../gulfi_ingest/"}
+gulfi_cli = { path = "../gulfi_cli/"}
 
 # Examples:
 # Triggers cargo-udeps

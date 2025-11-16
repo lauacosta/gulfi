@@ -1,0 +1,53 @@
+[package]
+name = "gulfi_server"
+edition = "2024"
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+tower = { version = "0.5.0", features = ["limit", "buffer"] }
+tower-http = { version = "0.5.2", features = ["compression-gzip", "cors", "fs", "trace"] }
+tower-request-id = "0.3.0"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json", "time"] }
+mime_guess = "2.0.5"
+webbrowser = "1.0.3"
+include_dir = "0.7.4"
+termcolor = "1.4.1"
+rand = "0.9.1"
+moka = { version = "0.12.10", features = ["future", "logging"] }
+tracing-error = "0.2.0"
+async-stream = "0.3.6"
+tracing-log = "0.2.0"
+tracing-opentelemetry = "0.31.0"
+opentelemetry = "0.30.0"
+opentelemetry_sdk = "0.30.0"
+opentelemetry-otlp = {version = "0.30.0", features = ["serialize"] }
+futures = "0.3.31"
+
+eyre.workspace = true
+tracing.workspace = true
+color-eyre.workspace = true
+axum.workspace = true
+tokio.workspace = true
+rusqlite.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde-aux.workspace = true
+serde_json.workspace = true
+http.workspace = true
+zerocopy.workspace = true
+serde_urlencoded.workspace = true
+chrono.workspace = true
+argon2.workspace = true
+config.workspace = true
+password-hash.workspace = true
+secrecy.workspace = true
+
+gulfi_query = { path = "../gulfi_query/"}
+gulfi_ingest= { path = "../gulfi_ingest/"}
+gulfi_shared = { path = "../gulfi_shared/"}
+gulfi_ui = { path = "../gulfi_ui/"}
+gulfi_openai = { path = "../gulfi_openai/"}
+thiserror.workspace = true
+
+

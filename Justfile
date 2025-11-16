@@ -3,7 +3,7 @@
 _default:
     @just --list
 
-build:build-ui
+build: bundle
     cargo build --bin gulfi
 
 # Runs cargo fmt
@@ -30,8 +30,8 @@ test:
     cargo nextest r --locked --all-features --all-targets --profile ci
 
 # Builds the UI
-build-ui:
-    cargo run --bin xtask -- build-frontend
+bundle:
+    cargo run --bin xtask -- bundle 
 
 # Runs cargo-deny
 deny:
@@ -41,7 +41,7 @@ deny:
 audit:
     cargo audit
 
-ci: fmt check test udeps audit deny build-ui
+ci: fmt check test udeps audit deny bundle
 
 validate-ci:
     circleci config validate
