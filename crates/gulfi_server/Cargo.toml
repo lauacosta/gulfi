@@ -17,7 +17,6 @@ rand = "0.9.1"
 moka = { version = "0.12.10", features = ["future", "logging"] }
 tracing-error = "0.2.0"
 async-stream = "0.3.6"
-tracing-log = "0.2.0"
 tracing-opentelemetry = "0.31.0"
 opentelemetry = "0.30.0"
 opentelemetry_sdk = "0.30.0"
@@ -49,5 +48,6 @@ gulfi_shared = { path = "../gulfi_shared/"}
 gulfi_ui = { path = "../gulfi_ui/"}
 gulfi_openai = { path = "../gulfi_openai/"}
 thiserror.workspace = true
+tracing-log = "0.2.0"
 
 

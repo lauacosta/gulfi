@@ -311,28 +311,14 @@ pub fn build_server(listener: TcpListener, state: ServerState) -> Result<Serve<R
                 .layer(
                     TraceLayer::new_for_http()
                         .make_span_with(|request: &Request<Body>| {
-                            let request_id = request
-                                .extensions()
-                                .get::<RequestId>()
-                                .map_or_else(|| "unknown".into(), ToString::to_string);
-
                             info_span!(
                                 "request",
-                                id = %request_id,
-                                trace_id = tracing::field::Empty,
-                                span_id = tracing::field::Empty,
+                                // id = %request_id,
+                                // trace_id = tracing::field::Empty,
+                                // span_id = tracing::field::Empty,
                                 method = %request.method().blue().bold(),
-                                uri = %request.uri(),
+                                uri = %request.uri().path(),
                             )
-                        })
-                        .on_request(|_request: &Request<Body>, span: &Span| {
-                            let context = span.context();
-
-                            let span_id = context.span().span_context().span_id().to_string();
-                            let trace_id = context.span().span_context().trace_id().to_string();
-
-                            span.record("span_id", &span_id);
-                            span.record("trace_id", &trace_id);
                         })
                         .on_response(
                             ColoredOnResponse::new()

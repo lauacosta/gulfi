@@ -437,7 +437,7 @@ pub fn setup_sqlite(conn: &rusqlite::Connection, doc: &Document) -> Result<()> {
     Ok(())
 }
 
-pub fn insert_base_data(conn: &rusqlite::Connection, doc: &Document) -> Result<()> {
+pub fn insert_base_data(conn: &mut rusqlite::Connection, doc: &Document) -> Result<()> {
     let doc_name = doc.name.clone();
 
     let num: usize = conn.query_row(&format!("select count(*) from {doc_name}"), [], |row| {
@@ -463,8 +463,9 @@ pub fn insert_base_data(conn: &rusqlite::Connection, doc: &Document) -> Result<(
     );
 
     let start = std::time::Instant::now();
-    conn.execute("BEGIN TRANSACTION", [])
-        .expect("Should be a valid SQL sentence");
+    let tx = conn.transaction()?;
+    // conn.execute("BEGIN TRANSACTION", [])
+    //     .expect("Should be a valid SQL sentence");
 
     let fields_str = {
         let fields: Vec<String> = doc
@@ -477,23 +478,27 @@ pub fn insert_base_data(conn: &rusqlite::Connection, doc: &Document) -> Result<(
         fields.join(", ")
     };
 
-    let sql_statement = doc.generate_vec_input();
-    let mut statement = conn.prepare(&format!(
-        "insert or ignore into {doc_name} ({fields_str}, vec_input)
+    {
+        let sql_statement = doc.generate_vec_input();
+        let mut statement = tx.prepare(&format!(
+            "insert or ignore into {doc_name} ({fields_str}, vec_input)
         select {fields_str}, {sql_statement} as vec_input from {doc_name}_raw; "
-    ))?;
+        ))?;
 
-    let inserted = statement
-        .execute(rusqlite::params![])
-        .map_err(|err| eyre!(err))?;
-    let elapsed = start.elapsed().as_millis();
-    eprintln!(
-        "Total records processed: {inserted} into {} ({elapsed} ms)",
-        doc_name.bright_purple()
-    );
+        let inserted = statement
+            .execute(rusqlite::params![])
+            .map_err(|err| eyre!(err))?;
+        let elapsed = start.elapsed().as_millis();
+        eprintln!(
+            "Total records processed: {inserted} into {} ({elapsed} ms)",
+            doc_name.bright_purple()
+        );
 
-    conn.execute("COMMIT", [])
-        .expect("Should be a valid SQL sentence");
+        // conn.execute("COMMIT", [])
+        //     .expect("Should be a valid SQL sentence");
+    }
+
+    tx.commit()?;
 
     Ok(())
 }

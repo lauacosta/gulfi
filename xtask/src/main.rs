@@ -25,14 +25,11 @@ fn bundle() {
 
     let bundle = match std::env::var("BUILD_FRONTEND") {
         Ok(val) => {
-            println!("cargo:warning=BUILD_FRONTEND set to: {val}");
+            eprintln!("BUILD_FRONTEND set to: {val}");
             val == "true"
         }
         Err(_) => {
-            println!(
-                "cargo:warning=BUILD_FRONTEND not set, default to: {}",
-                !in_ci
-            );
+            eprintln!("BUILD_FRONTEND not set, default to: {}", !in_ci);
             !in_ci
         }
     };
@@ -41,7 +38,7 @@ fn bundle() {
     let output_dir = Path::new("crates/gulfi_uifrontend/dist");
 
     if in_ci && !bundle {
-        println!("cargo:warning=Skipping frontend build in CI");
+        eprintln!("Skipping frontend build in CI");
 
         let placeholder = output_dir.join("placeholder.html");
         let mut file = fs::File::create(&placeholder).expect("Failed to create placeholder file");
@@ -49,14 +46,11 @@ fn bundle() {
         file.write_all(b"<!DOCTYPE html><html><body><h1>Placeholder for CI</h1></body></html>")
             .expect("Failed to write placeholder");
 
-        println!(
-            "cargo:warning=Placeholder created for CI at: {}",
-            placeholder.display()
-        );
+        eprintln!("Placeholder created for CI at: {}", placeholder.display());
         return;
     }
 
-    println!("cargo:warning=Checking pnpm installation...");
+    eprintln!("Checking pnpm installation...");
     let pnpm_status = Command::new("pnpm")
         .arg("--version")
         .output()
@@ -70,9 +64,9 @@ fn bundle() {
     }
 
     let pnpm_version = String::from_utf8_lossy(&pnpm_status.stdout);
-    println!("cargo:warning=pnpm found, version: {}", pnpm_version.trim());
+    eprintln!("pnpm found, version: {}", pnpm_version.trim());
 
-    println!("cargo:warning=Building frontend with pnpm...");
+    eprintln!("Building frontend with pnpm...");
 
     let status = Command::new("pnpm")
         .args([
@@ -90,5 +84,5 @@ fn bundle() {
         panic!("Svelte build failed with exit code: {:?}", status.code());
     }
 
-    println!("cargo:warning=UI built successfully at frontend/dist");
+    eprintln!("UI built successfully at frontend/dist");
 }

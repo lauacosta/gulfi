@@ -118,9 +118,9 @@ impl<B> OnResponse<B> for ColoredOnResponse {
     fn on_response(self, response: &http::Response<B>, latency: Duration, _: &tracing::Span) {
         let latency = Latency::new(latency);
 
-        let response_headers = self
-            .include_headers
-            .then(|| tracing::field::debug(response.headers()));
+        // let response_headers = self
+        //     .include_headers
+        //     .then(|| tracing::field::debug(response.headers()));
 
         let status = response.status();
         let colored_status = if status.is_success() {
@@ -135,10 +135,10 @@ impl<B> OnResponse<B> for ColoredOnResponse {
 
         event_dynamic_lvl!(
             self.level,
-            latency = %format!("{}", latency.bright_blue().bold()),
             status = %colored_status,
-            response_headers,
-            "request procesado"
+            latency = %format!("{}", latency.bright_blue().bold()),
+            // response_headers
+            // "request procesado"
         );
     }
 }

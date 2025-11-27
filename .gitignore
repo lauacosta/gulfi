@@ -1,4 +1,5 @@
 **/target/
+perf*
 **/dist/
 *.sqlite3
 .env

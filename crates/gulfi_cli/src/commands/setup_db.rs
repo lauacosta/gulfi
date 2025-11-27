@@ -30,7 +30,7 @@ where
         )));
     }
 
-    let conn = spawn_vec_connection(db_path)?;
+    let mut conn = spawn_vec_connection(db_path)?;
 
     let Some(doc) = docs.iter().find(|d| d.name == doc) else {
         let available = docs.iter().map(|d| &d.name).collect::<Vec<_>>();
@@ -57,7 +57,7 @@ where
     }
 
     setup_sqlite(&conn, doc)?;
-    insert_base_data(&conn, doc)?;
+    insert_base_data(&mut conn, doc)?;
 
     Ok(doc.clone())
 }

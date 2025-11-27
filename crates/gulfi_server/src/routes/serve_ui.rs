@@ -6,9 +6,9 @@ use axum::{
 use gulfi_ui::ASSETS;
 use http::{HeaderMap, HeaderValue};
 use mime_guess::from_path;
-use tracing::{info, instrument, warn};
+use tracing::{debug, info, instrument, warn};
 
-#[instrument(level = "info")]
+#[instrument(level = "debug")]
 pub async fn serve_assets(uri: Uri) -> impl IntoResponse {
     let path = uri.path();
 
@@ -39,7 +39,7 @@ pub async fn serve_assets(uri: Uri) -> impl IntoResponse {
 
         (headers, file.contents()).into_response()
     } else {
-        warn!("Archivo no encontrado: {:?}", file_path);
+        debug!(path=%file_path, "Asset not found");
         StatusCode::NOT_FOUND.into_response()
     }
 }
