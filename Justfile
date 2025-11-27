@@ -11,7 +11,7 @@ fmt:
     cargo fmt
 
 watch: 
-    watchexec -r -e rs -- cargo run -- serve dev
+    watchexec -r -e rs -- cargo run --bin gulfi -- serve 
 
 # Searches for unused dependencies
 udeps:

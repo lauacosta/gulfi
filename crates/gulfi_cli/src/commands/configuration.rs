@@ -18,7 +18,7 @@ embedding_provider:
     auth_token: "your-secret-token-here"
 db_settings:
     pool_size: "10"
-    db_path: "./gulfi.db"
+    path: "./gulfi.db"
 tracer_provider:
     service_name: my-app
     protocol: HttpBinary
