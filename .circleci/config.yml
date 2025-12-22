@@ -15,9 +15,6 @@ workflows:
       - test:
           context: [aws]
 
-      - coverage_report:
-          context: [aws]
-
       - dependency_analysis:
           context: [aws]
           requires:
@@ -42,14 +39,6 @@ workflows:
             branches:
               only: main
 
-      # - deploy_to_vps:
-      #     context: [aquiles, slack, aws]
-      #     requires:
-      #       - hold_for_approval
-      #     filters:
-      #       branches:
-      #         only: main
-
 jobs:
   check:
     executor: shadesmar/rust
@@ -58,11 +47,7 @@ jobs:
       - shadesmar/with_rust:
           steps:
             - run: |
-                just check_report
-            - persist_to_workspace:
-                root: /root/project
-                paths:
-                  - clippy.json
+                just check
 
 
   test:
@@ -73,31 +58,6 @@ jobs:
           steps:
             - run: |
                 just test
-            - run: |
-                mv /root/project/target/nextest/ci/junit.xml /root/project/
-
-            - store_test_results:
-                path: junit.xml
-
-            - persist_to_workspace:
-                root: /root/project
-                paths:
-                  - junit.xml
-
-
-  coverage_report:
-    executor: shadesmar/rust
-    steps:
-      - checkout
-      - shadesmar/with_rust:
-          steps:
-            - run: |
-                just coverage
-
-            - persist_to_workspace:
-                root: /root/project
-                paths:
-                  - lcov.info
 
 
   dependency_analysis:
@@ -110,25 +70,13 @@ jobs:
           steps:
             - run: |
                   echo "Running unused dependencies check..."
-                  just udeps_report || true
+                  just udeps
                   
                   echo "Running license and dependency denial check..."
-                  just deny_report || true
+                  just deny
                    
                   echo "Running security audit..."
-                  just audit_report || true
-
-                  echo "Preparing sonar analysis..."
-                  just sonar
-
-            - persist_to_workspace:
-                root: /root/project
-                paths:
-                  - sonar-issues.json
-                  - udeps.json
-                  - clippy.json
-                  - audit.json
-                  - deny.json
+                  just audit
                 
   build_ui:
     docker:
@@ -140,12 +88,7 @@ jobs:
 
       - run:
           name: building-ui
-          command: cd crates/gulfi-server/ui/ && pnpm install && pnpm build
-
-      - persist_to_workspace:     
-          root: .
-          paths:
-            - crates/gulfi-server/ui/dist
+          command: cargo run -p xtask -- bundle
 
   update_taiga:
     executor: shadesmar/rust
@@ -154,27 +97,3 @@ jobs:
       - shadesmar/update_taiga:
           project_name: Gulfi
           
-  # deploy_to_vps:
-  #   executor: shadesmar/rust
-  #   steps:
-  #     - checkout
-
-  #     - attach_workspace:
-  #         at: .
-
-  #     - run:
-  #         name: Build Gulfi
-  #         command : |
-  #           cargo build --release
-
-  #     - run:
-  #         name: Prepare deploy script
-  #         command: |
-  #           chmod +x scripts/deploy.sh
-
-  #     - shadesmar/with_rust:
-  #         steps:
-  #           - run:
-  #               name: Deploy to VPS
-  #               command: ./scripts/deploy.sh
-  #               no_output_timeout: 10m
