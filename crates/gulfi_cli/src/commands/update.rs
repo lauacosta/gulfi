@@ -27,8 +27,7 @@ pub fn handle_vector(
     let rt = tokio::runtime::Runtime::new()?;
 
     let start = Instant::now();
-    let (inserted, average) =
-        rt.block_on(sync_vec_data(conn, doc, base_delay, chunk_size, client))?;
+    let (inserted, average) = sync_vec_data(conn, doc, base_delay, chunk_size, client)?;
 
     let elapsed = start.elapsed().as_millis();
 

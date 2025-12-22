@@ -1,14 +1,15 @@
 pub mod embedding_message;
-
 use secrecy::{ExposeSecret, SecretBox, SecretString};
-use std::time::{Duration, Instant};
+use std::io::Read;
+use std::{
+    sync::mpsc::Sender,
+    time::{Duration, Instant},
+};
 
-use bytes::BufMut;
 use eyre::Result;
 use rand::Rng;
-use reqwest::Client;
+use reqwest::blocking::{Client, Response};
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc::Sender;
 use tracing::{debug, error, info, instrument, warn};
 
 use crate::embedding_message::EmbeddingMessage;
@@ -30,7 +31,7 @@ impl OpenAIClient {
     }
     // https://community.openai.com/t/does-the-index-field-on-an-embedding-response-correlate-to-the-index-of-the-input-text-it-was-generated-from/526099
     // FIX: Siempre hay una request que devuelve 400 no 429.
-    pub async fn embed_vec_with_progress(
+    pub fn embed_vec_with_progress(
         &self,
         indices: Vec<u64>,
         input: Vec<String>,
@@ -41,9 +42,7 @@ impl OpenAIClient {
     ) -> Result<(Vec<(u64, Vec<f32>)>, u128)> {
         let global_start = Instant::now();
 
-        let _ = tx
-            .send(EmbeddingMessage::Preparing { count: input.len() })
-            .await;
+        let _ = tx.send(EmbeddingMessage::Preparing { count: input.len() });
 
         let request = RequestBody {
             input,
@@ -60,12 +59,10 @@ impl OpenAIClient {
 
         while current_try <= MAX_RETRIES {
             let req_start = Instant::now();
-            let _ = tx
-                .send(EmbeddingMessage::SendingRequest {
-                    attempt: (current_try + 1) as usize,
-                    max_attempts: (MAX_RETRIES + 1) as usize,
-                })
-                .await;
+            let _ = tx.send(EmbeddingMessage::SendingRequest {
+                attempt: (current_try + 1) as usize,
+                max_attempts: (MAX_RETRIES + 1) as usize,
+            });
 
             let call = EmbeddingCall {
                 request: EmbeddingRequest {
@@ -82,61 +79,62 @@ impl OpenAIClient {
                 proc_id,
             };
 
-            match request_embeddings(call).await {
+            match request_embeddings(call) {
                 Ok(resp) => {
                     let elapsed = req_start.elapsed().as_millis();
-                    let _ = tx
-                        .send(EmbeddingMessage::RequestSuccessful {
-                            elapsed_ms: (elapsed),
-                        })
-                        .await;
+                    let _ = tx.send(EmbeddingMessage::RequestSuccessful {
+                        elapsed_ms: (elapsed),
+                    });
                     response = Some(resp);
                     break;
                 }
                 Err(EmbeddingError::RateLimit) => {
-                    let _ = tx
-                        .send(EmbeddingMessage::RateLimit {
-                            attempt: (current_try + 1) as usize,
-                            max_attempts: (MAX_RETRIES + 1) as usize,
-                        })
-                        .await;
+                    let _ = tx.send(EmbeddingMessage::RateLimit {
+                        attempt: (current_try + 1) as usize,
+                        max_attempts: (MAX_RETRIES + 1) as usize,
+                    });
                     current_try += 1;
                 }
                 Err(e) => {
-                    let _ = tx
-                        .send(EmbeddingMessage::Error {
-                            message: format!("{e}"),
-                        })
-                        .await;
+                    let _ = tx.send(EmbeddingMessage::Error {
+                        message: format!("{e}"),
+                    });
                     return Err(e.into());
                 }
             }
         }
 
         let Some(mut response) = response else {
-            let _ = tx.send(EmbeddingMessage::MaxRetriesExceeded).await;
+            let _ = tx.send(EmbeddingMessage::MaxRetriesExceeded);
             return Err(EmbeddingError::MaxRetriesExceeded.into());
         };
 
-        let _ = tx.send(EmbeddingMessage::ParsingResponse).await;
+        let _ = tx.send(EmbeddingMessage::ParsingResponse);
         let start = Instant::now();
+
+        // let capacity = response.content_length().unwrap_or(0) as usize;
+        // let mut payload = Vec::with_capacity(capacity);
+        // response.read_to_end(&mut payload)?;
 
         let capacity = response.content_length().unwrap_or(0) as usize;
         let mut payload = Vec::with_capacity(capacity);
-        while let Some(chunk) = response.chunk().await? {
-            payload.put(chunk);
+        let mut buffer = [0; 8192]; // 8KB buffer
+
+        loop {
+            match response.read(&mut buffer)? {
+                0 => break, // EOF
+                n => payload.extend_from_slice(&buffer[..n]),
+            }
         }
 
         let response: ResponseBody = simd_json::serde::from_slice(&mut payload)?;
 
         let elapsed = start.elapsed().as_millis();
-        let _ = tx
-            .send(EmbeddingMessage::ParsingComplete {
-                elapsed_ms: elapsed,
-            })
-            .await;
+        let _ = tx.send(EmbeddingMessage::ParsingComplete {
+            elapsed_ms: elapsed,
+        });
 
-        let _ = tx.send(EmbeddingMessage::ProcessingEmbeddings).await;
+        let _ = tx.send(EmbeddingMessage::ProcessingEmbeddings);
         let embedding: Vec<(u64, Vec<f32>)> = std::iter::zip(
             indices,
             EmbeddingObject::embeddings_iter(response.embeddings),
@@ -144,17 +142,15 @@ impl OpenAIClient {
         .collect();
 
         let total_elapsed = global_start.elapsed().as_millis();
-        let _ = tx
-            .send(EmbeddingMessage::Complete {
-                total_elapsed_ms: total_elapsed,
-            })
-            .await;
+        let _ = tx.send(EmbeddingMessage::Complete {
+            total_elapsed_ms: total_elapsed,
+        });
 
         Ok((embedding, total_elapsed))
     }
 
     #[instrument(name = "embed.request", skip(self, input, client) ,  fields(url = %self.endpoint_url, input_len = input.len()))]
-    pub async fn embed_single(&self, input: &str, client: &Client) -> Result<Vec<f32>> {
+    pub async fn embed_single(&self, input: &str, client: &reqwest::Client) -> Result<Vec<f32>> {
         let input = input.to_string();
         let global_start = Instant::now();
 
@@ -180,7 +176,6 @@ impl OpenAIClient {
         info!("Sending request to Open AI...");
         let response = client
             .post(endpoint_url)
-            // .post("https://api.openai.com/v1/embeddings")
             .bearer_auth(open_ai_key.expose_secret())
             .json(&request)
             .send()
@@ -231,7 +226,7 @@ struct EmbeddingCall<'a> {
     proc_id: usize,
 }
 
-async fn request_embeddings(call: EmbeddingCall<'_>) -> Result<reqwest::Response, EmbeddingError> {
+fn request_embeddings(call: EmbeddingCall<'_>) -> Result<Response, EmbeddingError> {
     let EmbeddingCall {
         request,
         retry,
@@ -256,15 +251,14 @@ async fn request_embeddings(call: EmbeddingCall<'_>) -> Result<reqwest::Response
         let jittered_delay = rand::rng().random_range(0..=base_delay / 2);
 
         debug!(%time_backoff, %base_delay, %jittered_delay);
-        tokio::time::sleep(Duration::from_millis(base_delay + jittered_delay)).await;
+        std::thread::sleep(Duration::from_millis(base_delay + jittered_delay));
     }
 
     let response = client
         .post(endpoint_url)
         .bearer_auth(token.expose_secret())
         .json(body)
-        .send()
-        .await?;
+        .send()?;
 
     let status = response.status();
 
@@ -281,7 +275,7 @@ async fn request_embeddings(call: EmbeddingCall<'_>) -> Result<reqwest::Response
                 Err(EmbeddingError::MaxRetriesExceeded)
             } else {
                 if let Some(retry_after) = retry_after {
-                    tokio::time::sleep(Duration::from_secs(retry_after)).await;
+                    std::thread::sleep(Duration::from_secs(retry_after));
                 }
                 Err(EmbeddingError::RateLimit)
             }
@@ -293,7 +287,6 @@ async fn request_embeddings(call: EmbeddingCall<'_>) -> Result<reqwest::Response
 
             let err_body = response
                 .text()
-                .await
                 .unwrap_or_else(|_| "No response body".to_string());
 
             let error_msg = format!("{status} -> {err_body}",);

@@ -16,7 +16,6 @@ use std::{
 use color_eyre::owo_colors::OwoColorize;
 use csv::ReaderBuilder;
 use eyre::{Result, eyre};
-use futures::StreamExt;
 use gulfi_openai::{OpenAIClient, embedding_message::EmbeddingMessage};
 use rusqlite::{
     Connection,
@@ -31,9 +30,10 @@ use crate::Filetype;
 use crate::reader::{Document, parse_sources};
 
 pub const DIMENSION: usize = 1536;
+// TODO: This is so ugly
 const KEYWORDS: &[&str] = &["SELECT", "DROP", "DELETE", "UPDATE", "INSERT", "TABLE"];
 
-pub async fn sync_vec_data(
+pub fn sync_vec_data(
     conn: &Connection,
     doc: &Document,
     base_delay: u64,
@@ -51,7 +51,8 @@ pub async fn sync_vec_data(
 
     let mut statement = conn.prepare_cached(&format!("select id, vec_input from {doc_name}"))?;
 
-    let v_inputs: Vec<(u64, String)> = match statement.query_map([], |row| {
+    // TODO: Avoid allocating so much memory
+    let embedding_inputs: Vec<(u64, String)> = match statement.query_map([], |row| {
         let id: u64 = row.get(0)?;
         let input: String = row.get::<_, String>(1)?;
         Ok((id, input))
@@ -62,102 +63,115 @@ pub async fn sync_vec_data(
         Err(err) => return Err(eyre!(err)),
     };
 
-    let http_client = reqwest::ClientBuilder::new()
-        .deflate(true)
-        .gzip(true)
-        .build()?;
+    let http_client = Arc::new(
+        reqwest::blocking::ClientBuilder::new()
+            .deflate(true)
+            .gzip(true)
+            .build()?,
+    );
 
     let bar_max = 30;
-    let chunks = v_inputs.chunks(chunk_size).count();
+    let chunks = embedding_inputs.chunks(chunk_size).count();
+
+    eprintln!(
+        "The work of generating embeddings will be divided in {chunks} of {chunk_size} embeddings each"
+    );
+
     let jobs_done = Arc::new(AtomicUsize::new(0));
-
-    let futures_iterator = v_inputs
-        .chunks(chunk_size)
-        .enumerate()
-        .map(|(chunk_id, chunk)| {
-            let (indices, v_inputs) = chunk.iter().cloned().unzip();
-            let (tx, mut rx) = tokio::sync::mpsc::channel::<EmbeddingMessage>(10);
-
-            let jobs_done = jobs_done.clone();
-            tokio::spawn(async move {
-                while let Some(msg) = rx.recv().await {
-                    if let EmbeddingMessage::Complete { .. } = msg {
-                        let jobs_done = 1 + jobs_done.fetch_add(1, Ordering::Relaxed);
-                        print!("\r    Progress: ");
-                        let bar_current = if chunks == 0 {
-                            0
-                        } else {
-                            bar_max * jobs_done / chunks
-                        };
-
-                        for _ in 0..bar_current {
-                            print!("#");
-                        }
-                        for _ in bar_current..bar_max {
-                            print!(".");
-                        }
-
-                        print!(" ({jobs_done}/{chunks})");
-                        std::io::stdout()
-                            .flush()
-                            .expect("Should be able to flush the pipe");
-                    }
-                }
-            });
-
-            client.embed_vec_with_progress(
-                indices,
-                v_inputs,
-                &http_client,
-                chunk_id,
-                base_delay,
-                tx,
-            )
-        });
-
-    let futures_stream = futures::stream::iter(futures_iterator);
     let total_inserted = Arc::new(AtomicUsize::new(0));
     let acc_time_per_chunk = Arc::new(AtomicUsize::new(0));
 
-    futures_stream.for_each_concurrent(Some(6), |future| {
-        let total_inserted = total_inserted.clone();
-        let acc_time_per_chunk = acc_time_per_chunk.clone();
-        let sent_doc_name = doc_name.clone();
-
-        async move {
-            match future.await {
-                Ok((data, millis)) => {
-
-                    let mut statement =
-                        conn.prepare(&format!("insert into vec_{sent_doc_name}(row_id, vec_input_embedding) values (?,?)")).expect("Should be able to prepare query");
-
-                    conn.execute("BEGIN TRANSACTION", []).expect(
-                        "Should be a valid SQL sentence",
-                    );
-
-                    let mut insertions = 0;
-                    for (id, embedding) in data {
-                        insertions += statement.execute(
-                            rusqlite::params![id, embedding.as_bytes()],
-                        ).unwrap_or_else(|_| panic!("Error inserting in vec_{sent_doc_name}"));
-
+    let (result_tx, result_rx) = std::sync::mpsc::channel::<(Vec<(u64, Vec<f32>)>, u128)>();
+    let (progress_tx, progress_rx) = std::sync::mpsc::channel::<EmbeddingMessage>();
+    let handles: Vec<_> = embedding_inputs
+        .chunks(chunk_size)
+        .enumerate()
+        .map(|(c_id, chunk)| {
+            let (indices, v_inputs) = chunk.iter().cloned().unzip();
+            let client = client.clone();
+            let http_client = http_client.clone();
+            let result_tx = result_tx.clone();
+            let progress_tx = progress_tx.clone();
+            std::thread::spawn(move || {
+                match client.embed_vec_with_progress(
+                    indices,
+                    v_inputs,
+                    &*http_client,
+                    c_id,
+                    base_delay,
+                    progress_tx,
+                ) {
+                    Ok(data) => {
+                        result_tx.send(data).ok();
                     }
-                    conn.execute("COMMIT", []).expect(
-                    "Should be a valid SQL sentence",
-                    );
-
-                     total_inserted.fetch_add(insertions, Ordering::Relaxed);
-
-                     let millis = millis.try_into().unwrap_or_default();
-                     acc_time_per_chunk.fetch_add(millis, Ordering::Relaxed);
-
+                    Err(err) => {
+                        error!("Error processing chunk {c_id}: {err}");
+                    }
                 }
-                Err(err) => {
-                    error!("Error processing chunk: {err}");
-                },
+            })
+        })
+        .collect();
+
+    drop(result_tx);
+    drop(progress_tx);
+
+    let jobs_done_progress = jobs_done.clone();
+    let progress_handle = std::thread::spawn(move || {
+        while let Ok(msg) = progress_rx.recv() {
+            if let EmbeddingMessage::Complete { .. } = msg {
+                let jobs_done = 1 + jobs_done_progress.fetch_add(1, Ordering::Relaxed);
+                print!("\r    Progress: ");
+                let bar_current = if chunks == 0 {
+                    0
+                } else {
+                    bar_max * jobs_done / chunks
+                };
+
+                for _ in 0..bar_current {
+                    print!("#");
+                }
+                for _ in bar_current..bar_max {
+                    print!(".");
+                }
+
+                print!(" ({jobs_done}/{chunks})");
+                std::io::stdout()
+                    .flush()
+                    .expect("Should be able to flush the pipe");
             }
         }
-    }).await;
+    });
+
+    let sent_doc_name = doc_name.clone();
+    while let Ok((payload, elapsed)) = result_rx.recv() {
+        let mut statement = conn
+            .prepare(&format!(
+                "insert into vec_{sent_doc_name}(row_id, vec_input_embedding) values (?,?)"
+            ))
+            .expect("Should be able to prepare query");
+
+        conn.execute("BEGIN TRANSACTION", [])
+            .expect("Should be a valid SQL sentence");
+
+        let mut insertions = 0;
+        for (id, embedding) in payload {
+            insertions += statement
+                .execute(rusqlite::params![id, embedding.as_bytes()])
+                .unwrap_or_else(|_| panic!("Error inserting in vec_{sent_doc_name}"));
+        }
+        conn.execute("COMMIT", [])
+            .expect("Should be a valid SQL sentence");
+
+        total_inserted.fetch_add(insertions, Ordering::Relaxed);
+
+        let millis = elapsed.try_into().unwrap_or_default();
+        acc_time_per_chunk.fetch_add(millis, Ordering::Relaxed);
+    }
+
+    for handle in handles {
+        handle.join().ok();
+    }
+    progress_handle.join().ok();
 
     let total = total_inserted.load(Ordering::Relaxed);
     let total_acc_chunks = acc_time_per_chunk.load(Ordering::Relaxed);
@@ -302,7 +316,22 @@ pub fn setup_sqlite(conn: &rusqlite::Connection, doc: &Document) -> Result<()> {
 
     validate_sql_identifier(&doc.name)?;
 
-    debug!("sqlite_version={sqlite_version}, vec_version={vec_version}");
+    eprintln!(
+        "{} {}",
+        "sqlite_version:".cyan(),
+        sqlite_version.bright_white()
+    );
+    eprintln!(
+        "{} {}",
+        "sqlite-vec version:".cyan(),
+        vec_version.bright_white()
+    );
+
+    eprintln!(
+        "{}",
+        "Creating base tables (historial, favoritos)...".yellow()
+    );
+
     let statement = "
             create table if not exists historial(
                 id integer primary key,
@@ -355,7 +384,14 @@ pub fn setup_sqlite(conn: &rusqlite::Connection, doc: &Document) -> Result<()> {
         .map_err(|err| eyre!(err))
         .expect("Should be a valid SQL sentence");
 
+    eprintln!("{}", "✓ Base tables created successfully".green());
+
     let doc_name = doc.name.clone();
+    eprintln!(
+        "{} {}",
+        "Processing document type:".cyan(),
+        doc_name.bright_white()
+    );
 
     let (raw_fields_str, fields_str, field_names) = {
         let fields: Vec<String> = doc
@@ -400,6 +436,16 @@ pub fn setup_sqlite(conn: &rusqlite::Connection, doc: &Document) -> Result<()> {
         (raw_fields_str, fields_str, fields_names)
     };
 
+    eprintln!(
+        "{} {}",
+        "Creating document-specific tables for:".yellow(),
+        doc_name.bright_white()
+    );
+    eprintln!("  • {}_raw", doc_name);
+    eprintln!("  • {}", doc_name);
+    eprintln!("  • fts_{}", doc_name);
+    eprintln!("  • vec_{}", doc_name);
+
     let statement = format!(
         "
             create table if not exists {doc_name}_raw(
@@ -434,6 +480,11 @@ pub fn setup_sqlite(conn: &rusqlite::Connection, doc: &Document) -> Result<()> {
         .map_err(|err| eyre!(err))
         .expect("Should be a valid SQL sentence");
 
+    eprintln!(
+        "{}",
+        "✓ Document tables created successfully. Ready for use\n".green()
+    );
+
     Ok(())
 }
 
@@ -455,17 +506,18 @@ pub fn insert_base_data(conn: &mut rusqlite::Connection, doc: &Document) -> Resu
 
     eprintln!("📁 Searching files in \"./datasources/{doc_name}\"...");
 
+    // Populate the raw table of the document previously generated on sqlite_setup
     let inserted = parse_and_insert(format!("./datasources/{doc_name}"), db_path, doc)?;
+
     let elapsed = start.elapsed().as_millis();
     eprintln!(
         "Total records processed: {inserted} into {} ({elapsed} ms)",
         format!("{doc_name}_raw").bright_yellow()
     );
 
+    // Now I populate the proper document table
     let start = std::time::Instant::now();
     let tx = conn.transaction()?;
-    // conn.execute("BEGIN TRANSACTION", [])
-    //     .expect("Should be a valid SQL sentence");
 
     let fields_str = {
         let fields: Vec<String> = doc
@@ -493,9 +545,6 @@ pub fn insert_base_data(conn: &mut rusqlite::Connection, doc: &Document) -> Resu
             "Total records processed: {inserted} into {} ({elapsed} ms)",
             doc_name.bright_purple()
         );
-
-        // conn.execute("COMMIT", [])
-        //     .expect("Should be a valid SQL sentence");
     }
 
     tx.commit()?;
@@ -503,6 +552,7 @@ pub fn insert_base_data(conn: &mut rusqlite::Connection, doc: &Document) -> Resu
     Ok(())
 }
 
+/// Looks for available files to parse and insert into the raw table of the document
 fn parse_and_insert<T: AsRef<Path> + Debug>(
     path: T,
     db_path: &str,

@@ -44,6 +44,8 @@ impl BuildInfo {
 #[derive(Debug)]
 struct DatabaseInfo {
     path: String,
+    sqlite_version: String,
+    sqlite_vec_version: String,
     size_bytes: u64,
     page_count: i64,
     page_size: i64,
@@ -55,10 +57,15 @@ struct DatabaseInfo {
 
 impl DatabaseInfo {
     fn from_path(db_path: impl AsRef<Path>) -> rusqlite::Result<Self> {
-        let conn = rusqlite::Connection::open(&db_path)?;
+        let conn = gulfi_ingest::spawn_vec_connection(&db_path)?;
         let path = db_path.as_ref().display().to_string();
 
         let size_bytes = std::fs::metadata(db_path).map(|m| m.len()).unwrap_or(0);
+
+        let (sqlite_version, vec_version): (String, String) =
+            conn.query_row("select sqlite_version(), vec_version()", [], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })?;
 
         let page_count: i64 = conn.query_row("PRAGMA page_count", [], |row| row.get(0))?;
         let page_size: i64 = conn.query_row("PRAGMA page_size", [], |row| row.get(0))?;
@@ -76,6 +83,8 @@ impl DatabaseInfo {
         Ok(Self {
             path,
             size_bytes,
+            sqlite_version,
+            sqlite_vec_version: vec_version,
             page_count,
             page_size,
             schema_version,
@@ -87,7 +96,17 @@ impl DatabaseInfo {
 
     pub fn print(&self) {
         println!("\n{}", "Database Information:".bold().blue());
-        println!("  {}         {}", "Path:".cyan(), self.path.bright_white());
+        println!("  {} {}", "Path:".cyan(), self.path.bright_white());
+        println!(
+            "  {} v{}",
+            "sqlite_version:".cyan(),
+            self.sqlite_version.bright_white()
+        );
+        println!(
+            "  {} {}",
+            "sqlite-vec_version:".cyan(),
+            self.sqlite_vec_version.bright_white()
+        );
 
         let size_mb = self.size_bytes as f64 / 1_048_576.0;
         let size_str = if size_mb < 0.01 {
