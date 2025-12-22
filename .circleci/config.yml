@@ -3,8 +3,6 @@ version: 2.1
 orbs:
   shadesmar: shadesmar/rust@1.2.0
   node: circleci/node@7.1.0
-  slack: circleci/slack@5.1.1
-  # sonarcloud: sonarsource/sonarcloud@3.0
 
 workflows:
   version: 2
@@ -12,21 +10,21 @@ workflows:
   build_and_test:
     jobs:
       - check:
-          context: [aws, slack]
+          context: [aws]
 
       - test:
-          context: [aws, slack]
+          context: [aws]
 
       - coverage_report:
-          context: [aws, slack]
+          context: [aws]
 
       - dependency_analysis:
-          context: [aws, slack]
+          context: [aws]
           requires:
             - check
 
       - build_ui:
-          context: [slack]
+          context: []
 
       - update_taiga:
           context: [aws, taiga, slack]
@@ -44,13 +42,13 @@ workflows:
             branches:
               only: main
 
-      - deploy_to_vps:
-          context: [aquiles, slack, aws]
-          requires:
-            - hold_for_approval
-          filters:
-            branches:
-              only: main
+      # - deploy_to_vps:
+      #     context: [aquiles, slack, aws]
+      #     requires:
+      #       - hold_for_approval
+      #     filters:
+      #       branches:
+      #         only: main
 
 jobs:
   check:
@@ -66,9 +64,6 @@ jobs:
                 paths:
                   - clippy.json
 
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
 
   test:
     executor: shadesmar/rust
@@ -89,9 +84,6 @@ jobs:
                 paths:
                   - junit.xml
 
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
 
   coverage_report:
     executor: shadesmar/rust
@@ -107,9 +99,6 @@ jobs:
                 paths:
                   - lcov.info
 
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
 
   dependency_analysis:
     executor: shadesmar/rust
@@ -141,10 +130,6 @@ jobs:
                   - audit.json
                   - deny.json
                 
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
-          
   build_ui:
     docker:
       - image: cimg/base:stable
@@ -162,25 +147,6 @@ jobs:
           paths:
             - crates/gulfi-server/ui/dist
 
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
-
-          
-  # sonarcloud:
-  #   docker:
-  #     - image: node:latest
-  #   steps:
-  #     - checkout
-  #     - attach_workspace:
-  #         at: /root/project
-  #     - run: |
-  #         ls
-  #     - sonarcloud/scan
-  #     - slack/notify:
-  #         event: fail
-  #         template: basic_fail_1
-
   update_taiga:
     executor: shadesmar/rust
     steps:
@@ -188,39 +154,27 @@ jobs:
       - shadesmar/update_taiga:
           project_name: Gulfi
           
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
+  # deploy_to_vps:
+  #   executor: shadesmar/rust
+  #   steps:
+  #     - checkout
 
-  deploy_to_vps:
-    executor: shadesmar/rust
-    steps:
-      - checkout
+  #     - attach_workspace:
+  #         at: .
 
-      - attach_workspace:
-          at: .
+  #     - run:
+  #         name: Build Gulfi
+  #         command : |
+  #           cargo build --release
 
-      - run:
-          name: Build Gulfi
-          command : |
-            cargo build --release
+  #     - run:
+  #         name: Prepare deploy script
+  #         command: |
+  #           chmod +x scripts/deploy.sh
 
-      - run:
-          name: Prepare deploy script
-          command: |
-            chmod +x scripts/deploy.sh
-
-      - shadesmar/with_rust:
-          steps:
-            - run:
-                name: Deploy to VPS
-                command: ./scripts/deploy.sh
-                no_output_timeout: 10m
-
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
-
-      - slack/notify:
-          event: pass
-          template: success_tagged_deploy_1
+  #     - shadesmar/with_rust:
+  #         steps:
+  #           - run:
+  #               name: Deploy to VPS
+  #               command: ./scripts/deploy.sh
+  #               no_output_timeout: 10m

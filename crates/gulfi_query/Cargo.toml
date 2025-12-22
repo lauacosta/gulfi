@@ -6,8 +6,8 @@ license.workspace = true
 
 [dependencies]
 thiserror = "2.0.12"
-ammonia = "4.0.0"
 expect-test = "1.5.1"
+ammonia.workspace = true
 
 [dev-dependencies]
 proptest = "1.6.0"

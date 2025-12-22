@@ -1,6 +1,6 @@
 use std::fmt::Write as _;
 use std::io::Write;
-use std::sync::atomic::AtomicBool;
+use std::sync::mpsc;
 use std::{
     fmt::Debug,
     fs::File,
@@ -10,42 +10,44 @@ use std::{
         Arc,
         atomic::{AtomicUsize, Ordering},
     },
-    time::Duration,
 };
 
 use color_eyre::owo_colors::OwoColorize;
 use csv::ReaderBuilder;
 use eyre::{Result, eyre};
-use gulfi_openai::{OpenAIClient, embedding_message::EmbeddingMessage};
+use gulfi_openai::OpenAIClient;
+use gulfi_types::embedding_events::EmbeddingEvent;
 use rusqlite::{
     Connection,
     ffi::{sqlite3, sqlite3_api_routines, sqlite3_auto_extension},
     params_from_iter,
 };
 use sqlite_vec::sqlite3_vec_init;
-use tracing::{debug, error};
 use zerocopy::IntoBytes;
 
-use crate::Filetype;
 use crate::reader::{Document, parse_sources};
+use crate::{
+    Filetype, RenderEvent, SyncStatistics, log_ui, route_embedding_events, spawn_render_thread,
+    spawn_spinner,
+};
 
 pub const DIMENSION: usize = 1536;
 // TODO: This is so ugly
 const KEYWORDS: &[&str] = &["SELECT", "DROP", "DELETE", "UPDATE", "INSERT", "TABLE"];
 
-pub fn sync_vec_data(
+pub fn update_vec_data(
     conn: &Connection,
     doc: &Document,
     base_delay: u64,
     chunk_size: usize,
     client: &OpenAIClient,
-) -> Result<(usize, f32)> {
+) -> Result<SyncStatistics> {
     let doc_name = doc.name.clone();
     validate_sql_identifier(&doc_name).expect("Should be a safe identifier");
 
     let start = std::time::Instant::now();
-    println!("Syncing VEC tables in {doc_name}!");
-    std::io::stdout()
+    eprintln!("Updating the data in the vec tables...");
+    std::io::stderr()
         .flush()
         .expect("Should be able to flush the pipe");
 
@@ -70,83 +72,57 @@ pub fn sync_vec_data(
             .build()?,
     );
 
-    let bar_max = 30;
     let chunks = embedding_inputs.chunks(chunk_size).count();
 
     eprintln!(
-        "The work of generating embeddings will be divided in {chunks} of {chunk_size} embeddings each"
+        "Generating embeddings in {} of {} embeddings each...",
+        chunks.bright_purple(),
+        chunk_size.bright_purple()
     );
 
-    let jobs_done = Arc::new(AtomicUsize::new(0));
     let total_inserted = Arc::new(AtomicUsize::new(0));
     let acc_time_per_chunk = Arc::new(AtomicUsize::new(0));
 
-    let (result_tx, result_rx) = std::sync::mpsc::channel::<(Vec<(u64, Vec<f32>)>, u128)>();
-    let (progress_tx, progress_rx) = std::sync::mpsc::channel::<EmbeddingMessage>();
+    let (result_tx, result_rx) = mpsc::channel::<(Vec<(u64, Vec<f32>)>, u128)>();
+    let (embedding_tx, embedding_rx) = mpsc::channel::<EmbeddingEvent>();
+    let (ui_tx, ui_rx) = mpsc::channel::<EmbeddingEvent>();
+
+    let router_handle = route_embedding_events(embedding_rx, ui_tx);
+    let ui_handle = log_ui(ui_rx, chunks);
+
     let handles: Vec<_> = embedding_inputs
         .chunks(chunk_size)
         .enumerate()
-        .map(|(c_id, chunk)| {
+        .map(|(job_id, chunk)| {
             let (indices, v_inputs) = chunk.iter().cloned().unzip();
             let client = client.clone();
             let http_client = http_client.clone();
             let result_tx = result_tx.clone();
-            let progress_tx = progress_tx.clone();
+            let progress_tx = embedding_tx.clone();
             std::thread::spawn(move || {
-                match client.embed_vec_with_progress(
+                if let Ok(data) = client.embed_vector(
                     indices,
                     v_inputs,
-                    &*http_client,
-                    c_id,
+                    &http_client,
+                    job_id,
                     base_delay,
                     progress_tx,
                 ) {
-                    Ok(data) => {
-                        result_tx.send(data).ok();
-                    }
-                    Err(err) => {
-                        error!("Error processing chunk {c_id}: {err}");
-                    }
+                    result_tx.send(data).ok();
                 }
             })
         })
         .collect();
 
     drop(result_tx);
-    drop(progress_tx);
+    drop(embedding_tx);
+    router_handle.join().ok();
+    ui_handle.join().ok();
 
-    let jobs_done_progress = jobs_done.clone();
-    let progress_handle = std::thread::spawn(move || {
-        while let Ok(msg) = progress_rx.recv() {
-            if let EmbeddingMessage::Complete { .. } = msg {
-                let jobs_done = 1 + jobs_done_progress.fetch_add(1, Ordering::Relaxed);
-                print!("\r    Progress: ");
-                let bar_current = if chunks == 0 {
-                    0
-                } else {
-                    bar_max * jobs_done / chunks
-                };
-
-                for _ in 0..bar_current {
-                    print!("#");
-                }
-                for _ in bar_current..bar_max {
-                    print!(".");
-                }
-
-                print!(" ({jobs_done}/{chunks})");
-                std::io::stdout()
-                    .flush()
-                    .expect("Should be able to flush the pipe");
-            }
-        }
-    });
-
-    let sent_doc_name = doc_name.clone();
     while let Ok((payload, elapsed)) = result_rx.recv() {
         let mut statement = conn
             .prepare(&format!(
-                "insert into vec_{sent_doc_name}(row_id, vec_input_embedding) values (?,?)"
+                "insert into vec_{doc_name}(row_id, vec_input_embedding) values (?,?)"
             ))
             .expect("Should be able to prepare query");
 
@@ -157,7 +133,7 @@ pub fn sync_vec_data(
         for (id, embedding) in payload {
             insertions += statement
                 .execute(rusqlite::params![id, embedding.as_bytes()])
-                .unwrap_or_else(|_| panic!("Error inserting in vec_{sent_doc_name}"));
+                .unwrap_or_else(|_| panic!("Error inserting in vec_{doc_name}"));
         }
         conn.execute("COMMIT", [])
             .expect("Should be a valid SQL sentence");
@@ -171,31 +147,13 @@ pub fn sync_vec_data(
     for handle in handles {
         handle.join().ok();
     }
-    progress_handle.join().ok();
 
-    let total = total_inserted.load(Ordering::Relaxed);
     let total_acc_chunks = acc_time_per_chunk.load(Ordering::Relaxed);
-
-    let media = total_acc_chunks as f32 / chunks as f32;
-
-    print!("\r    Progress: ");
-    for _ in 0..bar_max {
-        print!("#");
-    }
-
-    print!(" ({chunks}/{chunks})");
-    println!();
-
-    println!(
-        "{} updated! ({} ms)",
-        "VEC tables".bright_purple(),
-        start.elapsed().as_millis()
-    );
-    std::io::stdout()
-        .flush()
-        .expect("Should be able to flush the pipe");
-
-    Ok((total, media))
+    Ok(SyncStatistics {
+        total_inserted: total_inserted.load(Ordering::Relaxed),
+        average: total_acc_chunks as f32 / chunks as f32,
+        time_elapsed: start.elapsed().as_millis(),
+    })
 }
 
 pub fn create_indexes(conn: &Connection, doc: &Document) -> Result<()> {
@@ -210,9 +168,9 @@ pub fn create_indexes(conn: &Connection, doc: &Document) -> Result<()> {
     Ok(())
 }
 
-pub fn sync_fts_data(conn: &Connection, doc: &Document) -> usize {
+pub fn update_fts_data(conn: &Connection, doc: &Document) -> usize {
     let doc_name = doc.name.clone();
-    let start = std::time::Instant::now();
+    eprintln!("Updating the data in the fts tables...");
     validate_sql_identifier(&doc_name).expect("Should be a safe identifier");
 
     for field in &doc.fields {
@@ -230,28 +188,9 @@ pub fn sync_fts_data(conn: &Connection, doc: &Document) -> usize {
         fields.join(", ")
     };
 
-    let keep_spinning = Arc::new(AtomicBool::new(true));
-    let spinner_handle = {
-        let keep_spinning = Arc::clone(&keep_spinning);
-        let doc_name = doc_name.clone();
-        std::thread::spawn(move || {
-            let tick_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-            let mut tick_index = 0;
-
-            while keep_spinning.load(Ordering::Relaxed) {
-                print!(
-                    "\r{} Syncing FTS tables in {}...",
-                    tick_chars[tick_index], doc_name
-                );
-                std::io::stdout()
-                    .flush()
-                    .expect("Should be able to flush the pipe");
-
-                tick_index = (tick_index + 1) % tick_chars.len();
-                std::thread::sleep(Duration::from_millis(100));
-            }
-        })
-    };
+    let (render_tx, render_rx) = mpsc::channel::<RenderEvent>();
+    let render_handle = spawn_render_thread("Updating tables in tnea...".to_string(), render_rx);
+    let spinner_handle = spawn_spinner(render_tx.clone());
 
     let inserted = conn
         .execute(
@@ -276,14 +215,12 @@ pub fn sync_fts_data(conn: &Connection, doc: &Document) -> usize {
             .expect("Should be a valid SQL sentence");
     }
 
-    keep_spinning.store(false, Ordering::Relaxed);
-    spinner_handle.join().expect("Thread shouldn't be dropped");
-    println!(
-        "\r{} updated! ({} ms)",
-        "FTS tables".bright_cyan(),
-        start.elapsed().as_millis()
-    );
-    std::io::stdout()
+    render_tx.send(RenderEvent::Done).ok();
+    drop(render_tx);
+    spinner_handle.join().ok();
+    render_handle.join().ok();
+
+    std::io::stderr()
         .flush()
         .expect("Should be able to flush the pipe");
 
@@ -302,9 +239,6 @@ pub fn spawn_vec_connection<P: AsRef<Path>>(db_path: P) -> Result<Connection, ru
 
     db.pragma_update(None, "journal_mode", "WAL")?;
 
-    let mode: String = db.pragma_query_value(None, "journal_mode", |row| row.get(0))?;
-    debug!("Current journal mode: {}", mode);
-
     Ok(db)
 }
 
@@ -317,19 +251,7 @@ pub fn setup_sqlite(conn: &rusqlite::Connection, doc: &Document) -> Result<()> {
     validate_sql_identifier(&doc.name)?;
 
     eprintln!(
-        "{} {}",
-        "sqlite_version:".cyan(),
-        sqlite_version.bright_white()
-    );
-    eprintln!(
-        "{} {}",
-        "sqlite-vec version:".cyan(),
-        vec_version.bright_white()
-    );
-
-    eprintln!(
-        "{}",
-        "Creating base tables (historial, favoritos)...".yellow()
+        "Running on sqlite v{sqlite_version} (sqlite_vec {vec_version}) Setting up base tables..."
     );
 
     let statement = "
@@ -384,14 +306,10 @@ pub fn setup_sqlite(conn: &rusqlite::Connection, doc: &Document) -> Result<()> {
         .map_err(|err| eyre!(err))
         .expect("Should be a valid SQL sentence");
 
-    eprintln!("{}", "✓ Base tables created successfully".green());
+    eprintln!("  {}", "✓ Base tables created successfully".green());
 
     let doc_name = doc.name.clone();
-    eprintln!(
-        "{} {}",
-        "Processing document type:".cyan(),
-        doc_name.bright_white()
-    );
+    eprintln!("  {} {}", "Processing document type:".cyan(), doc_name);
 
     let (raw_fields_str, fields_str, field_names) = {
         let fields: Vec<String> = doc
@@ -436,16 +354,6 @@ pub fn setup_sqlite(conn: &rusqlite::Connection, doc: &Document) -> Result<()> {
         (raw_fields_str, fields_str, fields_names)
     };
 
-    eprintln!(
-        "{} {}",
-        "Creating document-specific tables for:".yellow(),
-        doc_name.bright_white()
-    );
-    eprintln!("  • {}_raw", doc_name);
-    eprintln!("  • {}", doc_name);
-    eprintln!("  • fts_{}", doc_name);
-    eprintln!("  • vec_{}", doc_name);
-
     let statement = format!(
         "
             create table if not exists {doc_name}_raw(
@@ -474,16 +382,18 @@ pub fn setup_sqlite(conn: &rusqlite::Connection, doc: &Document) -> Result<()> {
             ",
     );
 
-    debug!(?statement);
-
     conn.execute_batch(&statement)
         .map_err(|err| eyre!(err))
         .expect("Should be a valid SQL sentence");
 
-    eprintln!(
-        "{}",
-        "✓ Document tables created successfully. Ready for use\n".green()
-    );
+    let mut out = String::new();
+    let _ = writeln!(out, "  {}", "✓ Document tables created:".green());
+    let _ = writeln!(out, "    • {}_raw table created", doc_name);
+    let _ = writeln!(out, "    • {} table created", doc_name);
+    let _ = writeln!(out, "    • fts_{} table created", doc_name);
+    let _ = writeln!(out, "    • vec_{} table created", doc_name);
+
+    eprintln!("{out}");
 
     Ok(())
 }
@@ -495,24 +405,25 @@ pub fn insert_base_data(conn: &mut rusqlite::Connection, doc: &Document) -> Resu
         row.get(0)
     })?;
 
+    eprintln!("Inserting base data on the document tables...");
     if num != 0 {
-        eprintln!("📦 Document '{doc_name}' has {num} entries.");
+        eprintln!("  📦 Document '{doc_name}' has {num} entries.");
     } else {
-        eprintln!("📦 Document '{doc_name}' is empty.");
+        eprintln!("  📦 Document '{doc_name}' is empty.");
     }
 
     let start = std::time::Instant::now();
     let db_path = conn.path().expect("Should be able to access db path");
 
-    eprintln!("📁 Searching files in \"./datasources/{doc_name}\"...");
+    eprintln!("  📁 Searching files in \"./datasources/{doc_name}\"...");
 
     // Populate the raw table of the document previously generated on sqlite_setup
     let inserted = parse_and_insert(format!("./datasources/{doc_name}"), db_path, doc)?;
 
     let elapsed = start.elapsed().as_millis();
     eprintln!(
-        "Total records processed: {inserted} into {} ({elapsed} ms)",
-        format!("{doc_name}_raw").bright_yellow()
+        "  Total records processed into {}: {inserted} ({elapsed} ms)",
+        format!("{doc_name}_raw").bright_purple()
     );
 
     // Now I populate the proper document table
@@ -542,7 +453,7 @@ pub fn insert_base_data(conn: &mut rusqlite::Connection, doc: &Document) -> Resu
             .map_err(|err| eyre!(err))?;
         let elapsed = start.elapsed().as_millis();
         eprintln!(
-            "Total records processed: {inserted} into {} ({elapsed} ms)",
+            "  Total records processed into {}: {inserted} ({elapsed} ms)\n",
             doc_name.bright_purple()
         );
     }
@@ -599,7 +510,7 @@ fn parse_and_insert<T: AsRef<Path> + Debug>(
         }
 
         print!(" ({job_counter}/{max_jobs})");
-        std::io::stdout().flush()?;
+        std::io::stderr().flush()?;
 
         let start = std::time::Instant::now();
         match ext {

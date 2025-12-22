@@ -8,7 +8,7 @@ license.workspace = true
 tower = { version = "0.5.0", features = ["limit", "buffer"] }
 tower-http = { version = "0.5.2", features = ["compression-gzip", "cors", "fs", "trace"] }
 tower-request-id = "0.3.0"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json", "time"] }
+tracing-subscriber = { version = "0.3.20", features = ["env-filter", "json", "time"] }
 mime_guess = "2.0.5"
 webbrowser = "1.0.3"
 include_dir = "0.7.4"
@@ -39,7 +39,6 @@ serde_urlencoded.workspace = true
 chrono.workspace = true
 argon2.workspace = true
 config.workspace = true
-password-hash.workspace = true
 secrecy.workspace = true
 
 gulfi_query = { path = "../gulfi_query/"}

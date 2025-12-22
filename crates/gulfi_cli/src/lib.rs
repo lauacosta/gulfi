@@ -68,7 +68,7 @@ pub enum Command {
         telemetry: bool,
     },
     /// Updates the database.
-    Sync {
+    Update {
         /// Name of the document to sync.
         document: String,
         /// Rewrites the database from scratch.
@@ -78,30 +78,34 @@ pub enum Command {
         /// Sets the strategy for updating. Possible values are Fts, Vector, Full and indicate
         /// wether it will synchronize the fts virtual table, the vector virtual table or both
         /// tables against the new data.
-        #[arg(value_enum,  default_value_t = SyncStrategy::Fts)]
-        sync_strat: SyncStrategy,
+        #[arg(value_enum,  default_value_t = UpdateStrategy::Fts)]
+        update_strat: UpdateStrategy,
 
         // TODO: Open up to other alternatives to embedding, like local models, etc.
         /// Sets the base time for doing expontential backoff for the requests to OpenAI's API in ms.
         #[arg(long, default_value_t = 2)]
         base_delay: u64,
 
-        /// Sets the size of the chunks when splitting the entries for processing.
+        /// Sets the size of the chunks when splitting the entries when ingesting.
         #[arg(long, default_value_t = 1024)]
         chunk_size: usize,
     },
     /// Lists all defined documents.
     List {
-        #[arg(value_enum, long, default_value_t = Format::Pretty)]
-        format: Format,
+        #[arg(long, value_enum, default_value_t = MessageFormat::PrettyText)]
+        message_format: MessageFormat,
     },
     /// Starts the wizard to add a new document.
     Add,
 
     /// Prints useful information about the binary itself and the database.
     Info {
-        #[arg(long = "db-path")]
+        // Database from where to report data, defaults to the one defined in the config file
+        #[arg(default_value = None)]
         db_path: Option<PathBuf>,
+
+        #[arg(long, value_enum, default_value_t = MessageFormat::PrettyText)]
+        message_format: MessageFormat,
     },
 
     // TODO: Evaluate the need of the meta.json file instead of having everything in the database.
@@ -123,13 +127,13 @@ impl Cli {
 }
 
 #[derive(Debug, Clone, ValueEnum, PartialEq, Eq)]
-pub enum Format {
+pub enum MessageFormat {
     Json,
-    Pretty,
+    PrettyText,
 }
 
 #[derive(Debug, Clone, ValueEnum, PartialEq, Eq)]
-pub enum SyncStrategy {
+pub enum UpdateStrategy {
     Fts,
     Vector,
     All,

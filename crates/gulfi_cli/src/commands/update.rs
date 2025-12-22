@@ -1,17 +1,20 @@
 use std::{path::Path, time::Instant};
 
 use color_eyre::owo_colors::OwoColorize;
-use gulfi_ingest::{Document, create_indexes, spawn_vec_connection, sync_fts_data, sync_vec_data};
+use gulfi_ingest::{
+    Document, SyncStatistics, create_indexes, spawn_vec_connection, update_fts_data,
+    update_vec_data,
+};
 use gulfi_openai::OpenAIClient;
 use gulfi_server::configuration::get_configuration;
 use rusqlite::Connection;
 use secrecy::ExposeSecret;
 
-use crate::{CliError, ExitOnError, SyncStrategy};
+use crate::{CliError, ExitOnError, UpdateStrategy};
 
 pub fn handle_fts(conn: &Connection, doc: &Document) -> (usize, u128) {
     let start = Instant::now();
-    let inserted = sync_fts_data(conn, doc);
+    let inserted = update_fts_data(conn, doc);
     let elapsed = start.elapsed().as_millis();
 
     (inserted, elapsed)
@@ -23,21 +26,14 @@ pub fn handle_vector(
     base_delay: u64,
     chunk_size: usize,
     client: &OpenAIClient,
-) -> Result<(usize, f32, u128), CliError> {
-    let rt = tokio::runtime::Runtime::new()?;
-
-    let start = Instant::now();
-    let (inserted, average) = sync_vec_data(conn, doc, base_delay, chunk_size, client)?;
-
-    let elapsed = start.elapsed().as_millis();
-
-    Ok((inserted, average, elapsed))
+) -> Result<SyncStatistics, CliError> {
+    Ok(update_vec_data(conn, doc, base_delay, chunk_size, client)?)
 }
 
 pub fn handle<P: AsRef<Path>>(
     db_path: P,
     doc: &Document,
-    strat: &SyncStrategy,
+    strat: &UpdateStrategy,
     base_delay: u64,
     chunk_size: usize,
 ) -> Result<(), CliError> {
@@ -53,7 +49,7 @@ pub fn handle<P: AsRef<Path>>(
     );
 
     match strat {
-        SyncStrategy::Fts => {
+        UpdateStrategy::Fts => {
             let (inserted, elapsed) = handle_fts(&conn, doc);
 
             eprintln!(
@@ -61,20 +57,20 @@ pub fn handle<P: AsRef<Path>>(
                 format!("fts_{}", doc.name).bright_cyan().bold(),
             );
         }
-        SyncStrategy::Vector => {
-            let (inserted, average, vec_elapsed) =
-                handle_vector(&conn, doc, base_delay, chunk_size, &client).or_exit();
+        UpdateStrategy::Vector => {
+            let stats = handle_vector(&conn, doc, base_delay, chunk_size, &client).or_exit();
 
             eprintln!(
-                "{inserted} entries were synced in {} ({vec_elapsed} ms, average of {average} ms per chunk).",
+                "{} entries were synced in {} ({} ms, average of {} ms per chunk).",
+                stats.total_inserted,
+                stats.time_elapsed,
+                stats.average,
                 format!("vec_{}", doc.name).bright_purple().bold(),
             );
         }
-        SyncStrategy::All => {
+        UpdateStrategy::All => {
             let (inserted_fts, fts_elapsed) = handle_fts(&conn, doc);
-
-            let (inserted, average, vec_elapsed) =
-                handle_vector(&conn, doc, base_delay, chunk_size, &client).or_exit();
+            let stats = handle_vector(&conn, doc, base_delay, chunk_size, &client).or_exit();
 
             eprintln!(
                 "{inserted_fts} entries were synced in {} ({fts_elapsed} ms).",
@@ -82,7 +78,10 @@ pub fn handle<P: AsRef<Path>>(
             );
 
             eprintln!(
-                "{inserted} entries were synced in {} ({vec_elapsed} ms, average of {average} ms per chunk).",
+                "{} entries were synced in {} ({} ms, average of {} ms per chunk).",
+                stats.total_inserted,
+                stats.time_elapsed,
+                stats.average,
                 format!("vec_{}", doc.name).bright_purple().bold(),
             );
         }

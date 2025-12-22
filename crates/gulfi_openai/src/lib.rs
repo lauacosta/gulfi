@@ -1,4 +1,4 @@
-pub mod embedding_message;
+use gulfi_types::embedding_events::{EmbeddingEvent, EmbeddingEventKind};
 use secrecy::{ExposeSecret, SecretBox, SecretString};
 use std::io::Read;
 use std::{
@@ -12,8 +12,6 @@ use reqwest::blocking::{Client, Response};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info, instrument, warn};
 
-use crate::embedding_message::EmbeddingMessage;
-
 const MAX_RETRIES: u32 = 5;
 
 #[derive(Debug, Clone)]
@@ -21,6 +19,8 @@ pub struct OpenAIClient {
     pub auth_token: SecretString,
     pub endpoint_url: String,
 }
+
+type TechDebt = (Vec<(u64, Vec<f32>)>, u128);
 
 impl OpenAIClient {
     pub fn new(auth_token: String, endpoint_url: String) -> Self {
@@ -31,18 +31,21 @@ impl OpenAIClient {
     }
     // https://community.openai.com/t/does-the-index-field-on-an-embedding-response-correlate-to-the-index-of-the-input-text-it-was-generated-from/526099
     // FIX: Siempre hay una request que devuelve 400 no 429.
-    pub fn embed_vec_with_progress(
+    pub fn embed_vector(
         &self,
         indices: Vec<u64>,
         input: Vec<String>,
         client: &Client,
         proc_id: usize,
         base_delay: u64,
-        tx: Sender<EmbeddingMessage>,
-    ) -> Result<(Vec<(u64, Vec<f32>)>, u128)> {
+        tx: Sender<EmbeddingEvent>,
+    ) -> Result<TechDebt> {
         let global_start = Instant::now();
 
-        let _ = tx.send(EmbeddingMessage::Preparing { count: input.len() });
+        let _ = tx.send(EmbeddingEvent {
+            proc_id,
+            kind: EmbeddingEventKind::Preparing { count: input.len() },
+        });
 
         let request = RequestBody {
             input,
@@ -59,9 +62,12 @@ impl OpenAIClient {
 
         while current_try <= MAX_RETRIES {
             let req_start = Instant::now();
-            let _ = tx.send(EmbeddingMessage::SendingRequest {
-                attempt: (current_try + 1) as usize,
-                max_attempts: (MAX_RETRIES + 1) as usize,
+            let _ = tx.send(EmbeddingEvent {
+                proc_id,
+                kind: EmbeddingEventKind::SendingRequest {
+                    attempt: (current_try + 1) as usize,
+                    max_attempts: (MAX_RETRIES + 1) as usize,
+                },
             });
 
             let call = EmbeddingCall {
@@ -82,22 +88,31 @@ impl OpenAIClient {
             match request_embeddings(call) {
                 Ok(resp) => {
                     let elapsed = req_start.elapsed().as_millis();
-                    let _ = tx.send(EmbeddingMessage::RequestSuccessful {
-                        elapsed_ms: (elapsed),
+                    let _ = tx.send(EmbeddingEvent {
+                        proc_id,
+                        kind: EmbeddingEventKind::RequestSuccessful {
+                            elapsed_ms: (elapsed),
+                        },
                     });
                     response = Some(resp);
                     break;
                 }
                 Err(EmbeddingError::RateLimit) => {
-                    let _ = tx.send(EmbeddingMessage::RateLimit {
-                        attempt: (current_try + 1) as usize,
-                        max_attempts: (MAX_RETRIES + 1) as usize,
+                    let _ = tx.send(EmbeddingEvent {
+                        proc_id,
+                        kind: EmbeddingEventKind::RateLimit {
+                            attempt: (current_try + 1) as usize,
+                            max_attempts: (MAX_RETRIES + 1) as usize,
+                        },
                     });
                     current_try += 1;
                 }
                 Err(e) => {
-                    let _ = tx.send(EmbeddingMessage::Error {
-                        message: format!("{e}"),
+                    let _ = tx.send(EmbeddingEvent {
+                        proc_id,
+                        kind: EmbeddingEventKind::Error {
+                            message: format!("{e}"),
+                        },
                     });
                     return Err(e.into());
                 }
@@ -105,11 +120,17 @@ impl OpenAIClient {
         }
 
         let Some(mut response) = response else {
-            let _ = tx.send(EmbeddingMessage::MaxRetriesExceeded);
+            let _ = tx.send(EmbeddingEvent {
+                proc_id,
+                kind: EmbeddingEventKind::MaxRetriesExceeded,
+            });
             return Err(EmbeddingError::MaxRetriesExceeded.into());
         };
 
-        let _ = tx.send(EmbeddingMessage::ParsingResponse);
+        let _ = tx.send(EmbeddingEvent {
+            proc_id,
+            kind: EmbeddingEventKind::ParsingResponse,
+        });
         let start = Instant::now();
 
         // let capacity = response.content_length().unwrap_or(0) as usize;
@@ -130,11 +151,17 @@ impl OpenAIClient {
         let response: ResponseBody = simd_json::serde::from_slice(&mut payload)?;
 
         let elapsed = start.elapsed().as_millis();
-        let _ = tx.send(EmbeddingMessage::ParsingComplete {
-            elapsed_ms: elapsed,
+        let _ = tx.send(EmbeddingEvent {
+            proc_id,
+            kind: EmbeddingEventKind::ParsingComplete {
+                elapsed_ms: elapsed,
+            },
         });
 
-        let _ = tx.send(EmbeddingMessage::ProcessingEmbeddings);
+        let _ = tx.send(EmbeddingEvent {
+            proc_id,
+            kind: EmbeddingEventKind::ProcessingEmbeddings,
+        });
         let embedding: Vec<(u64, Vec<f32>)> = std::iter::zip(
             indices,
             EmbeddingObject::embeddings_iter(response.embeddings),
@@ -142,8 +169,11 @@ impl OpenAIClient {
         .collect();
 
         let total_elapsed = global_start.elapsed().as_millis();
-        let _ = tx.send(EmbeddingMessage::Complete {
-            total_elapsed_ms: total_elapsed,
+        let _ = tx.send(EmbeddingEvent {
+            proc_id,
+            kind: EmbeddingEventKind::Complete {
+                total_elapsed_ms: total_elapsed,
+            },
         });
 
         Ok((embedding, total_elapsed))

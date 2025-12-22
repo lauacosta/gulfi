@@ -1,47 +1,77 @@
-use std::path::{Path, PathBuf};
+use std::fmt::Write as _;
+use std::{
+    io::IsTerminal,
+    path::{Path, PathBuf},
+};
 
 use color_eyre::owo_colors::OwoColorize;
+use serde::Serialize;
 
-#[derive(Debug)]
+use crate::MessageFormat;
+
+#[derive(Debug, Serialize)]
 pub struct BuildInfo {
     pub version: &'static str,
     pub target: &'static str,
     pub profile: &'static str,
-    pub build_date: &'static str,
+    pub build_timestamp: &'static str,
+
     pub git_commit: Option<&'static str>,
     pub git_branch: Option<&'static str>,
-    pub rustc_version: &'static str,
+
+    pub rust_toolchain: Option<&'static str>,
+    pub rustc_version: Option<&'static str>,
+    pub cargo_version: Option<&'static str>,
 }
 
 impl BuildInfo {
+    #![allow(clippy::new_without_default)]
     pub const fn new() -> Self {
         Self {
             version: env!("CARGO_PKG_VERSION"),
             target: env!("BUILD_TARGET"),
             profile: env!("BUILD_PROFILE"),
-            build_date: env!("BUILD_TIMESTAMP"),
+            build_timestamp: env!("BUILD_TIMESTAMP"),
             git_commit: option_env!("GIT_COMMIT"),
             git_branch: option_env!("GIT_BRANCH"),
-            rustc_version: env!("RUSTC_VERSION"),
+            rustc_version: option_env!("RUSTC_VERSION"),
+            cargo_version: option_env!("CARGO_VERSION"),
+            rust_toolchain: option_env!("RUST_TOOLCHAIN"),
         }
     }
 
-    pub fn print(&self) {
-        println!("\n{}", "Binary Information:".bold().blue());
-        println!("  {}  {}", "Version:".cyan(), self.version);
-        println!("  {}  {}", "Built:".cyan(), self.build_date);
-        println!("  {}  {}", "Target:".cyan(), self.target);
-        println!("  {} {}", "Profile:".cyan(), self.profile);
-        println!("  {}  {}", "Rustc:".cyan(), self.rustc_version);
+    pub fn display(&self) -> String {
+        let mut out = String::new();
+        let _ = writeln!(out, "\n{}", "Binary Information:".bold().blue());
+        let _ = writeln!(out, "  {}  {}", "Version:".cyan(), self.version);
+        let _ = writeln!(
+            out,
+            "  {}  {}",
+            "Build timestamp:".cyan(),
+            self.build_timestamp
+        );
+        let _ = writeln!(out, "  {}  {}", "Target:".cyan(), self.target);
+        let _ = writeln!(out, "  {} {}", "Profile:".cyan(), self.profile);
+
+        if let Some(rustc_version) = self.rustc_version {
+            let _ = writeln!(out, "  {}  {}", "Rustc:".cyan(), rustc_version);
+        }
+        if let Some(toolchain) = self.rust_toolchain {
+            let _ = writeln!(out, "  {}  {}", "Toolchain:".cyan(), toolchain);
+        }
+        if let Some(cargo_version) = self.cargo_version {
+            let _ = writeln!(out, "  {}  {}", "Cargo:".cyan(), cargo_version);
+        }
         if let Some(commit) = self.git_commit {
-            println!("  {} {}", "Git commit:".cyan(), commit.yellow());
+            let _ = writeln!(out, "  {} {}", "Git commit:".cyan(), commit.yellow());
         }
         if let Some(branch) = self.git_branch {
-            println!("  {} {}", "Git branch:".cyan(), branch.yellow());
+            let _ = writeln!(out, "  {} {}", "Git branch:".cyan(), branch.yellow());
         }
+        out
     }
 }
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 struct DatabaseInfo {
     path: String,
     sqlite_version: String,
@@ -94,18 +124,21 @@ impl DatabaseInfo {
         })
     }
 
-    pub fn print(&self) {
-        println!("\n{}", "Database Information:".bold().blue());
-        println!("  {} {}", "Path:".cyan(), self.path.bright_white());
-        println!(
+    pub fn display(&self) -> String {
+        let mut out = String::new();
+        let _ = writeln!(out, "\n{}", "Database Information:".bold().blue());
+        let _ = writeln!(out, "  {} {}", "Path:".cyan(), self.path);
+        let _ = writeln!(
+            out,
             "  {} v{}",
             "sqlite_version:".cyan(),
-            self.sqlite_version.bright_white()
+            self.sqlite_version
         );
-        println!(
+        let _ = writeln!(
+            out,
             "  {} {}",
             "sqlite-vec_version:".cyan(),
-            self.sqlite_vec_version.bright_white()
+            self.sqlite_vec_version
         );
 
         let size_mb = self.size_bytes as f64 / 1_048_576.0;
@@ -118,52 +151,34 @@ impl DatabaseInfo {
         } else {
             format!("{} bytes ({:.2} MB)", self.size_bytes, size_mb)
         };
-        println!("  {}         {}", "Size:".cyan(), size_str.bright_white());
+        let _ = writeln!(out, "  {}         {}", "Size:".cyan(), size_str);
 
-        println!(
-            "  {}   {}",
-            "Page count:".cyan(),
-            self.page_count.to_string().bright_white()
-        );
-        println!(
-            "  {}    {} bytes",
-            "Page size:".cyan(),
-            self.page_size.to_string().bright_white()
-        );
-        println!(
-            "  {}   {}",
-            "Schema ver:".cyan(),
-            self.schema_version.to_string().bright_white()
-        );
-        println!(
-            "  {}     {}",
-            "Encoding:".cyan(),
-            self.encoding.bright_white()
-        );
-        println!(
-            "  {} {}",
-            "Journal mode:".cyan(),
-            self.journal_mode.bright_white()
-        );
+        let _ = writeln!(out, "  {}   {}", "Page count:".cyan(), self.page_count);
+        let _ = writeln!(out, "  {}    {} bytes", "Page size:".cyan(), self.page_size);
+        let _ = writeln!(out, "  {}   {}", "Schema ver:".cyan(), self.schema_version);
+        let _ = writeln!(out, "  {}     {}", "Encoding:".cyan(), self.encoding);
+        let _ = writeln!(out, "  {} {}", "Journal mode:".cyan(), self.journal_mode);
 
-        println!(
+        let _ = writeln!(
+            out,
             "  {}       {} table{}",
             "Tables:".cyan(),
-            self.tables.len().to_string().bright_white().bold(),
+            self.tables.len().to_string().bold(),
             if self.tables.len() == 1 { "" } else { "s" }
         );
 
         if !self.tables.is_empty() {
             for table in &self.tables {
-                println!("    {} {}", "•".green(), table.bright_white());
+                let _ = writeln!(out, "    {} {}", "•".green(), table);
             }
         } else {
-            println!("    {}", "(no tables)".dimmed());
+            let _ = writeln!(out, "    {}", "(no tables)".dimmed());
         }
+        out
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 struct SystemInfo {
     build: BuildInfo,
     database: Option<DatabaseInfo>,
@@ -180,16 +195,32 @@ impl SystemInfo {
         Self { build, database }
     }
 
-    pub fn print(&self) {
-        self.build.print();
+    pub fn display(&self) -> String {
+        let mut out = String::new();
+        let _ = writeln!(out, "{}", self.build.display());
         if let Some(db) = &self.database {
-            db.print();
+            let _ = writeln!(out, "{}", db.display());
         } else {
-            println!("Database Information: Not available");
+            let _ = writeln!(out, "Database Information: Not available");
         }
+        out
     }
 }
 
-pub fn info(db_path: &Option<PathBuf>) {
-    SystemInfo::new(db_path).print();
+pub fn info(db_path: &Option<PathBuf>, message_format: MessageFormat) {
+    let system_info = SystemInfo::new(db_path);
+
+    let emit_json = matches!(message_format, MessageFormat::Json)
+    // Doesnt guarantee ansi_support but I dont really care.
+    || !std::io::stdout().is_terminal();
+
+    if emit_json {
+        println!(
+            "{}",
+            serde_json::to_string(&system_info)
+                .expect("Failed to deserialize system_info to string")
+        );
+    } else {
+        println!("{}", system_info.display());
+    }
 }

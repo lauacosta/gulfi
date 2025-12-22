@@ -26,12 +26,15 @@ fn run_cli(mut cli: Cli) -> Result<(), CliError> {
     let (_, documents) = load_meta_docs(&cli)?;
 
     match cli.command {
-        Command::Info { db_path } => match db_path {
-            Some(path) => gulfi_cli::info(&Some(path)),
-            None => gulfi_cli::info(&cli.db),
-        },
-        Command::List { format } => {
-            gulfi_cli::list::handle(&documents, &format).or_exit();
+        Command::Info {
+            db_path,
+            message_format,
+        } => {
+            let db_path = db_path.or(cli.db);
+            gulfi_cli::info(&db_path, message_format)
+        }
+        Command::List { message_format } => {
+            gulfi_cli::list::handle(&documents, message_format).or_exit();
         }
 
         Command::Add => gulfi_cli::documents::add_document().or_exit(),
@@ -48,8 +51,8 @@ fn run_cli(mut cli: Cli) -> Result<(), CliError> {
 
             gulfi_cli::server::start_server(overrides, open, telemetry, documents)?;
         }
-        Command::Sync {
-            sync_strat,
+        Command::Update {
+            update_strat,
             force,
             base_delay,
             document,
@@ -62,7 +65,7 @@ fn run_cli(mut cli: Cli) -> Result<(), CliError> {
             let start = Instant::now();
             let doc = gulfi_cli::setup_db::handle(db_path, &documents, &document, force)?;
 
-            gulfi_cli::update::handle(db_path, &doc, &sync_strat, base_delay, chunk_size)?;
+            gulfi_cli::update::handle(db_path, &doc, &update_strat, base_delay, chunk_size)?;
 
             eprintln!(
                 "\n🎉 Synchronization finished! took {} ms.\n",

@@ -1,3 +1,4 @@
+pub mod embedding_events;
 use std::fmt::{Display, Formatter};
 
 use eyre::Report;

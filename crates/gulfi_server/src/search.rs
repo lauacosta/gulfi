@@ -44,7 +44,7 @@ pub async fn search_stream(
             Ok(res) => res,
             Err(e) => {
                 let error_msg = StreamMessage::Error { msg: e.to_string() };
-                yield Ok(Event::default().data(serde_json::to_string(&error_msg).unwrap()));
+                yield Ok(Event::default().data(serde_json::to_string(&error_msg).expect("Failed to deserialize error msg to string")));
                 return;
             }
         };
@@ -56,7 +56,7 @@ pub async fn search_stream(
             .map(|f| f.name.clone())
             .collect();
         let metadata = StreamMessage::Metadata { columns };
-        yield Ok(Event::default().data(serde_json::to_string(&metadata).unwrap()));
+        yield Ok(Event::default().data(serde_json::to_string(&metadata).expect("Failed to deserialize metadata to string")));
 
     let mut row_count = 0;
     match stream_results(
@@ -71,15 +71,12 @@ pub async fn search_stream(
              while let Some(result) = result_stream.recv().await {
                 match result {
                     Ok(msg) => {
-                        match &msg {
-                            StreamMessage::Rows { data } => row_count += data.len(),
-                            _ => {}
-                        }
-                        yield Ok(Event::default().data(serde_json::to_string(&msg).unwrap()));
+                        if let StreamMessage::Rows { data } = &msg { row_count += data.len() }
+                        yield Ok(Event::default().data(serde_json::to_string(&msg).expect("Failed to deserialize message to string")));
                     }
                     Err(err) => {
                         let error_msg = StreamMessage::Error { msg: err.to_string() };
-                        yield Ok(Event::default().data(serde_json::to_string(&error_msg).unwrap()));
+                        yield Ok(Event::default().data(serde_json::to_string(&error_msg).expect("Failed to deserialize error msg to string")));
                         break;
                     }
                 }
@@ -87,12 +84,12 @@ pub async fn search_stream(
         }
         Err(err) => {
             let error_msg = StreamMessage::Error { msg: err.to_string() };
-            yield Ok(Event::default().data(serde_json::to_string(&error_msg).unwrap()));
+            yield Ok(Event::default().data(serde_json::to_string(&error_msg).expect("Failed to deserialize error msg to string")));
 
         }
     }
         let complete = StreamMessage::Complete { total_sent: row_count };
-        yield Ok(Event::default().data(serde_json::to_string(&complete).unwrap()));
+        yield Ok(Event::default().data(serde_json::to_string(&complete).expect("Failed to deserialize complete message to string")));
     };
 
     Sse::new(s)

@@ -10,7 +10,9 @@ use std::{collections::HashMap, fmt, time::Duration};
 use tracing::Subscriber;
 use tracing_error::ErrorLayer;
 use tracing_log::LogTracer;
-use tracing_subscriber::{EnvFilter, Layer, Registry, fmt::format::FmtSpan, layer::SubscriberExt};
+use tracing_subscriber::{
+    EnvFilter, Layer, Registry, filter::Directive, fmt::format::FmtSpan, layer::SubscriberExt,
+};
 
 use crate::configuration::Settings;
 
@@ -79,15 +81,23 @@ pub fn get_subscriber(
 
                 let tracer = provider.tracer("gulfi_server");
 
-                let telemetry_filter = base_filter(env_filter)
-                    .add_directive("embed=trace".parse().unwrap())
-                    .add_directive("gen_embeddings=trace".parse().unwrap())
-                    .add_directive("auth=trace".parse().unwrap())
-                    .add_directive("favorites=trace".parse().unwrap())
-                    .add_directive("history=trace".parse().unwrap())
-                    .add_directive("bg_task=trace".parse().unwrap())
-                    .add_directive("request=off".parse().unwrap())
-                    .add_directive("opentelemetry_sdk=off".parse().unwrap());
+                let directives = [
+                    "embed=trace",
+                    "gen_embeddings=trace",
+                    "auth=trace",
+                    "favorites=trace",
+                    "history=trace",
+                    "bg_task=trace",
+                    "request=off",
+                    "opentelemetry_sdk=off",
+                ];
+
+                let telemetry_filter = directives
+                    .iter()
+                    .map(|s| s.parse::<Directive>().expect("Failed to parse directive"))
+                    .fold(base_filter(env_filter), |filter, directive| {
+                        filter.add_directive(directive)
+                    });
 
                 Some(
                     tracing_opentelemetry::layer()
