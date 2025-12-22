@@ -35,7 +35,7 @@ pub fn handle_vector(
     Ok((inserted, average, elapsed))
 }
 
-pub fn handle_update<P: AsRef<Path>>(
+pub fn handle<P: AsRef<Path>>(
     db_path: P,
     doc: &Document,
     strat: &SyncStrategy,

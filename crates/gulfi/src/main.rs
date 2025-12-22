@@ -3,13 +3,14 @@ use std::path::PathBuf;
 use std::{fs::File, time::Instant};
 
 use clap::Parser;
-use gulfi_cli::commands::server::ServerOverrides;
+use gulfi_cli::get_configuration;
+use gulfi_cli::server::ServerOverrides;
 use gulfi_cli::{Cli, CliError, Command, ExitOnError, helper::initialize_meta_file};
-use gulfi_cli::{commands, get_configuration};
 use gulfi_ingest::Document;
 
 fn main() -> eyre::Result<()> {
     color_eyre::install()?;
+
     Cli::check_config()?;
 
     if let Err(e) = run_cli(Cli::parse()) {
@@ -25,12 +26,16 @@ fn run_cli(mut cli: Cli) -> Result<(), CliError> {
     let (_, documents) = load_meta_docs(&cli)?;
 
     match cli.command {
+        Command::Info { db_path } => match db_path {
+            Some(path) => gulfi_cli::info(&Some(path)),
+            None => gulfi_cli::info(&cli.db),
+        },
         Command::List { format } => {
-            commands::list::handle(&documents, &format).or_exit();
+            gulfi_cli::list::handle(&documents, &format).or_exit();
         }
 
-        Command::Add => commands::documents::add_document().or_exit(),
-        Command::Delete { document } => commands::documents::delete_document(&document).or_exit(),
+        Command::Add => gulfi_cli::documents::add_document().or_exit(),
+        Command::Delete { document } => gulfi_cli::documents::delete_document(&document).or_exit(),
         Command::Serve {
             interface,
             port,
@@ -41,7 +46,7 @@ fn run_cli(mut cli: Cli) -> Result<(), CliError> {
             let db_path = cli.db.clone();
             let overrides = ServerOverrides::new(interface, port, db_path, pool_size);
 
-            commands::server::start_server(overrides, open, telemetry, documents)?;
+            gulfi_cli::server::start_server(overrides, open, telemetry, documents)?;
         }
         Command::Sync {
             sync_strat,
@@ -55,9 +60,9 @@ fn run_cli(mut cli: Cli) -> Result<(), CliError> {
             let base_delay = base_delay * 1000;
 
             let start = Instant::now();
-            let doc = commands::setup_db::handle(db_path, &documents, &document, force)?;
+            let doc = gulfi_cli::setup_db::handle(db_path, &documents, &document, force)?;
 
-            commands::sync::handle_update(db_path, &doc, &sync_strat, base_delay, chunk_size)?;
+            gulfi_cli::update::handle(db_path, &doc, &sync_strat, base_delay, chunk_size)?;
 
             eprintln!(
                 "\n🎉 Synchronization finished! took {} ms.\n",

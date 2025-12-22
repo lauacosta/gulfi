@@ -1,8 +1,11 @@
 pub mod clierror;
-pub mod commands;
+mod commands;
+pub use commands::*;
 pub mod helper;
 pub use clierror::*;
 pub use gulfi_server::configuration::get_configuration;
+mod info;
+pub use info::*;
 
 use clap::{Parser, Subcommand, ValueEnum, command, crate_version};
 use eyre::Result;
@@ -94,6 +97,12 @@ pub enum Command {
     },
     /// Starts the wizard to add a new document.
     Add,
+
+    /// Prints useful information about the binary itself and the database.
+    Info {
+        #[arg(long = "db-path")]
+        db_path: Option<PathBuf>,
+    },
 
     // TODO: Evaluate the need of the meta.json file instead of having everything in the database.
     /// Deletes a document, deleting it from the meta.json and the sqlite database.

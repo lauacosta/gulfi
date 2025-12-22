@@ -3,7 +3,6 @@ name = "xtask"
 edition = "2024"
 version.workspace = true
 license.workspace = true
-rust-version.workspace = true
 
 [dependencies]
 color-eyre.workspace = true

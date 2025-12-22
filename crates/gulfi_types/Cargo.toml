@@ -3,7 +3,6 @@ name = "gulfi_types"
 edition = "2024"
 version.workspace = true
 license.workspace = true
-rust-version.workspace = true
 
 [dependencies]
 chrono.workspace = true

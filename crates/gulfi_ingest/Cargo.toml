@@ -3,7 +3,6 @@ name = "gulfi_ingest"
 edition = "2024"
 version.workspace = true
 license.workspace = true
-rust-version.workspace = true
 
 [dependencies]
 sqlite-vec = "0.1.6"

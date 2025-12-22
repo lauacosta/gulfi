@@ -34,7 +34,6 @@ pub fn create_config_template() -> Result<(), CliError> {
         let contents = read_to_string(config_path).expect("File should be present");
 
         if !contents.trim().is_empty() {
-            eprintln!("Config file already exists and it's not empty.");
             return Ok(());
         }
     }

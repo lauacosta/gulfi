@@ -1053,7 +1053,7 @@ checksum = "07e28edb80900c19c28f1072f2e8aeca7fa06b23cd4169cefe1af5aa3260783f"
 
 [[package]]
 name = "gulfi"
-version = "0.6.1"
+version = "0.7.1"
 dependencies = [
  "axum",
  "chrono",
@@ -1070,7 +1070,7 @@ dependencies = [
 
 [[package]]
 name = "gulfi_cli"
-version = "0.6.1"
+version = "0.7.1"
 dependencies = [
  "argon2",
  "clap",
@@ -1091,7 +1091,7 @@ dependencies = [
 
 [[package]]
 name = "gulfi_ingest"
-version = "0.6.1"
+version = "0.7.1"
 dependencies = [
  "ammonia",
  "camino",
@@ -1114,7 +1114,7 @@ dependencies = [
 
 [[package]]
 name = "gulfi_openai"
-version = "0.6.1"
+version = "0.7.1"
 dependencies = [
  "bytes",
  "color-eyre",
@@ -1132,7 +1132,7 @@ dependencies = [
 
 [[package]]
 name = "gulfi_query"
-version = "0.6.1"
+version = "0.7.1"
 dependencies = [
  "ammonia",
  "expect-test",
@@ -1142,7 +1142,7 @@ dependencies = [
 
 [[package]]
 name = "gulfi_server"
-version = "0.6.1"
+version = "0.7.1"
 dependencies = [
  "argon2",
  "async-stream",
@@ -1189,7 +1189,7 @@ dependencies = [
 
 [[package]]
 name = "gulfi_types"
-version = "0.6.1"
+version = "0.7.1"
 dependencies = [
  "chrono",
  "eyre",
@@ -4176,7 +4176,7 @@ checksum = "ea2f10b9bb0928dfb1b42b65e1f9e36f7f54dbdf08457afefb38afcdec4fa2bb"
 
 [[package]]
 name = "xtask"
-version = "0.6.1"
+version = "0.7.1"
 dependencies = [
  "color-eyre",
 ]

@@ -17,10 +17,6 @@ export const streamingCount: number = 0;
             {/if}
         </div>
     </div>
-{:else if table.columns.length > 0}
-    <div class="status-indicator completed">
-        <div class="status-text">Búsqueda terminada</div>
-    </div>
 {/if}
 
 {#if table.columns.length > 0}

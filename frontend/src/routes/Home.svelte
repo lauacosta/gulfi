@@ -163,7 +163,7 @@ async function handleStreamingSearch(event: SubmitEvent) {
 	params.append("batch_size", "10");
 
 	try {
-		const sseUrl = `${apiUrl}/api/search_stream?${params}`;
+		const sseUrl = `${apiUrl}/api/search?${params}`;
 		eventSource = new EventSource(sseUrl);
 
 		eventSource.onopen = () => {
