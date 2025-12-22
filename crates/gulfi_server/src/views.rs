@@ -1,5 +1,5 @@
 use chrono::NaiveDateTime;
-use gulfi_shared::SearchStrategy;
+use gulfi_types::SearchStrategy;
 use serde::Serialize;
 
 #[derive(Serialize, Debug, Clone)]

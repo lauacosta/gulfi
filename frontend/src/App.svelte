@@ -9,38 +9,38 @@ import History from "./routes/History.svelte";
 import Home from "./routes/Home.svelte";
 
 const RouteName = {
-	Home: "home",
-	Favorites: "favorites",
-	History: "history",
-	Fallback: "fallback",
+    Home: "home",
+    Favorites: "favorites",
+    History: "history",
+    Fallback: "fallback",
 } as const;
 
 type RouteNames = (typeof RouteName)[keyof typeof RouteName];
 
 export const routes: Readonly<Route<RouteNames>[]> = [
-	{
-		name: RouteName.Home,
-		path: "/",
-		component: Home,
-	},
+    {
+        name: RouteName.Home,
+        path: "/",
+        component: Home,
+    },
 
-	{
-		name: RouteName.Favorites,
-		path: "/favorites",
-		component: Favorites,
-	},
+    {
+        name: RouteName.Favorites,
+        path: "/favorites",
+        component: Favorites,
+    },
 
-	{
-		name: RouteName.History,
-		path: "/history",
-		component: History,
-	},
+    {
+        name: RouteName.History,
+        path: "/history",
+        component: History,
+    },
 
-	{
-		name: RouteName.Fallback,
-		path: "*",
-		component: Fallback,
-	},
+    {
+        name: RouteName.Fallback,
+        path: "*",
+        component: Fallback,
+    },
 ] as const;
 
 export const options: RouterOptions<RouteNames> = { routes } as const;

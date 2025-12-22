@@ -17,7 +17,7 @@ use crate::{
     startup::ServerState,
     views::{HistorialFullView, HistorialParams},
 };
-use gulfi_shared::SearchStrategy;
+use gulfi_types::SearchStrategy;
 
 #[axum::debug_handler]
 #[tracing::instrument(name = "history.fetch_summary", skip(app))]

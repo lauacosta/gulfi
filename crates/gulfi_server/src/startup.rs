@@ -1,12 +1,9 @@
-use axum::response::{Html, IntoResponse};
 use axum::{
     BoxError, Extension, Router, body::Body, error_handling::HandleErrorLayer, http::Request,
     routing::get, serve::Serve,
 };
 use gulfi_ingest::Document;
-use opentelemetry::trace::TraceContextExt;
 use reqwest::Client;
-use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use color_eyre::owo_colors::OwoColorize;
 use eyre::Result;
@@ -31,7 +28,7 @@ use tower_http::{
 
 use tokio::{net::TcpListener, signal};
 use tower::ServiceBuilder;
-use tower_request_id::{RequestId, RequestIdLayer};
+use tower_request_id::RequestIdLayer;
 use tracing::{Instrument, Level, Span, error, info, info_span, instrument};
 
 use crate::bg_tasks::{WriteJob, spawn_writer_task};
@@ -41,7 +38,7 @@ use crate::routes::{
     add_favoritos, auth, delete_favoritos, delete_historial, documents, favoritos, health_check,
     historial_detailed, historial_summary, search, serve_assets,
 };
-use gulfi_shared::SearchStrategy;
+use gulfi_types::SearchStrategy;
 
 #[derive(Debug, Clone)]
 pub struct ServerState {
@@ -214,7 +211,6 @@ impl Application {
     /// Panics if it is unable to install the handler.
     pub async fn run_until_stopped(self) -> io::Result<()> {
         self.server
-            // https://github.com/tokio-rs/axum/blob/main/examples/graceful-shutdown/src/main.rs
             .with_graceful_shutdown(
                 async move {
                     let ctrl_c = async {
@@ -270,13 +266,9 @@ pub fn build_server(listener: TcpListener, state: ServerState) -> Result<Serve<R
             .layer(BufferLayer::new(1024)), // .layer(RateLimitLayer::new(1000, Duration::from_secs(1))),
     );
 
-    // let frontend_routes = Router::new()
-    //     .route("/assets/*path", get(serve_ui))
-    //     .fallback(serve_ui);
-
-    let askama_routes = Router::new()
-        .route("/", get(askama_index))
-        .route("/assets/*path", get(serve_assets));
+    let frontend_routes = Router::new()
+        .route("/assets/*path", get(serve_assets))
+        .fallback(serve_assets);
 
     let api_routes = Router::new()
         .nest("/api", search_routes)
@@ -289,7 +281,7 @@ pub fn build_server(listener: TcpListener, state: ServerState) -> Result<Serve<R
         )
         .route("/api/documents", get(documents));
 
-    let mut server = api_routes.merge(askama_routes).with_state(state);
+    let mut server = api_routes.merge(frontend_routes).with_state(state);
 
     if cfg!(debug_assertions) {
         let cors = CorsLayer::new()
@@ -342,7 +334,7 @@ pub async fn run_server(
     match Application::build(&configuration, documents).await {
         Ok(app) => {
             let url = format!("http://{}:{}", app.host(), app.port());
-            dbg!("{:?}", &configuration);
+            eprintln!("{:#?}", &configuration);
             let name = configuration.app_settings.name;
             let version = env!("CARGO_PKG_VERSION");
 
@@ -375,13 +367,4 @@ pub async fn run_server(
         }
     }
     Ok(())
-}
-
-#[axum::debug_handler]
-async fn askama_index() -> Result<impl IntoResponse, String> {
-    Ok(Html(
-        gulfi_ui::IndexTemplate::default()
-            .renderr()
-            .unwrap_or("Hola!".to_string()),
-    ))
 }

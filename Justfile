@@ -3,6 +3,10 @@
 _default:
     @just --list
 
+run: build
+    ./target/debug/gulfi serve --open
+
+# Build the gulfi binary, bundling the ui first
 build: bundle
     cargo build --bin gulfi
 
@@ -31,7 +35,7 @@ test:
 
 # Builds the UI
 bundle:
-    cargo run --bin xtask -- bundle 
+    cargo run --quiet --bin xtask -- bundle 
 
 # Runs cargo-deny
 deny:

@@ -1,4 +1,4 @@
-use gulfi_shared::SearchStrategy;
+use gulfi_types::SearchStrategy;
 use rusqlite::{Connection, params};
 use std::{
     path::Path,

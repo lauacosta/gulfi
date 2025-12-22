@@ -8,12 +8,6 @@ use std::{net::IpAddr, path::PathBuf, time::Instant};
 
 use crate::CliError;
 
-#[cfg(debug_assertions)]
-use eyre::Report;
-
-#[cfg(debug_assertions)]
-use tokio::{process::Command as TokioCommand, try_join};
-
 pub struct ServerOverrides {
     interface: Option<IpAddr>,
     port: Option<u16>,
@@ -54,6 +48,7 @@ impl ServerOverrides {
 pub fn start_server(
     overrides: ServerOverrides,
     open: bool,
+    telemetry: bool,
     documents: Vec<Document>,
 ) -> Result<(), CliError> {
     let start = Instant::now();
@@ -61,7 +56,7 @@ pub fn start_server(
     let mut configuration = get_configuration()?;
     overrides.apply_to_config(&mut configuration);
 
-    let subscriber = get_subscriber(&configuration, "info".into());
+    let subscriber = get_subscriber(&configuration, "info".into(), telemetry);
     init_subscriber(subscriber);
     let rt = tokio::runtime::Runtime::new()?;
 

@@ -44,8 +44,7 @@ secrecy.workspace = true
 
 gulfi_query = { path = "../gulfi_query/"}
 gulfi_ingest= { path = "../gulfi_ingest/"}
-gulfi_shared = { path = "../gulfi_shared/"}
-gulfi_ui = { path = "../gulfi_ui/"}
+gulfi_types = { path = "../gulfi_types/"}
 gulfi_openai = { path = "../gulfi_openai/"}
 thiserror.workspace = true
 tracing-log = "0.2.0"

@@ -36,11 +36,12 @@ fn run_cli(mut cli: Cli) -> Result<(), CliError> {
             port,
             open,
             pool_size,
+            telemetry,
         } => {
             let db_path = cli.db.clone();
             let overrides = ServerOverrides::new(interface, port, db_path, pool_size);
 
-            commands::server::start_server(overrides, open, documents)?;
+            commands::server::start_server(overrides, open, telemetry, documents)?;
         }
         Command::Sync {
             sync_strat,

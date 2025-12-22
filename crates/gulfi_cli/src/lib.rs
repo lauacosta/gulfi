@@ -25,29 +25,18 @@ pub struct Cli {
     #[arg(long = "level", default_value = "INFO")]
     pub loglevel: String,
 
+    /// TODO: Possibly support postgres.
     /// Path to the sqlite database
     #[arg(long = "database-path")]
     pub db: Option<PathBuf>,
 
+    /// TODO: Pending review of maybe just removing this file.
     /// Path to the metadata file for documents
     #[arg(long = "meta-file-path")]
     pub meta_file_path: Option<PathBuf>,
 
     #[command(subcommand)]
     pub command: Command,
-}
-
-impl Cli {
-    pub fn merge_with_config(&mut self, config: &Settings) {
-        self.db
-            .get_or_insert_with(|| config.db_settings.path.clone());
-        self.meta_file_path
-            .get_or_insert_with(|| config.app_settings.meta_file_path.clone());
-    }
-
-    pub fn check_config() -> Result<(), CliError> {
-        crate::commands::configuration::create_config_template()
-    }
 }
 
 #[derive(Subcommand, Clone, Debug, PartialEq, Eq)]
@@ -69,6 +58,11 @@ pub enum Command {
         /// Opens the web interface in the default browser.
         #[arg(long, default_value = "false")]
         open: bool,
+
+        /// TODO: Polish this interface.
+        /// Connects to a observability tool (just Honeycomb for now)
+        #[arg(long, default_value = "false")]
+        telemetry: bool,
     },
     /// Updates the database.
     Sync {
@@ -104,6 +98,19 @@ pub enum Command {
     // TODO: Evaluate the need of the meta.json file instead of having everything in the database.
     /// Deletes a document, deleting it from the meta.json and the sqlite database.
     Delete { document: String },
+}
+
+impl Cli {
+    pub fn merge_with_config(&mut self, config: &Settings) {
+        self.db
+            .get_or_insert_with(|| config.db_settings.path.clone());
+        self.meta_file_path
+            .get_or_insert_with(|| config.app_settings.meta_file_path.clone());
+    }
+
+    pub fn check_config() -> Result<(), CliError> {
+        crate::commands::configuration::create_config_template()
+    }
 }
 
 #[derive(Debug, Clone, ValueEnum, PartialEq, Eq)]

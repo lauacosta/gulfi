@@ -3,10 +3,13 @@ use axum::{
     response::IntoResponse,
 };
 
-use gulfi_ui::ASSETS;
 use http::{HeaderMap, HeaderValue};
+use include_dir::{Dir, include_dir};
 use mime_guess::from_path;
-use tracing::{debug, info, instrument, warn};
+use tracing::{debug, info, instrument};
+
+/// The folder with all the static assets gets generated at compile time by a xtask.
+pub static ASSETS: Dir = include_dir!("$CARGO_MANIFEST_DIR/static");
 
 #[instrument(level = "debug")]
 pub async fn serve_assets(uri: Uri) -> impl IntoResponse {

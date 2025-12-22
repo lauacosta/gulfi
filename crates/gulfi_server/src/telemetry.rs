@@ -17,6 +17,7 @@ use crate::configuration::Settings;
 pub fn get_subscriber(
     configuration: &Settings,
     env_filter: String,
+    telemetry: bool,
 ) -> impl Subscriber + Send + Sync {
     let base_filter = |env_filter: String| {
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(env_filter))
@@ -36,71 +37,75 @@ pub fn get_subscriber(
                 .add_directive("opentelemetry_sdk:off".parse().expect("should build")),
         );
 
-    let mut headers = HashMap::new();
-    headers.insert(
-        "x-honeycomb-team".to_owned(),
-        configuration
-            .tracer_provider
-            .api_key
-            .expose_secret()
-            .to_string(),
-    );
+    let telemetry_layer = if telemetry {
+        let mut headers = HashMap::new();
+        headers.insert(
+            "x-honeycomb-team".to_owned(),
+            configuration
+                .tracer_provider
+                .api_key
+                .expose_secret()
+                .to_string(),
+        );
 
-    let telemetry_layer = match SpanExporterBuilder::default()
-        .with_http()
-        .with_protocol(configuration.tracer_provider.protocol)
-        .with_headers(headers)
-        .with_endpoint(configuration.tracer_provider.endpoint.clone())
-        .build()
-    {
-        Ok(otlp_exporter) => {
-            let batch_processor = BatchSpanProcessor::builder(otlp_exporter)
-                .with_batch_config(
-                    BatchConfigBuilder::default()
-                        .with_max_export_batch_size(512)
-                        // .with_max_export_timeout(Duration::from_secs(30))
-                        .with_scheduled_delay(Duration::from_millis(500))
-                        .build(),
+        match SpanExporterBuilder::default()
+            .with_http()
+            .with_protocol(configuration.tracer_provider.protocol)
+            .with_headers(headers)
+            .with_endpoint(configuration.tracer_provider.endpoint.clone())
+            .build()
+        {
+            Ok(otlp_exporter) => {
+                let batch_processor = BatchSpanProcessor::builder(otlp_exporter)
+                    .with_batch_config(
+                        BatchConfigBuilder::default()
+                            .with_max_export_batch_size(512)
+                            // .with_max_export_timeout(Duration::from_secs(30))
+                            .with_scheduled_delay(Duration::from_millis(500))
+                            .build(),
+                    )
+                    .build();
+
+                let provider = SdkTracerProvider::builder()
+                    .with_span_processor(batch_processor)
+                    .with_resource(
+                        Resource::builder()
+                            .with_service_name(configuration.tracer_provider.service_name.clone())
+                            .build(),
+                    )
+                    .build();
+
+                global::set_tracer_provider(provider.clone());
+
+                let tracer = provider.tracer("gulfi_server");
+
+                let telemetry_filter = base_filter(env_filter)
+                    .add_directive("embed=trace".parse().unwrap())
+                    .add_directive("gen_embeddings=trace".parse().unwrap())
+                    .add_directive("auth=trace".parse().unwrap())
+                    .add_directive("favorites=trace".parse().unwrap())
+                    .add_directive("history=trace".parse().unwrap())
+                    .add_directive("bg_task=trace".parse().unwrap())
+                    .add_directive("request=off".parse().unwrap())
+                    .add_directive("opentelemetry_sdk=off".parse().unwrap());
+
+                Some(
+                    tracing_opentelemetry::layer()
+                        .with_tracer(tracer)
+                        .with_filter(telemetry_filter),
                 )
-                .build();
-
-            let provider = SdkTracerProvider::builder()
-                .with_span_processor(batch_processor)
-                .with_resource(
-                    Resource::builder()
-                        .with_service_name(configuration.tracer_provider.service_name.clone())
-                        .build(),
-                )
-                .build();
-
-            global::set_tracer_provider(provider.clone());
-
-            let tracer = provider.tracer("gulfi_server");
-
-            let telemetry_filter = base_filter(env_filter)
-                .add_directive("embed=trace".parse().unwrap())
-                .add_directive("gen_embeddings=trace".parse().unwrap())
-                .add_directive("auth=trace".parse().unwrap())
-                .add_directive("favorites=trace".parse().unwrap())
-                .add_directive("history=trace".parse().unwrap())
-                .add_directive("bg_task=trace".parse().unwrap())
-                .add_directive("request=off".parse().unwrap())
-                .add_directive("opentelemetry_sdk=off".parse().unwrap());
-
-            Some(
-                tracing_opentelemetry::layer()
-                    .with_tracer(tracer)
-                    .with_filter(telemetry_filter),
-            )
+            }
+            Err(err) => {
+                tracing::warn!(
+                    target: "telemetry",
+                    error = %err,
+                    "Telemetry exporter disabled"
+                );
+                None
+            }
         }
-        Err(err) => {
-            tracing::warn!(
-                target: "telemetry",
-                error = %err,
-                "Telemetry exporter disabled"
-            );
-            None
-        }
+    } else {
+        None
     };
 
     Registry::default()

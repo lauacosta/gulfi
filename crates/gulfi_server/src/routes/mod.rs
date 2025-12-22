@@ -1,5 +1,5 @@
-mod serve_ui;
-pub use serve_ui::*;
+mod assets;
+pub use assets::*;
 
 mod favorites;
 pub use favorites::*;
